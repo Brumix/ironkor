@@ -2,7 +2,7 @@ import { Tabs } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
 
-export default function TrainingLayout() {
+export default function WorkoutLayout() {
   return (
     <Tabs
       tabBar={(props) => <WorkoutBottomNav {...props} />}
@@ -14,8 +14,8 @@ export default function TrainingLayout() {
       <Tabs.Screen name="home" />
       <Tabs.Screen name="routines" />
       <Tabs.Screen name="start" />
-      <Tabs.Screen name="history" />
       <Tabs.Screen name="plan" />
+      <Tabs.Screen name="settings" />
       <Tabs.Screen
         name="index"
         options={{

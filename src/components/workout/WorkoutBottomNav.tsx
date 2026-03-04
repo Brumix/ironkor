@@ -20,33 +20,46 @@ const ROUTE_META = {
     icon: "play",
     activeIcon: "play",
   },
-  history: {
-    label: "History",
-    icon: "time-outline",
-    activeIcon: "time",
-  },
   plan: {
     label: "Plan",
     icon: "calendar-outline",
     activeIcon: "calendar",
   },
+  settings: {
+    label: "Settings",
+    icon: "settings-outline",
+    activeIcon: "settings",
+  },
 } as const;
 
 type RouteName = keyof typeof ROUTE_META;
-const VISIBLE_SIDE_TABS: RouteName[] = ["home", "routines", "history", "plan"];
+const SIDE_TAB_ORDER: RouteName[] = ["home", "routines", "plan", "settings"];
+const CENTER_TAB: RouteName = "start";
+const KNOWN_ROUTE_NAMES = Object.keys(ROUTE_META) as RouteName[];
+
+function resolveRouteName(name: string): RouteName | undefined {
+  if (KNOWN_ROUTE_NAMES.includes(name as RouteName)) {
+    return name as RouteName;
+  }
+
+  return KNOWN_ROUTE_NAMES.find((routeName) => name.endsWith(`/${routeName}`));
+}
 
 export default function WorkoutBottomNav({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
-  const centerRoute = state.routes.find((route) => route.name === "start");
-  const sideRoutes = state.routes.filter((route) => {
-    return VISIBLE_SIDE_TABS.includes(route.name as RouteName);
-  });
+  const centerRoute = state.routes.find((route) => resolveRouteName(route.name) === CENTER_TAB);
+  const sideRoutes = SIDE_TAB_ORDER
+    .map((name) => state.routes.find((route) => resolveRouteName(route.name) === name))
+    .filter((route): route is NonNullable<typeof route> => Boolean(route));
   const leftRoutes = sideRoutes.slice(0, 2);
   const rightRoutes = sideRoutes.slice(2);
 
   const renderTab = (route: typeof sideRoutes[number]) => {
-    const routeName = route.name as RouteName;
+    const routeName = resolveRouteName(route.name);
+    if (!routeName) {
+      return null;
+    }
     const meta = ROUTE_META[routeName];
     const isFocused = state.index === state.routes.findIndex((item) => item.key === route.key);
 
@@ -58,7 +71,7 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
       });
 
       if (!isFocused && !event.defaultPrevented) {
-        navigation.navigate(routeName, route.params);
+        navigation.navigate(route.name, route.params);
       }
     };
 
