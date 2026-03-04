@@ -1,0 +1,45 @@
+---
+description: Commit message format guidelines for wallet-app project
+globs: []
+alwaysApply: true
+---
+
+# Commit Message Rules
+
+## CRITICAL: All commit messages MUST start with a prefix
+
+When generating ANY commit message, you MUST ALWAYS start with one of these prefixes followed by a colon and space:
+
+- `feat:` - for new features
+- `fix:` - for bug fixes
+- `test:` - for adding or updating tests
+- `docs:` - for documentation changes
+- `style:` - for formatting, missing semicolons, etc.
+- `refactor:` - for code refactoring without changing functionality
+- `perf:` - for performance improvements
+- `chore:` - for maintenance tasks, dependencies, etc.
+- `ci:` - for CI/CD changes
+- `build:` - for build system changes
+- `revert:` - for reverting previous commits
+
+## Format Requirements
+
+1. **ALWAYS** start with a prefix (lowercase) followed by colon and space: `feat: `, `fix: `, etc.
+2. Use imperative mood in the description ("add" not "added", "fix" not "fixed")
+3. Keep the description concise but descriptive
+4. No period at the end of the description
+5. If the commit affects multiple areas, use the most significant one as the prefix
+
+## Examples of CORRECT format:
+- `feat: add user authentication system`
+- `fix: resolve memory leak in workout tracking`
+- `test: add unit tests for exercise validation`
+- `docs: update API documentation`
+- `refactor: simplify routine management logic`
+- `perf: optimize database queries for workout history`
+
+## Examples of INCORRECT format (DO NOT USE):
+- `Add user authentication system` (missing prefix)
+- `feat add user authentication system` (missing colon)
+- `FEAT: add user authentication system` (uppercase prefix)
+- `feat: Added user authentication system` (past tense, should be imperative)
