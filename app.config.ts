@@ -1,4 +1,4 @@
-import { ConfigContext, ExpoConfig } from "expo/config";
+import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const IS_BETA = process.env.APP_VARIANT === 'beta';
 const IS_DEVELOPMENT = process.env.APP_VARIANT === 'development';
