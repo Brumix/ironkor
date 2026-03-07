@@ -1,31 +1,126 @@
 import { useQuery } from "convex/react";
+import { router } from "expo-router";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInUp } from "react-native-reanimated";
 
+import AppButton from "@/components/ui/AppButton";
+import AppCard from "@/components/ui/AppCard";
+import AppChip from "@/components/ui/AppChip";
+import FloatingActionButton from "@/components/ui/FloatingActionButton";
+import ProgressBar from "@/components/ui/ProgressBar";
+import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { mapRoutineDetailed } from "@/features/workout/mappers";
+import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+import { useTheme } from "@/theme";
 
 import { api } from "@convex/_generated/api";
 
 export default function HomeScreen() {
+  const { theme } = useTheme();
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
   const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
+  const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
+  const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
+
+  const trainingDays = activeRoutine?.weeklyPlan.filter((entry) => entry.type === "train").length ?? 0;
+  const weeklyFocusRatio = Math.min(trainingDays / 7, 1);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        centered: {
+          alignItems: "flex-start",
+          gap: theme.tokens.spacing.sm,
+        },
+        helper: {
+          color: theme.colors.textMuted,
+          fontFamily: theme.tokens.typography.fontFamily.body,
+          fontSize: theme.tokens.typography.fontSize.md,
+          lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        heroTitle: {
+          color: theme.colors.text,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        heroMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          fontWeight: theme.tokens.typography.fontWeight.medium,
+        },
+        sessionRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+          borderRadius: theme.tokens.radius.md,
+          backgroundColor: theme.colors.surfaceAlt,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.md,
+        },
+        sessionIndex: {
+          width: 30,
+          height: 30,
+          borderRadius: theme.tokens.radius.pill,
+          textAlign: "center",
+          textAlignVertical: "center",
+          overflow: "hidden",
+          backgroundColor: theme.colors.surfaceMuted,
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sessionName: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.lg,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sessionMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          marginTop: 1,
+        },
+      }),
+    [theme],
+  );
 
   if (activeRoutineData === undefined) {
     return (
-      <WorkoutPage title="Home" subtitle="Loading your active routine...">
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderText}>Syncing routines...</Text>
-        </View>
+      <WorkoutPage title="Home" subtitle="Loading your training dashboard...">
+        <AppCard variant="muted">
+          <Text style={styles.helper}>Syncing routines and weekly sessions...</Text>
+        </AppCard>
       </WorkoutPage>
     );
   }
 
   if (!activeRoutine) {
     return (
-      <WorkoutPage title="Home" subtitle="No active routine yet.">
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderText}>Create and activate your first routine in the Routines tab.</Text>
-        </View>
+      <WorkoutPage
+        title="Home"
+        subtitle="Build your first routine and start logging sessions with one tap between sets."
+        floatingAction={
+          <FloatingActionButton
+            label="New routine"
+            onPress={() => {
+              router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
+            }}
+          />
+        }
+      >
+        <AppCard variant="muted" style={styles.centered}>
+          <Text style={styles.helper}>No active routine yet.</Text>
+          <AppButton
+            label="Create routine"
+            onPress={() => {
+              router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
+            }}
+          />
+        </AppCard>
       </WorkoutPage>
     );
   }
@@ -33,105 +128,64 @@ export default function HomeScreen() {
   return (
     <WorkoutPage
       title="Home"
-      subtitle="Quick overview of your weekly split so you can train fast and stay focused."
+      subtitle="Quick gym flow for today. Open your workout, track sets, and keep momentum high."
+      floatingAction={
+        <FloatingActionButton
+          label="Start now"
+          iconName="flash"
+          onPress={() => {
+            router.push("/(workout)/start");
+          }}
+        />
+      }
     >
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{activeRoutine.name}</Text>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{activeRoutine.daysPerWeek} days/week</Text>
-          </View>
-        </View>
+      <Animated.View entering={FadeInUp.delay(30)}>
+        <AppCard style={{ backgroundColor: theme.gradients.heroPrimary }}>
+          <AppChip label="Active routine" variant="primary" />
+          <Text style={styles.heroTitle}>{activeRoutine.name}</Text>
+          <Text style={styles.heroMeta}>
+            {activeRoutine.daysPerWeek} days/week • {activeRoutine.sessions.length} sessions
+          </Text>
+          <ProgressBar progress={weeklyFocusRatio} />
+          <Text style={styles.heroMeta}>Weekly focus {Math.round(weeklyFocusRatio * 100)}%</Text>
+        </AppCard>
+      </Animated.View>
 
-        <Text style={styles.sectionTitle}>Routine sessions</Text>
-        {activeRoutine.sessions.map((session, index) => (
-          <View key={session.id} style={styles.sessionRow}>
+      <SectionHeader
+        action={
+          <AppButton
+            label="Open plan"
+            onPress={() => {
+              router.push("/(workout)/plan");
+            }}
+            size="sm"
+            variant="ghost"
+          />
+        }
+        title="Today"
+      />
+
+      <AppCard variant="muted">
+        <Text style={styles.heroTitle}>{todaySession?.name ?? "Recovery session"}</Text>
+        <Text style={styles.heroMeta}>
+          {todaySession
+            ? `${todaySession.exercises.length} exercises • ${todayPlan?.estimatedDurationMinutes ?? 0} min`
+            : "Rest day. Light mobility and walk recommended."}
+        </Text>
+      </AppCard>
+
+      <SectionHeader title="Routine sessions" />
+      {activeRoutine.sessions.map((session, index) => (
+        <Animated.View entering={FadeInUp.delay(80 + index * 30)} key={session.id}>
+          <View style={styles.sessionRow}>
             <Text style={styles.sessionIndex}>{index + 1}</Text>
-            <View style={styles.sessionInfo}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.sessionName}>{session.name}</Text>
-              <Text style={styles.sessionMeta}>{session.exercises.length} exercises</Text>
+              <Text style={styles.sessionMeta}>{session.exercises.length} planned exercises</Text>
             </View>
           </View>
-        ))}
-      </View>
+        </Animated.View>
+      ))}
     </WorkoutPage>
   );
 }
-
-const styles = StyleSheet.create({
-  placeholderCard: {
-    backgroundColor: "#16181D",
-    borderRadius: 20,
-    padding: 18,
-  },
-  placeholderText: {
-    color: "#B7BEC8",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  card: {
-    backgroundColor: "#16181D",
-    borderRadius: 24,
-    padding: 18,
-    gap: 12,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  cardTitle: {
-    color: "#F4F6F8",
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  badge: {
-    backgroundColor: "#272B33",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    color: "#CCD2DC",
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  sectionTitle: {
-    color: "#AFB4BD",
-    fontSize: 13,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  sessionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#20242B",
-    borderRadius: 14,
-    padding: 12,
-  },
-  sessionIndex: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#303543",
-    textAlign: "center",
-    textAlignVertical: "center",
-    color: "#F4F6F8",
-    fontWeight: "700",
-    overflow: "hidden",
-  },
-  sessionInfo: {
-    gap: 2,
-  },
-  sessionName: {
-    color: "#F4F6F8",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  sessionMeta: {
-    color: "#AFB4BD",
-    fontSize: 13,
-  },
-});

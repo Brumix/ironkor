@@ -1,17 +1,35 @@
-import { View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { ReactNode } from 'react';
+import { useTheme } from "@/theme";
+
+import type { ReactNode } from "react";
 
 const SafeScreen = ({ children }: { children: ReactNode }) => {
+  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        root: {
+          flex: 1,
+          backgroundColor: theme.colors.background,
+        },
+      }),
+    [theme],
+  );
+
   return (
     <View
-      style={{
-        paddingTop: insets.top,
-        paddingBottom: insets.bottom,
-        flex: 1,
-      }}
+      style={[
+        styles.root,
+        {
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}
     >
       {children}
     </View>

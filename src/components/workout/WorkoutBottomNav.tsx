@@ -1,6 +1,10 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import PressableScale from "@/components/ui/PressableScale";
+import { useTheme } from "@/theme";
 
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 
@@ -47,19 +51,93 @@ function resolveRouteName(name: string): RouteName | undefined {
 
 export default function WorkoutBottomNav({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        wrapper: {
+          backgroundColor: "transparent",
+          paddingHorizontal: theme.tokens.spacing.xl - 2,
+          paddingTop: theme.tokens.spacing.sm,
+        },
+        pill: {
+          minHeight: 76,
+          borderRadius: theme.tokens.radius.xl,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.backgroundElevated,
+          paddingHorizontal: theme.tokens.spacing.sm + 2,
+          paddingVertical: theme.tokens.spacing.md,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          shadowColor: theme.colors.text,
+          shadowOpacity: theme.isDark ? 0.26 : 0.12,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: theme.tokens.elevation.md,
+        },
+        tabButton: {
+          width: 56,
+          alignItems: "center",
+          justifyContent: "center",
+          gap: theme.tokens.spacing.xxs + 1,
+          borderRadius: theme.tokens.radius.md,
+          paddingVertical: theme.tokens.spacing.xs,
+        },
+        group: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flex: 1,
+        },
+        centerSpacer: {
+          width: 78,
+        },
+        tabLabel: {
+          fontFamily: theme.tokens.typography.fontFamily.body,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.medium,
+        },
+        tabLabelActive: {
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        centerButton: {
+          position: "absolute",
+          alignSelf: "center",
+          top: -10,
+          width: 68,
+          height: 68,
+          borderRadius: theme.tokens.radius.pill,
+          backgroundColor: theme.colors.primary,
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: theme.colors.primary,
+          shadowColor: theme.colors.primary,
+          shadowOpacity: 0.34,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: theme.tokens.elevation.lg,
+        },
+      }),
+    [theme],
+  );
 
   const centerRoute = state.routes.find((route) => resolveRouteName(route.name) === CENTER_TAB);
-  const sideRoutes = SIDE_TAB_ORDER
-    .map((name) => state.routes.find((route) => resolveRouteName(route.name) === name))
+  const sideRoutes = SIDE_TAB_ORDER.map((name) => state.routes.find((route) => resolveRouteName(route.name) === name))
     .filter((route): route is NonNullable<typeof route> => Boolean(route));
   const leftRoutes = sideRoutes.slice(0, 2);
   const rightRoutes = sideRoutes.slice(2);
 
-  const renderTab = (route: typeof sideRoutes[number]) => {
+  const renderTab = (route: (typeof sideRoutes)[number]) => {
     const routeName = resolveRouteName(route.name);
+
     if (!routeName) {
       return null;
     }
+
     const meta = ROUTE_META[routeName];
     const isFocused = state.index === state.routes.findIndex((item) => item.key === route.key);
 
@@ -83,29 +161,32 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
     };
 
     return (
-      <Pressable
-        key={route.key}
+      <PressableScale
+        accessibilityLabel={descriptors[route.key].options.tabBarAccessibilityLabel}
         accessibilityRole="button"
         accessibilityState={isFocused ? { selected: true } : {}}
-        accessibilityLabel={descriptors[route.key].options.tabBarAccessibilityLabel}
-        testID={descriptors[route.key].options.tabBarButtonTestID}
-        onPress={onPress}
+        key={route.key}
         onLongPress={onLongPress}
-        style={({ pressed }) => [
+        onPress={onPress}
+        pressedOpacity={0.85}
+        pressedScale={0.95}
+        style={[
           styles.tabButton,
-          {
-            opacity: pressed ? 0.7 : 1,
-            transform: [{ scale: pressed ? 0.97 : 1 }],
+          isFocused && {
+            backgroundColor: theme.colors.surfaceAlt,
           },
         ]}
+        testID={descriptors[route.key].options.tabBarButtonTestID}
       >
         <Ionicons
+          color={isFocused ? theme.colors.primary : theme.colors.textSubtle}
           name={isFocused ? (meta.activeIcon as never) : (meta.icon as never)}
           size={20}
-          color={isFocused ? "#101114" : "#7B808A"}
         />
-        <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>{meta.label}</Text>
-      </Pressable>
+        <Text style={[styles.tabLabel, { color: isFocused ? theme.colors.text : theme.colors.textSubtle }, isFocused && styles.tabLabelActive]}>
+          {meta.label}
+        </Text>
+      </PressableScale>
     );
   };
 
@@ -118,84 +199,17 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
       </View>
 
       {centerRoute ? (
-        <Pressable
-          onPress={() => { navigation.navigate(centerRoute.name, centerRoute.params); }}
-          style={({ pressed }) => [
-            styles.centerButton,
-            {
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-              opacity: pressed ? 0.92 : 1,
-            },
-          ]}
-          accessibilityRole="button"
+        <PressableScale
           accessibilityLabel="Start today's workout"
+          accessibilityRole="button"
+          onPress={() => {
+            navigation.navigate(centerRoute.name, centerRoute.params);
+          }}
+          style={styles.centerButton}
         >
-          <Ionicons name="play" size={24} color="#FFFFFF" />
-        </Pressable>
+          <Ionicons color={theme.colors.onPrimary} name="play" size={24} />
+        </PressableScale>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    backgroundColor: "#0B0B0B",
-    paddingHorizontal: 18,
-    paddingTop: 8,
-  },
-  pill: {
-    minHeight: 76,
-    borderRadius: 40,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  tabButton: {
-    width: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  group: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flex: 1,
-  },
-  centerSpacer: {
-    width: 78,
-  },
-  tabLabel: {
-    fontSize: 11,
-    color: "#7B808A",
-    fontWeight: "500",
-  },
-  tabLabelActive: {
-    color: "#101114",
-    fontWeight: "700",
-  },
-  centerButton: {
-    position: "absolute",
-    alignSelf: "center",
-    top: -10,
-    width: 68,
-    height: 68,
-    borderRadius: 999,
-    backgroundColor: "#050505",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.26,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
-  },
-});

@@ -65,22 +65,23 @@ export function buildWeeklyPlan(routine: RoutineDetailed, weekStart = getWeekSta
       };
     }
 
-    let selectedSession: RoutineSessionDetailed | undefined;
-    if (dayTemplate.assignmentMode === "manual" && dayTemplate.manualSessionId) {
-      selectedSession = sessionMap.get(dayTemplate.manualSessionId);
-    }
-
-    if (!selectedSession) {
-      selectedSession = orderedSessions[autoCursor % Math.max(orderedSessions.length, 1)];
-      autoCursor += 1;
-    }
-
-    if (!selectedSession) {
+    if (orderedSessions.length === 0) {
       return {
         dateISO: currentDate.toISOString().slice(0, 10),
         type: "rest",
         estimatedDurationMinutes: 0,
       };
+    }
+
+    const manualSession =
+      dayTemplate.assignmentMode === "manual" && dayTemplate.manualSessionId
+        ? sessionMap.get(dayTemplate.manualSessionId)
+        : undefined;
+
+    const selectedSession = manualSession ?? orderedSessions[autoCursor % orderedSessions.length];
+
+    if (!manualSession) {
+      autoCursor += 1;
     }
 
     return {

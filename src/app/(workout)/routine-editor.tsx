@@ -16,6 +16,7 @@ import {
 import Animated, { LinearTransition } from "react-native-reanimated";
 
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { useTheme } from "@/theme";
 
 import { api } from "@convex/_generated/api";
 
@@ -55,6 +56,7 @@ function defaultPlanner(daysPerWeek = 4): PlannerEntry[] {
 }
 
 export default function RoutineEditorScreen() {
+  const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ routineId?: string }>();
 
@@ -133,8 +135,8 @@ export default function RoutineEditorScreen() {
         selectedRoutine.weeklyPlan.map((entry) => ({
           day: entry.day,
           type: entry.type,
-          assignmentMode: entry.assignmentMode ?? "auto",
-          ...(entry.manualSessionId != null && { manualSessionId: entry.manualSessionId }),
+          assignmentMode: entry.assignmentMode,
+          ...(entry.manualSessionId !== undefined && { manualSessionId: entry.manualSessionId }),
         })),
       ),
     );
@@ -165,7 +167,7 @@ export default function RoutineEditorScreen() {
           day: entry.day,
           type: entry.type,
           assignmentMode: entry.assignmentMode,
-          ...(entry.manualSessionId != null && { manualSessionId: entry.manualSessionId }),
+          ...(entry.manualSessionId !== undefined && { manualSessionId: entry.manualSessionId }),
         })),
       });
     } else {
@@ -180,7 +182,7 @@ export default function RoutineEditorScreen() {
           day: entry.day,
           type: entry.type,
           assignmentMode: entry.assignmentMode,
-          ...(entry.manualSessionId != null && { manualSessionId: entry.manualSessionId }),
+          ...(entry.manualSessionId !== undefined && { manualSessionId: entry.manualSessionId }),
         })),
       });
     }
@@ -258,6 +260,250 @@ export default function RoutineEditorScreen() {
     );
   }
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        backButton: {
+          alignSelf: "flex-start",
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          paddingHorizontal: theme.tokens.spacing.md,
+          paddingVertical: theme.tokens.spacing.sm,
+        },
+        backButtonText: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        card: {
+          backgroundColor: theme.colors.surface,
+          borderRadius: theme.tokens.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.md,
+          gap: theme.tokens.spacing.sm,
+        },
+        cardTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.xl,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        fieldLabel: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          textTransform: "uppercase",
+          letterSpacing: 0.7,
+          marginTop: theme.tokens.spacing.xs + 2,
+        },
+        input: {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          color: theme.colors.text,
+          paddingHorizontal: theme.tokens.spacing.md,
+          paddingVertical: theme.tokens.spacing.sm + 2,
+          fontSize: theme.tokens.typography.fontSize.md,
+        },
+        subHeaderRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+          marginTop: theme.tokens.spacing.sm,
+        },
+        subHeader: {
+          color: theme.colors.text,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          fontSize: theme.tokens.typography.fontSize.md,
+        },
+        addRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.xs + 2,
+        },
+        sessionNameInput: {
+          minWidth: 120,
+          maxWidth: 156,
+          paddingVertical: theme.tokens.spacing.sm - 1,
+          fontSize: theme.tokens.typography.fontSize.sm,
+        },
+        sessionRow: {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.sm + 2,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+        },
+        flexOne: {
+          flex: 1,
+        },
+        sessionName: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.md,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sessionMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+        },
+        sessionActions: {
+          flexDirection: "row",
+          gap: theme.tokens.spacing.xs + 1,
+          alignItems: "center",
+        },
+        smallBtn: {
+          backgroundColor: theme.colors.secondarySoft,
+          borderRadius: theme.tokens.radius.xs,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs + 2,
+        },
+        smallBtnText: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        smallDangerBtn: {
+          backgroundColor: theme.colors.errorSoft,
+          borderColor: theme.colors.error,
+        },
+        plannerDaysGrid: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.sm,
+        },
+        dayChip: {
+          width: "31%",
+          minWidth: 92,
+          borderRadius: theme.tokens.radius.sm,
+          paddingVertical: theme.tokens.spacing.sm + 2,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          alignItems: "center",
+          gap: theme.tokens.spacing.xxs + 1,
+          borderWidth: 1,
+        },
+        dayChipTrain: {
+          backgroundColor: theme.colors.secondarySoft,
+          borderColor: theme.colors.secondary,
+        },
+        dayChipRest: {
+          backgroundColor: theme.colors.errorSoft,
+          borderColor: theme.colors.error,
+        },
+        dayChipLabel: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        dayChipState: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.semibold,
+        },
+        helperText: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        saveButton: {
+          marginTop: theme.tokens.spacing.sm,
+          backgroundColor: theme.colors.primary,
+          borderRadius: theme.tokens.radius.md,
+          paddingVertical: theme.tokens.spacing.md,
+          alignItems: "center",
+          borderWidth: 1,
+          borderColor: theme.colors.primary,
+        },
+        saveButtonText: {
+          color: theme.colors.onPrimary,
+          fontSize: theme.tokens.typography.fontSize.md,
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        primaryButton: {
+          backgroundColor: theme.colors.primary,
+          borderRadius: theme.tokens.radius.sm,
+          paddingHorizontal: theme.tokens.spacing.md,
+          paddingVertical: theme.tokens.spacing.sm,
+          alignSelf: "flex-start",
+          borderWidth: 1,
+          borderColor: theme.colors.primary,
+        },
+        primaryButtonText: {
+          color: theme.colors.onPrimary,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          fontSize: theme.tokens.typography.fontSize.sm,
+        },
+        modalRoot: {
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "stretch",
+        },
+        modalBackdrop: {
+          flex: 1,
+          backgroundColor: theme.colors.overlay,
+          justifyContent: "center",
+          alignItems: "stretch",
+          paddingHorizontal: theme.tokens.spacing.sm + 2,
+        },
+        modalCard: {
+          width: "100%",
+          maxHeight: "82%",
+          backgroundColor: theme.colors.backgroundElevated,
+          borderRadius: theme.tokens.radius.xl,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.lg,
+        },
+        sheetHeader: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: theme.tokens.spacing.sm,
+        },
+        sheetTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        closeText: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sheetContent: {
+          paddingBottom: theme.tokens.spacing["4xl"],
+          gap: theme.tokens.spacing.sm,
+        },
+        exerciseRow: {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.sm + 2,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+        },
+        libraryRow: {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.sm + 2,
+          gap: theme.tokens.spacing.xxs + 1,
+        },
+      }),
+    [theme],
+  );
+
   if (routinesData === undefined || exercisesData === undefined) {
     return (
       <WorkoutPage title="Routine Editor" subtitle="Loading routine...">
@@ -291,7 +537,7 @@ export default function RoutineEditorScreen() {
         value={routineName}
         onChangeText={setRoutineName}
         placeholder="Push / Pull / Legs"
-        placeholderTextColor="#77808C"
+        placeholderTextColor={theme.colors.textSubtle}
       />
 
       {selectedRoutine ? (
@@ -304,7 +550,7 @@ export default function RoutineEditorScreen() {
                 value={newSessionName}
                 onChangeText={setNewSessionName}
                 placeholder="New session"
-                placeholderTextColor="#77808C"
+                placeholderTextColor={theme.colors.textSubtle}
               />
               <Pressable
                 style={styles.primaryButton}
@@ -420,7 +666,7 @@ export default function RoutineEditorScreen() {
                     value={sessionDraftName}
                     onChangeText={setSessionDraftName}
                     placeholder="Session name"
-                    placeholderTextColor="#77808C"
+                    placeholderTextColor={theme.colors.textSubtle}
                   />
 
                   <Pressable
@@ -577,13 +823,13 @@ export default function RoutineEditorScreen() {
               </View>
 
               <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-                <TextInput style={styles.input} value={customName} onChangeText={setCustomName} placeholder="Name" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customVariant} onChangeText={setCustomVariant} placeholder="Variant" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customSets} onChangeText={setCustomSets} keyboardType="number-pad" placeholder="Sets" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customReps} onChangeText={setCustomReps} placeholder="Reps" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customRest} onChangeText={setCustomRest} keyboardType="number-pad" placeholder="Rest seconds" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customPrimary} onChangeText={setCustomPrimary} placeholder="Primary muscles (comma separated)" placeholderTextColor="#77808C" />
-                <TextInput style={styles.input} value={customSecondary} onChangeText={setCustomSecondary} placeholder="Secondary muscles (comma separated)" placeholderTextColor="#77808C" />
+                <TextInput style={styles.input} value={customName} onChangeText={setCustomName} placeholder="Name" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customVariant} onChangeText={setCustomVariant} placeholder="Variant" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customSets} onChangeText={setCustomSets} keyboardType="number-pad" placeholder="Sets" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customReps} onChangeText={setCustomReps} placeholder="Reps" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customRest} onChangeText={setCustomRest} keyboardType="number-pad" placeholder="Rest seconds" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customPrimary} onChangeText={setCustomPrimary} placeholder="Primary muscles (comma separated)" placeholderTextColor={theme.colors.textSubtle} />
+                <TextInput style={styles.input} value={customSecondary} onChangeText={setCustomSecondary} placeholder="Secondary muscles (comma separated)" placeholderTextColor={theme.colors.textSubtle} />
 
                 <Pressable
                   style={styles.saveButton}
@@ -634,225 +880,3 @@ export default function RoutineEditorScreen() {
     </WorkoutPage>
   );
 }
-
-const styles = StyleSheet.create({
-  backButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#202630",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  backButtonText: {
-    color: "#DDE5F2",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  card: {
-    backgroundColor: "#16181D",
-    borderRadius: 20,
-    padding: 14,
-    gap: 10,
-  },
-  cardTitle: {
-    color: "#F4F6F8",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  fieldLabel: {
-    color: "#D1D9E6",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    marginTop: 6,
-  },
-  input: {
-    backgroundColor: "#1B212C",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2C3342",
-    color: "#F6F8FC",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  subHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  subHeader: {
-    color: "#E8EDF6",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  addRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  sessionNameInput: {
-    minWidth: 120,
-    maxWidth: 150,
-    paddingVertical: 7,
-    fontSize: 12,
-  },
-  sessionRow: {
-    backgroundColor: "#1A212D",
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  flexOne: {
-    flex: 1,
-  },
-  sessionName: {
-    color: "#F2F6FF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  sessionMeta: {
-    color: "#9EAABF",
-    fontSize: 12,
-  },
-  sessionActions: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-  },
-  smallBtn: {
-    backgroundColor: "#243043",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  smallBtnText: {
-    color: "#E9F0FC",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  smallDangerBtn: {
-    backgroundColor: "#4A2930",
-  },
-  plannerDaysGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  dayChip: {
-    width: "31%",
-    minWidth: 92,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    gap: 2,
-  },
-  dayChipTrain: {
-    backgroundColor: "#1E2A3B",
-    borderWidth: 1,
-    borderColor: "#2D405B",
-  },
-  dayChipRest: {
-    backgroundColor: "#3A2428",
-    borderWidth: 1,
-    borderColor: "#5A343A",
-  },
-  dayChipLabel: {
-    color: "#EAF0FB",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  dayChipState: {
-    color: "#B8C4D8",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  helperText: {
-    color: "#9EA9BB",
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  saveButton: {
-    marginTop: 8,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  saveButtonText: {
-    color: "#101114",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  primaryButton: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: "flex-start",
-  },
-  primaryButtonText: {
-    color: "#101114",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  modalRoot: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "stretch",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "stretch",
-    paddingHorizontal: 10,
-  },
-  modalCard: {
-    width: "100%",
-    maxHeight: "82%",
-    backgroundColor: "#0F131A",
-    borderRadius: 24,
-    padding: 16,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sheetTitle: {
-    color: "#F5F7FB",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  closeText: {
-    color: "#AAB4C4",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  sheetContent: {
-    paddingBottom: 30,
-    gap: 10,
-  },
-  exerciseRow: {
-    backgroundColor: "#1A212D",
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  libraryRow: {
-    backgroundColor: "#171E28",
-    borderRadius: 12,
-    padding: 10,
-    gap: 2,
-  },
-});

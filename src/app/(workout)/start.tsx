@@ -1,40 +1,101 @@
 import { useQuery } from "convex/react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInDown, LinearTransition } from "react-native-reanimated";
 
+import AppCard from "@/components/ui/AppCard";
+import AppChip from "@/components/ui/AppChip";
+import PressableScale from "@/components/ui/PressableScale";
+import ProgressBar from "@/components/ui/ProgressBar";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { mapRoutineDetailed } from "@/features/workout/mappers";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+import { useTheme } from "@/theme";
 
 import { api } from "@convex/_generated/api";
 
 export default function StartScreen() {
+  const { theme } = useTheme();
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<string[]>([]);
+
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
   const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
   const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
   const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
   const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
 
+  const completionProgress = todaySession
+    ? completedExerciseIds.length / Math.max(todaySession.exercises.length, 1)
+    : 0;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        title: {
+          color: theme.colors.text,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        body: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        sessionRow: {
+          borderRadius: theme.tokens.radius.md,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surfaceAlt,
+          padding: theme.tokens.spacing.md,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+        },
+        sessionIndex: {
+          width: 32,
+          height: 32,
+          borderRadius: theme.tokens.radius.pill,
+          overflow: "hidden",
+          textAlign: "center",
+          textAlignVertical: "center",
+          backgroundColor: theme.colors.surfaceMuted,
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sessionName: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.lg,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sessionMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          marginTop: 1,
+        },
+      }),
+    [theme],
+  );
+
   if (activeRoutineData === undefined) {
     return (
       <WorkoutPage title="Start" subtitle="Loading today's workout...">
-        <View style={styles.restCard}>
-          <Text style={styles.restTitle}>Preparing session</Text>
-          <Text style={styles.restText}>Syncing your active routine and weekly plan.</Text>
-        </View>
+        <AppCard variant="muted">
+          <Text style={styles.body}>Preparing session details and weekly schedule.</Text>
+        </AppCard>
       </WorkoutPage>
     );
   }
 
   if (!activeRoutine || !todayPlan || todayPlan.type === "rest" || !todaySession) {
     return (
-      <WorkoutPage
-        title="Start"
-        subtitle="Today is a rest day. Recover, hydrate, and get ready for your next workout."
-      >
-        <View style={styles.restCard}>
-          <Text style={styles.restTitle}>Active recovery</Text>
-          <Text style={styles.restText}>Suggestion: 20-30 min walk + light mobility work.</Text>
-        </View>
+      <WorkoutPage title="Start" subtitle="Today is a recovery day. Keep momentum with light activity.">
+        <AppCard variant="muted">
+          <AppChip label="Rest day" variant="warning" />
+          <Text style={styles.title}>Active recovery</Text>
+          <Text style={styles.body}>20-30 min walk, mobility work, and hydration target.</Text>
+        </AppCard>
       </WorkoutPage>
     );
   }
@@ -42,95 +103,53 @@ export default function StartScreen() {
   return (
     <WorkoutPage
       title="Start"
-      subtitle={`Today's workout: ${todaySession.name} • estimate ${todayPlan.estimatedDurationMinutes} min`}
+      subtitle={`Today's workout: ${todaySession.name} • ${todayPlan.estimatedDurationMinutes} min`}
     >
-      <View style={styles.sessionCard}>
-        <Text style={styles.sessionTitle}>{todaySession.name}</Text>
-        <Text style={styles.sessionMeta}>{todaySession.exercises.length} planned exercises</Text>
-      </View>
+      <Animated.View entering={FadeInDown.delay(30)}>
+        <AppCard style={{ backgroundColor: theme.gradients.heroPrimary }}>
+          <Text style={styles.title}>{todaySession.name}</Text>
+          <Text style={styles.body}>
+            {todaySession.exercises.length} exercises • Tap each block when completed
+          </Text>
+          <ProgressBar progress={completionProgress} />
+          <Text style={styles.body}>{Math.round(completionProgress * 100)}% complete</Text>
+        </AppCard>
+      </Animated.View>
 
       {todaySession.exercises.map((sessionExercise, index) => {
         const exercise = sessionExercise.exercise;
+        const isCompleted = completedExerciseIds.includes(sessionExercise.id);
 
         return (
-          <View key={sessionExercise.id} style={styles.exerciseCard}>
-            <Text style={styles.exerciseIndex}>{index + 1}</Text>
-            <View style={styles.exerciseInfo}>
-              <Text style={styles.exerciseName}>{exercise.name}</Text>
-              <Text style={styles.exerciseTarget}>
-                {exercise.setsTarget} sets • {exercise.repsTarget} reps • {exercise.restSeconds}s
-              </Text>
-            </View>
-          </View>
+          <Animated.View key={sessionExercise.id} layout={LinearTransition.springify()}>
+            <PressableScale
+              onPress={() => {
+                setCompletedExerciseIds((current) =>
+                  current.includes(sessionExercise.id)
+                    ? current.filter((id) => id !== sessionExercise.id)
+                    : [...current, sessionExercise.id],
+                );
+              }}
+              style={[
+                styles.sessionRow,
+                isCompleted && {
+                  borderColor: theme.colors.success,
+                  backgroundColor: theme.colors.successSoft,
+                },
+              ]}
+            >
+              <Text style={styles.sessionIndex}>{index + 1}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sessionName}>{exercise.name}</Text>
+                <Text style={styles.sessionMeta}>
+                  {exercise.setsTarget} sets • {exercise.repsTarget} reps • {exercise.restSeconds}s rest
+                </Text>
+              </View>
+              <AppChip label={isCompleted ? "Done" : "Pending"} variant={isCompleted ? "success" : "neutral"} />
+            </PressableScale>
+          </Animated.View>
         );
       })}
     </WorkoutPage>
   );
 }
-
-const styles = StyleSheet.create({
-  restCard: {
-    backgroundColor: "#16181D",
-    borderRadius: 20,
-    padding: 18,
-    gap: 6,
-  },
-  restTitle: {
-    color: "#F4F6F8",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  restText: {
-    color: "#B5BCC8",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sessionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
-    gap: 4,
-  },
-  sessionTitle: {
-    color: "#121317",
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  sessionMeta: {
-    color: "#4E545F",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  exerciseCard: {
-    backgroundColor: "#16181D",
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  exerciseIndex: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "#2C313C",
-    color: "#F4F6F8",
-    textAlign: "center",
-    textAlignVertical: "center",
-    fontWeight: "700",
-    overflow: "hidden",
-  },
-  exerciseInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  exerciseName: {
-    color: "#F4F6F8",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  exerciseTarget: {
-    color: "#AFB4BD",
-    fontSize: 13,
-  },
-});

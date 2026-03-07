@@ -1,14 +1,17 @@
 import { Tabs } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
+import { useTheme } from "@/theme";
 
 export default function WorkoutLayout() {
+  const { theme } = useTheme();
+
   return (
     <Tabs
       tabBar={(props) => <WorkoutBottomNav {...props} />}
       screenOptions={{
         headerShown: false,
-        sceneStyle: { backgroundColor: "#0B0B0B" },
+        sceneStyle: { backgroundColor: theme.colors.background },
       }}
     >
       <Tabs.Screen name="home" />

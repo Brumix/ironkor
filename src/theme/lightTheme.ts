@@ -1,0 +1,42 @@
+import { tokens } from "@/theme/tokens";
+import type { AppTheme } from "@/theme/tokens";
+
+export const lightTheme: AppTheme = {
+  name: "light",
+  isDark: false,
+  tokens,
+  colors: {
+    background: "#F4F6FB",
+    backgroundElevated: "#FFFFFF",
+    surface: "#FFFFFF",
+    surfaceAlt: "#EEF2FA",
+    surfaceMuted: "#E8EDF7",
+    text: "#0E1628",
+    textMuted: "#54617A",
+    textSubtle: "#73829D",
+    primary: "#F25F3A",
+    primarySoft: "#FFE5DE",
+    secondary: "#2348C7",
+    secondarySoft: "#DFE7FF",
+    accent: "#0DA96B",
+    accentSoft: "#DDF9EE",
+    success: "#0DA96B",
+    successSoft: "#DDF9EE",
+    warning: "#C07A00",
+    warningSoft: "#FFECCC",
+    error: "#CF2F45",
+    errorSoft: "#FFE0E5",
+    border: "#D7E0F0",
+    borderStrong: "#B7C4DA",
+    overlay: "rgba(14, 22, 40, 0.35)",
+    onPrimary: "#FFFFFF",
+    onSecondary: "#FFFFFF",
+    onAccent: "#FFFFFF",
+  },
+  gradients: {
+    screenGlowTop: "rgba(242, 95, 58, 0.2)",
+    screenGlowBottom: "rgba(35, 72, 199, 0.15)",
+    heroPrimary: "rgba(242, 95, 58, 0.16)",
+    heroSecondary: "rgba(13, 169, 107, 0.14)",
+  },
+};

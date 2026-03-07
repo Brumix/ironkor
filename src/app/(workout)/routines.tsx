@@ -1,14 +1,22 @@
 import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown, FadeInUp, LinearTransition } from "react-native-reanimated";
+import { Alert, StyleSheet, Text, View } from "react-native";
+import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 
+import AppButton from "@/components/ui/AppButton";
+import AppCard from "@/components/ui/AppCard";
+import AppChip from "@/components/ui/AppChip";
+import FloatingActionButton from "@/components/ui/FloatingActionButton";
+import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { useTheme } from "@/theme";
 
 import { api } from "@convex/_generated/api";
 
 export default function RoutinesScreen() {
+  const { theme } = useTheme();
   const routinesData = useQuery(api.routines.listDetailed);
   const exercisesData = useQuery(api.exercises.list);
 
@@ -30,10 +38,61 @@ export default function RoutinesScreen() {
         // no-op
       });
     }
-  }, [routinesData, exercisesData, seedDefaults]);
+  }, [exercisesData, routinesData, seedDefaults]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        title: {
+          color: theme.colors.text,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        meta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+        },
+        cardTopRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: theme.tokens.spacing.sm,
+        },
+        cardBody: {
+          flex: 1,
+        },
+        rowTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.xl,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        rowMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          marginTop: 1,
+        },
+        actionRow: {
+          flexDirection: "row",
+          gap: theme.tokens.spacing.xs,
+          flexWrap: "wrap",
+        },
+        helper: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        swipeActions: {
+          justifyContent: "center",
+          alignItems: "center",
+          marginLeft: theme.tokens.spacing.xs,
+        },
+      }),
+    [theme],
+  );
 
   function handleDeleteRoutine(routineId: string, routineName: string) {
-    Alert.alert("Delete routine", `Delete \"${routineName}\"?`, [
+    Alert.alert("Delete routine", `Delete "${routineName}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -50,9 +109,9 @@ export default function RoutinesScreen() {
   if (routinesData === undefined || exercisesData === undefined) {
     return (
       <WorkoutPage title="Routines" subtitle="Loading your routine workspace...">
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Syncing routines...</Text>
-        </View>
+        <AppCard variant="muted">
+          <Text style={styles.helper}>Syncing routines and exercise library...</Text>
+        </AppCard>
       </WorkoutPage>
     );
   }
@@ -60,192 +119,116 @@ export default function RoutinesScreen() {
   return (
     <WorkoutPage
       title="Routines"
-      subtitle="Build, activate, and manage routines. Open a routine to edit sessions, exercises, and weekly plan."
-    >
-      <Animated.View entering={FadeInDown.delay(30)} layout={LinearTransition.springify()} style={styles.heroCard}>
-        <Text style={styles.heroLabel}>Active routine</Text>
-        <Text style={styles.heroTitle}>{activeRoutine?.name ?? "No active routine"}</Text>
-        <Text style={styles.heroMeta}>
-          {activeRoutine ? `${activeRoutine.daysPerWeek} training days per week` : "Create and activate one to start"}
-        </Text>
-      </Animated.View>
-
-      <View style={styles.headerRow}>
-        <Text style={styles.sectionHeading}>All routines</Text>
-        <Pressable
-          style={styles.primaryButton}
+      subtitle="Build, activate, and tune your routines with fast actions and swipe controls."
+      floatingAction={
+        <FloatingActionButton
+          label="New routine"
           onPress={() => {
             router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
           }}
-        >
-          <Text style={styles.primaryButtonText}>New routine</Text>
-        </Pressable>
-      </View>
+        />
+      }
+    >
+      <Animated.View entering={FadeInUp.delay(20)} layout={LinearTransition.springify()}>
+        <AppCard style={{ backgroundColor: theme.gradients.heroPrimary }}>
+          <AppChip label="Active routine" variant="primary" />
+          <Text style={styles.title}>{activeRoutine?.name ?? "No active routine"}</Text>
+          <Text style={styles.meta}>
+            {activeRoutine
+              ? `${activeRoutine.daysPerWeek} days/week • ${activeRoutine.sessions.length} sessions`
+              : "Create one and activate to start training flow."}
+          </Text>
+        </AppCard>
+      </Animated.View>
+
+      <SectionHeader
+        action={
+          <AppButton
+            label="New routine"
+            onPress={() => {
+              router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
+            }}
+            size="sm"
+          />
+        }
+        title="All routines"
+      />
 
       {routines.map((routine, index) => (
         <Animated.View
-          key={String(routine._id)}
           entering={FadeInUp.delay(40 + index * 40)}
+          key={String(routine._id)}
           layout={LinearTransition.springify()}
-          style={styles.card}
         >
-          <View style={styles.cardTopRow}>
-            <View style={styles.cardBody}>
-              <Text style={styles.cardTitle}>{routine.name}</Text>
-              <Text style={styles.cardMeta}>{routine.daysPerWeek} days/week • {routine.sessions.length} sessions</Text>
-            </View>
-            {routine.isActive ? <Text style={styles.activeTag}>Active</Text> : null}
-          </View>
-
-          <View style={styles.actionRow}>
-            <Pressable
-              style={styles.inlineBtn}
-              onPress={() => {
-                router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
-              }}
-            >
-              <Text style={styles.inlineBtnText}>Edit</Text>
-            </Pressable>
-
-            {routine.isActive ? (
-              <Pressable
-                style={styles.inlineBtn}
-                onPress={() => {
-                  toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
-                    Alert.alert("Failed", "Could not deactivate routine.");
-                  });
-                }}
-              >
-                <Text style={styles.inlineBtnText}>Deactivate</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                style={styles.inlineBtn}
-                onPress={() => {
-                  setActive({ routineId: routine._id }).catch(() => {
-                    Alert.alert("Failed", "Could not activate routine.");
-                  });
-                }}
-              >
-                <Text style={styles.inlineBtnText}>Activate</Text>
-              </Pressable>
+          <ReanimatedSwipeable
+            renderRightActions={() => (
+              <View style={styles.swipeActions}>
+                <AppButton
+                  label="Delete"
+                  onPress={() => {
+                    handleDeleteRoutine(String(routine._id), routine.name);
+                  }}
+                  size="sm"
+                  variant="danger"
+                />
+              </View>
             )}
+          >
+            <AppCard>
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardBody}>
+                  <Text style={styles.rowTitle}>{routine.name}</Text>
+                  <Text style={styles.rowMeta}>
+                    {routine.daysPerWeek} days/week • {routine.sessions.length} sessions
+                  </Text>
+                </View>
+                {routine.isActive ? <AppChip label="Active" variant="success" /> : null}
+              </View>
 
-            <Pressable
-              style={[styles.inlineBtn, styles.dangerBtn]}
-              onPress={() => {
-                handleDeleteRoutine(String(routine._id), routine.name);
-              }}
-            >
-              <Text style={[styles.inlineBtnText, styles.dangerText]}>Delete</Text>
-            </Pressable>
-          </View>
+              <View style={styles.actionRow}>
+                <AppButton
+                  label="Edit"
+                  onPress={() => {
+                    router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
+                  }}
+                  size="sm"
+                  variant="secondary"
+                />
+                {routine.isActive ? (
+                  <AppButton
+                    label="Deactivate"
+                    onPress={() => {
+                      toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
+                        Alert.alert("Failed", "Could not deactivate routine.");
+                      });
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  />
+                ) : (
+                  <AppButton
+                    label="Activate"
+                    onPress={() => {
+                      setActive({ routineId: routine._id }).catch(() => {
+                        Alert.alert("Failed", "Could not activate routine.");
+                      });
+                    }}
+                    size="sm"
+                  />
+                )}
+                <AppButton
+                  label="Delete"
+                  onPress={() => {
+                    handleDeleteRoutine(String(routine._id), routine.name);
+                  }}
+                  size="sm"
+                  variant="danger"
+                />
+              </View>
+            </AppCard>
+          </ReanimatedSwipeable>
         </Animated.View>
       ))}
     </WorkoutPage>
   );
 }
-
-const styles = StyleSheet.create({
-  heroCard: {
-    backgroundColor: "#151920",
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#2A3140",
-    gap: 5,
-  },
-  heroLabel: {
-    color: "#9AA5B8",
-    textTransform: "uppercase",
-    fontSize: 11,
-    letterSpacing: 0.8,
-  },
-  heroTitle: {
-    color: "#F8FAFF",
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  heroMeta: {
-    color: "#AEB7C7",
-    fontSize: 13,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 8,
-  },
-  sectionHeading: {
-    color: "#E8EBF2",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  card: {
-    backgroundColor: "#16181D",
-    borderRadius: 20,
-    padding: 14,
-    gap: 10,
-  },
-  cardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  cardBody: {
-    flex: 1,
-  },
-  cardTitle: {
-    color: "#F4F6F8",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  cardMeta: {
-    color: "#A9B1BE",
-    fontSize: 13,
-  },
-  activeTag: {
-    color: "#0E1117",
-    backgroundColor: "#D7E0EE",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  inlineBtn: {
-    backgroundColor: "#242A34",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  inlineBtnText: {
-    color: "#E7ECF6",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  dangerBtn: {
-    backgroundColor: "#3A2428",
-  },
-  dangerText: {
-    color: "#FFBFC9",
-  },
-  primaryButton: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignSelf: "flex-start",
-  },
-  primaryButtonText: {
-    color: "#101114",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-});
