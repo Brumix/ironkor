@@ -1,3 +1,11 @@
+import { Platform } from "react-native";
+
+const retroFontFamily = Platform.select({
+  ios: "Courier",
+  android: "monospace",
+  default: "monospace",
+});
+
 export const tokens = {
   spacing: {
     none: 0,
@@ -13,17 +21,17 @@ export const tokens = {
     "5xl": 48,
   },
   radius: {
-    xs: 8,
-    sm: 12,
-    md: 16,
-    lg: 22,
-    xl: 28,
+    xs: 2,
+    sm: 4,
+    md: 6,
+    lg: 8,
+    xl: 10,
     pill: 999,
   },
   typography: {
     fontFamily: {
-      display: "System",
-      body: "System",
+      display: retroFontFamily,
+      body: retroFontFamily,
     },
     fontSize: {
       xs: 11,
@@ -50,9 +58,9 @@ export const tokens = {
   },
   elevation: {
     none: 0,
-    sm: 3,
-    md: 7,
-    lg: 12,
+    sm: 1,
+    md: 2,
+    lg: 4,
   },
   motion: {
     quick: 120,

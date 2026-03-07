@@ -47,10 +47,14 @@ function AppCard({ children, variant = "default", style, onPress }: AppCardProps
       StyleSheet.create({
         base: {
           borderRadius: theme.tokens.radius.lg,
-          borderWidth: 1,
+          borderWidth: 2,
           padding: theme.tokens.spacing.lg,
           gap: theme.tokens.spacing.sm,
           overflow: "hidden",
+          shadowColor: theme.colors.text,
+          shadowOpacity: 0.12,
+          shadowRadius: 0,
+          shadowOffset: { width: 0, height: 3 },
         },
       }),
     [theme],

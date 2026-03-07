@@ -50,8 +50,8 @@ function AppChip({ label, variant = "neutral" }: AppChipProps) {
       StyleSheet.create({
         chip: {
           alignSelf: "flex-start",
-          borderRadius: theme.tokens.radius.pill,
-          borderWidth: 1,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 2,
           paddingHorizontal: theme.tokens.spacing.sm + 1,
           paddingVertical: theme.tokens.spacing.xxs + 1,
         },
@@ -59,6 +59,8 @@ function AppChip({ label, variant = "neutral" }: AppChipProps) {
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.xs,
           fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: 0.5,
+          textTransform: "uppercase",
         },
       }),
     [theme],

@@ -1,10 +1,13 @@
+import { Image } from "expo-image";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import mooseMascot from "@/assets/moose.png";
 import { useTheme } from "@/theme";
 
+import type { ImageSource } from "expo-image";
 import type { ReactNode } from "react";
 
 interface WorkoutPageProps {
@@ -13,6 +16,8 @@ interface WorkoutPageProps {
   children: ReactNode;
   floatingAction?: ReactNode;
 }
+
+const mascotSource = mooseMascot as ImageSource;
 
 export default function WorkoutPage({ title, subtitle, children, floatingAction }: WorkoutPageProps) {
   const insets = useSafeAreaInsets();
@@ -33,6 +38,16 @@ export default function WorkoutPage({ title, subtitle, children, floatingAction 
           marginBottom: theme.tokens.spacing.xs,
           gap: theme.tokens.spacing.xs,
         },
+        headerRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: theme.tokens.spacing.sm,
+        },
+        headingBlock: {
+          flex: 1,
+          gap: theme.tokens.spacing.xs,
+        },
         title: {
           color: theme.colors.text,
           fontFamily: theme.tokens.typography.fontFamily.display,
@@ -49,21 +64,50 @@ export default function WorkoutPage({ title, subtitle, children, floatingAction 
           lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
           maxWidth: "92%",
         },
-        glowTop: {
-          position: "absolute",
-          top: -90,
-          right: -70,
-          width: 210,
-          height: 210,
-          borderRadius: 999,
+        mascotWrap: {
+          borderTopWidth: 2,
+          borderLeftWidth: 2,
+          borderBottomWidth: 4,
+          borderRightWidth: 4,
+          borderTopColor: theme.colors.backgroundElevated,
+          borderLeftColor: theme.colors.backgroundElevated,
+          borderBottomColor: theme.colors.borderStrong,
+          borderRightColor: theme.colors.borderStrong,
+          borderRadius: theme.tokens.radius.xs,
+          backgroundColor: theme.colors.surface,
+          paddingHorizontal: theme.tokens.spacing.xs + 1,
+          paddingTop: theme.tokens.spacing.xs + 1,
+          paddingBottom: theme.tokens.spacing.xs,
+          alignItems: "center",
+          gap: theme.tokens.spacing.xxs + 1,
         },
-        glowBottom: {
+        mascot: {
+          width: 52,
+          height: 52,
+          borderRadius: theme.tokens.radius.xs,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        },
+        mascotLabel: {
+          color: theme.colors.textMuted,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: 0.7,
+        },
+        bandTop: {
           position: "absolute",
-          bottom: 90,
-          left: -60,
-          width: 170,
-          height: 170,
-          borderRadius: 999,
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 70,
+        },
+        bandBottom: {
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 58,
         },
       }),
     [theme],
@@ -71,8 +115,8 @@ export default function WorkoutPage({ title, subtitle, children, floatingAction 
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.glowTop, { backgroundColor: theme.gradients.screenGlowTop }]} />
-      <View style={[styles.glowBottom, { backgroundColor: theme.gradients.screenGlowBottom }]} />
+      <View style={[styles.bandTop, { backgroundColor: theme.gradients.screenGlowTop }]} />
+      <View style={[styles.bandBottom, { backgroundColor: theme.gradients.screenGlowBottom }]} />
 
       <ScrollView
         contentContainerStyle={[
@@ -85,8 +129,16 @@ export default function WorkoutPage({ title, subtitle, children, floatingAction 
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal)} style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headingBlock}>
+              <Text style={styles.title}>{title}</Text>
+              <Text style={styles.subtitle}>{subtitle}</Text>
+            </View>
+            <View style={styles.mascotWrap}>
+              <Image contentFit="cover" source={mascotSource} style={styles.mascot} />
+              <Text style={styles.mascotLabel}>Coach Moose</Text>
+            </View>
+          </View>
         </Animated.View>
         {children}
       </ScrollView>

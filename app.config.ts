@@ -32,19 +32,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     slug: "ironkor-mobile",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/moose.png",
     scheme: "ironkormobile",
     userInterfaceStyle: "automatic",
     ios: {
-        icon: "./assets/expo.icon",
+        icon: "./assets/moose.png",
         bundleIdentifier: getUniqueIdentifier(),
     },
     android: {
         adaptiveIcon: {
-            backgroundColor: "#E6F4FE",
-            foregroundImage: "./assets/images/android-icon-foreground.png",
-            backgroundImage: "./assets/images/android-icon-background.png",
-            monochromeImage: "./assets/images/android-icon-monochrome.png"
+            backgroundColor: "#17120F",
+            foregroundImage: "./assets/moose.png"
         },
         softwareKeyboardLayoutMode: "resize",
         predictiveBackGestureEnabled: false,
@@ -52,16 +50,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     web: {
         output: "static",
-        favicon: "./assets/images/favicon.png"
+        favicon: "./assets/moose.png"
     },
     plugins: [
         "expo-router",
         [
             "expo-splash-screen",
             {
-                backgroundColor: "#208AEF",
+                backgroundColor: "#17120F",
+                image: "./assets/moose.png",
                 android: {
-                    image: "./assets/images/splash-icon.png",
+                    image: "./assets/moose.png",
                     imageWidth: 76
                 }
             }

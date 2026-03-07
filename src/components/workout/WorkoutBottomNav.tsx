@@ -62,29 +62,32 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
           paddingTop: theme.tokens.spacing.sm,
         },
         pill: {
-          minHeight: 76,
-          borderRadius: theme.tokens.radius.xl,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.backgroundElevated,
+          minHeight: 78,
+          borderRadius: theme.tokens.radius.sm,
+          borderTopWidth: 2,
+          borderLeftWidth: 2,
+          borderBottomWidth: 4,
+          borderRightWidth: 4,
+          borderTopColor: theme.colors.backgroundElevated,
+          borderLeftColor: theme.colors.backgroundElevated,
+          borderBottomColor: theme.colors.borderStrong,
+          borderRightColor: theme.colors.borderStrong,
+          backgroundColor: theme.colors.surfaceAlt,
           paddingHorizontal: theme.tokens.spacing.sm + 2,
           paddingVertical: theme.tokens.spacing.md,
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
-          shadowColor: theme.colors.text,
-          shadowOpacity: theme.isDark ? 0.26 : 0.12,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: theme.tokens.elevation.md,
         },
         tabButton: {
-          width: 56,
+          width: 58,
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xxs + 1,
-          borderRadius: theme.tokens.radius.md,
-          paddingVertical: theme.tokens.spacing.xs,
+          borderRadius: theme.tokens.radius.xs,
+          borderWidth: 2,
+          borderColor: "transparent",
+          paddingVertical: theme.tokens.spacing.xs + 1,
         },
         group: {
           flexDirection: "row",
@@ -96,9 +99,11 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
           width: 78,
         },
         tabLabel: {
-          fontFamily: theme.tokens.typography.fontFamily.body,
+          fontFamily: theme.tokens.typography.fontFamily.display,
           fontSize: theme.tokens.typography.fontSize.xs,
           fontWeight: theme.tokens.typography.fontWeight.medium,
+          textTransform: "uppercase",
+          letterSpacing: 0.8,
         },
         tabLabelActive: {
           fontWeight: theme.tokens.typography.fontWeight.bold,
@@ -106,20 +111,21 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         centerButton: {
           position: "absolute",
           alignSelf: "center",
-          top: -10,
-          width: 68,
-          height: 68,
-          borderRadius: theme.tokens.radius.pill,
+          top: -8,
+          width: 74,
+          height: 62,
+          borderRadius: theme.tokens.radius.xs,
           backgroundColor: theme.colors.primary,
           alignItems: "center",
           justifyContent: "center",
-          borderWidth: 1,
-          borderColor: theme.colors.primary,
-          shadowColor: theme.colors.primary,
-          shadowOpacity: 0.34,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: theme.tokens.elevation.lg,
+          borderTopWidth: 2,
+          borderLeftWidth: 2,
+          borderBottomWidth: 4,
+          borderRightWidth: 4,
+          borderTopColor: theme.colors.primarySoft,
+          borderLeftColor: theme.colors.primarySoft,
+          borderBottomColor: theme.colors.borderStrong,
+          borderRightColor: theme.colors.borderStrong,
         },
       }),
     [theme],
@@ -173,7 +179,11 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         style={[
           styles.tabButton,
           isFocused && {
-            backgroundColor: theme.colors.surfaceAlt,
+            backgroundColor: theme.colors.surface,
+            borderTopColor: theme.colors.backgroundElevated,
+            borderLeftColor: theme.colors.backgroundElevated,
+            borderBottomColor: theme.colors.border,
+            borderRightColor: theme.colors.border,
           },
         ]}
         testID={descriptors[route.key].options.tabBarButtonTestID}
@@ -202,6 +212,8 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         <PressableScale
           accessibilityLabel="Start today's workout"
           accessibilityRole="button"
+          pressedOpacity={1}
+          pressedScale={0.99}
           onPress={() => {
             navigation.navigate(centerRoute.name, centerRoute.params);
           }}

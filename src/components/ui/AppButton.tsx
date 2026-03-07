@@ -21,7 +21,8 @@ interface AppButtonProps {
 
 interface ButtonStyleSet {
   backgroundColor: string;
-  borderColor: string;
+  borderDark: string;
+  borderLight: string;
   textColor: string;
 }
 
@@ -32,22 +33,26 @@ function resolveButtonStyle(
   const variantMap: Record<ButtonVariant, ButtonStyleSet> = {
     primary: {
       backgroundColor: theme.colors.primary,
-      borderColor: theme.colors.primary,
+      borderDark: theme.colors.borderStrong,
+      borderLight: theme.colors.primarySoft,
       textColor: theme.colors.onPrimary,
     },
     secondary: {
-      backgroundColor: theme.colors.surfaceAlt,
-      borderColor: theme.colors.borderStrong,
-      textColor: theme.colors.text,
+      backgroundColor: theme.colors.secondarySoft,
+      borderDark: theme.colors.secondary,
+      borderLight: theme.colors.surface,
+      textColor: theme.colors.onSecondary,
     },
     ghost: {
-      backgroundColor: "transparent",
-      borderColor: theme.colors.border,
-      textColor: theme.colors.textMuted,
+      backgroundColor: theme.colors.surface,
+      borderDark: theme.colors.borderStrong,
+      borderLight: theme.colors.backgroundElevated,
+      textColor: theme.colors.text,
     },
     danger: {
       backgroundColor: theme.colors.errorSoft,
-      borderColor: theme.colors.error,
+      borderDark: theme.colors.error,
+      borderLight: theme.colors.surface,
       textColor: theme.colors.error,
     },
   };
@@ -63,12 +68,12 @@ function resolveButtonSize(size: ButtonSize, theme: ReturnType<typeof useTheme>[
       fontSize: theme.tokens.typography.fontSize.sm,
     },
     md: {
-      paddingVertical: theme.tokens.spacing.sm + 1,
+      paddingVertical: theme.tokens.spacing.sm,
       paddingHorizontal: theme.tokens.spacing.lg,
       fontSize: theme.tokens.typography.fontSize.md,
     },
     lg: {
-      paddingVertical: theme.tokens.spacing.md,
+      paddingVertical: theme.tokens.spacing.md - 1,
       paddingHorizontal: theme.tokens.spacing.xl,
       fontSize: theme.tokens.typography.fontSize.lg,
     },
@@ -96,13 +101,19 @@ function AppButton({
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xs,
-          borderRadius: theme.tokens.radius.md,
-          borderWidth: 1,
+          borderRadius: theme.tokens.radius.xs,
+          borderTopWidth: 2,
+          borderLeftWidth: 2,
+          borderBottomWidth: 4,
+          borderRightWidth: 4,
+          minHeight: 44,
           alignSelf: fullWidth ? "stretch" : "flex-start",
         },
         label: {
-          fontFamily: theme.tokens.typography.fontFamily.body,
+          fontFamily: theme.tokens.typography.fontFamily.display,
           fontWeight: theme.tokens.typography.fontWeight.bold,
+          textTransform: "uppercase",
+          letterSpacing: 1.05,
         },
       }),
     [fullWidth, theme],
@@ -115,11 +126,16 @@ function AppButton({
     <PressableScale
       onPress={onPress}
       disabled={disabled}
+      pressedOpacity={1}
+      pressedScale={0.99}
       style={[
         styles.button,
         {
           backgroundColor: variantStyle.backgroundColor,
-          borderColor: variantStyle.borderColor,
+          borderTopColor: variantStyle.borderLight,
+          borderLeftColor: variantStyle.borderLight,
+          borderBottomColor: variantStyle.borderDark,
+          borderRightColor: variantStyle.borderDark,
           paddingVertical: buttonSize.paddingVertical,
           paddingHorizontal: buttonSize.paddingHorizontal,
           opacity: disabled ? 0.5 : 1,
