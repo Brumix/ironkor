@@ -80,7 +80,7 @@ export default function StartScreen() {
 
   if (activeRoutineData === undefined) {
     return (
-      <WorkoutPage title="Start" subtitle="Loading today's workout...">
+      <WorkoutPage headerChip={{ icon: "play-outline", label: "Workout" }}>
         <AppCard variant="muted">
           <Text style={styles.body}>Preparing session details and weekly schedule.</Text>
         </AppCard>
@@ -90,7 +90,7 @@ export default function StartScreen() {
 
   if (!activeRoutine || !todayPlan || todayPlan.type === "rest" || !todaySession) {
     return (
-      <WorkoutPage title="Start" subtitle="Today is a recovery day. Keep momentum with light activity.">
+      <WorkoutPage headerChip={{ icon: "moon-outline", label: "Rest" }}>
         <AppCard variant="muted">
           <AppChip label="Rest day" variant="warning" />
           <Text style={styles.title}>Active recovery</Text>
@@ -101,10 +101,7 @@ export default function StartScreen() {
   }
 
   return (
-    <WorkoutPage
-      title="Start"
-      subtitle={`Today's workout: ${todaySession.name} • ${todayPlan.estimatedDurationMinutes} min`}
-    >
+    <WorkoutPage headerChip={{ icon: "play-outline", label: "Workout" }}>
       <Animated.View entering={FadeInDown.delay(30)}>
         <AppCard style={{ backgroundColor: theme.gradients.heroPrimary }}>
           <Text style={styles.title}>{todaySession.name}</Text>

@@ -39,7 +39,7 @@ export default function SettingsScreen() {
   );
 
   return (
-    <WorkoutPage title="Settings" subtitle="Tune app behavior for speed, comfort, and focus in the gym.">
+    <WorkoutPage headerChip={{ icon: "options-outline", label: "Preferences" }}>
       <AppCard>
         <View style={styles.row}>
           <View style={styles.textBlock}>

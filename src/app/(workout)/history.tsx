@@ -48,7 +48,7 @@ export default function HistoryScreen() {
   );
 
   return (
-    <WorkoutPage title="History" subtitle="Recent completed workouts with top sets, duration, and notes.">
+    <WorkoutPage headerChip={{ icon: "time-outline", label: "History" }}>
       {mockLogs.map((log, index) => (
         <Animated.View entering={FadeInUp.delay(40 + index * 30)} key={log.id}>
           <AppCard>

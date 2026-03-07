@@ -9,6 +9,7 @@ import { useTheme } from "@/theme";
 interface FloatingActionButtonProps {
   label?: string;
   iconName?: keyof typeof Ionicons.glyphMap;
+  accessibilityLabel?: string;
   onPress: () => void;
   bottomOffset?: number;
 }
@@ -16,6 +17,7 @@ interface FloatingActionButtonProps {
 function FloatingActionButton({
   label,
   iconName = "add",
+  accessibilityLabel,
   onPress,
   bottomOffset = 112,
 }: FloatingActionButtonProps) {
@@ -64,7 +66,14 @@ function FloatingActionButton({
   );
 
   return (
-    <PressableScale accessibilityRole="button" pressedOpacity={0.95} pressedScale={0.975} style={styles.button} onPress={onPress}>
+    <PressableScale
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityRole="button"
+      pressedOpacity={0.95}
+      pressedScale={0.975}
+      style={styles.button}
+      onPress={onPress}
+    >
       <Ionicons color={theme.colors.onPrimary} name={iconName} size={20} />
       {label ? <Text style={styles.label}>{label}</Text> : null}
     </PressableScale>

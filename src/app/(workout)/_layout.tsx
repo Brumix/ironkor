@@ -26,6 +26,12 @@ export default function WorkoutLayout() {
         }}
       />
       <Tabs.Screen
+        name="session-editor"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           href: null,

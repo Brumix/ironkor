@@ -1,3 +1,4 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useMemo } from "react";
@@ -90,7 +91,7 @@ export default function HomeScreen() {
 
   if (activeRoutineData === undefined) {
     return (
-      <WorkoutPage title="Home" subtitle="Loading your training dashboard...">
+      <WorkoutPage headerChip={{ icon: "home-outline", label: "No routine" }}>
         <AppCard variant="muted">
           <Text style={styles.helper}>Syncing routines and weekly sessions...</Text>
         </AppCard>
@@ -101,11 +102,11 @@ export default function HomeScreen() {
   if (!activeRoutine) {
     return (
       <WorkoutPage
-        title="Home"
-        subtitle="Build your first routine and start logging sessions with one tap between sets."
+        headerChip={{ icon: "home-outline", label: "No routine" }}
         floatingAction={
           <FloatingActionButton
-            label="New routine"
+            accessibilityLabel="Create routine"
+            iconName="add"
             onPress={() => {
               router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
             }}
@@ -115,7 +116,8 @@ export default function HomeScreen() {
         <AppCard variant="muted" style={styles.centered}>
           <Text style={styles.helper}>No active routine yet.</Text>
           <AppButton
-            label="Create routine"
+            accessibilityLabel="Create routine"
+            icon={<Ionicons color={theme.colors.onPrimary} name="add-outline" size={18} />}
             onPress={() => {
               router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
             }}
@@ -127,11 +129,10 @@ export default function HomeScreen() {
 
   return (
     <WorkoutPage
-      title="Home"
-      subtitle="Quick gym flow for today. Open your workout, track sets, and keep momentum high."
+      headerChip={{ icon: "sparkles-outline", label: "Active" }}
       floatingAction={
         <FloatingActionButton
-          label="Start now"
+          accessibilityLabel="Start workout"
           iconName="flash"
           onPress={() => {
             router.push("/(workout)/start");
@@ -154,7 +155,8 @@ export default function HomeScreen() {
       <SectionHeader
         action={
           <AppButton
-            label="Open plan"
+            accessibilityLabel="Open weekly plan"
+            icon={<Ionicons color={theme.colors.text} name="calendar-outline" size={16} />}
             onPress={() => {
               router.push("/(workout)/plan");
             }}

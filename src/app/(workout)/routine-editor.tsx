@@ -3,11 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -61,21 +57,15 @@ export default function RoutineEditorScreen() {
   const params = useLocalSearchParams<{ routineId?: string }>();
 
   const routinesData = useQuery(api.routines.listDetailed);
-  const exercisesData = useQuery(api.exercises.list);
 
   const createRoutine = useMutation(api.routines.create);
   const updateRoutine = useMutation(api.routines.update);
   const upsertSession = useMutation(api.routines.upsertSession);
   const deleteSession = useMutation(api.routines.deleteSession);
   const reorderSessions = useMutation(api.routines.reorderSessions);
-  const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
-  const deleteSessionExercise = useMutation(api.routines.deleteSessionExercise);
-  const reorderSessionExercises = useMutation(api.routines.reorderSessionExercises);
   const updateWeeklyPlan = useMutation(api.routines.updateWeeklyPlan);
-  const createCustomExercise = useMutation(api.exercises.createCustom);
 
   const routines = useMemo(() => routinesData ?? [], [routinesData]);
-  const exercises = useMemo(() => exercisesData ?? [], [exercisesData]);
 
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "new";
   const isNew = routineIdParam === "new";
@@ -86,25 +76,10 @@ export default function RoutineEditorScreen() {
   );
 
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   const [routineName, setRoutineName] = useState("");
   const [newSessionName, setNewSessionName] = useState("");
   const [plannerDraft, setPlannerDraft] = useState<PlannerEntry[]>(defaultPlanner(4));
-
-  const [sessionEditorVisible, setSessionEditorVisible] = useState(false);
-  const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
-  const [customExerciseVisible, setCustomExerciseVisible] = useState(false);
-  const [replaceSessionExerciseId, setReplaceSessionExerciseId] = useState<string | null>(null);
-  const [sessionDraftName, setSessionDraftName] = useState("");
-
-  const [customName, setCustomName] = useState("");
-  const [customVariant, setCustomVariant] = useState("Bodyweight");
-  const [customSets, setCustomSets] = useState("3");
-  const [customReps, setCustomReps] = useState("8-12");
-  const [customRest, setCustomRest] = useState("90");
-  const [customPrimary, setCustomPrimary] = useState("Chest");
-  const [customSecondary, setCustomSecondary] = useState("Triceps");
 
   useEffect(() => {
     if (routinesData === undefined) {
@@ -143,13 +118,14 @@ export default function RoutineEditorScreen() {
     setHydratedFor(currentId);
   }, [hydratedFor, isNew, routinesData, selectedRoutine]);
 
-  const selectedSession = useMemo(() => {
-    if (!selectedRoutine || !selectedSessionId) {
-      return null;
+  function handleBackPress() {
+    if (isNew) {
+      router.replace("/(workout)/routines");
+      return;
     }
 
-    return selectedRoutine.sessions.find((session) => String(session._id) === selectedSessionId) ?? null;
-  }, [selectedRoutine, selectedSessionId]);
+    router.back();
+  }
 
   async function handleSaveRoutine() {
     const name = routineName.trim() || "Untitled routine";
@@ -213,32 +189,6 @@ export default function RoutineEditorScreen() {
     await reorderSessions({
       routineId: selectedRoutine._id,
       orderedSessionIds: reordered.map((session) => session._id),
-    });
-  }
-
-  async function moveSessionExercise(sessionExerciseId: Id<"sessionExercises">, direction: -1 | 1) {
-    if (!selectedSession) {
-      return;
-    }
-
-    const sorted = [...selectedSession.exercises].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((entry) => entry._id === sessionExerciseId);
-    if (index < 0) {
-      return;
-    }
-
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= sorted.length) {
-      return;
-    }
-
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-
-    await reorderSessionExercises({
-      sessionId: selectedSession._id,
-      orderedSessionExerciseIds: reordered.map((entry) => entry._id),
     });
   }
 
@@ -441,72 +391,13 @@ export default function RoutineEditorScreen() {
           fontWeight: theme.tokens.typography.fontWeight.bold,
           fontSize: theme.tokens.typography.fontSize.sm,
         },
-        modalRoot: {
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "stretch",
-        },
-        modalBackdrop: {
-          flex: 1,
-          backgroundColor: theme.colors.overlay,
-          justifyContent: "center",
-          alignItems: "stretch",
-          paddingHorizontal: theme.tokens.spacing.sm + 2,
-        },
-        modalCard: {
-          width: "100%",
-          maxHeight: "82%",
-          backgroundColor: theme.colors.backgroundElevated,
-          borderRadius: theme.tokens.radius.xl,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          padding: theme.tokens.spacing.lg,
-        },
-        sheetHeader: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: theme.tokens.spacing.sm,
-        },
-        sheetTitle: {
-          color: theme.colors.text,
-          fontSize: theme.tokens.typography.fontSize["2xl"],
-          fontWeight: theme.tokens.typography.fontWeight.black,
-        },
-        closeText: {
-          color: theme.colors.textMuted,
-          fontSize: theme.tokens.typography.fontSize.sm,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-        },
-        sheetContent: {
-          paddingBottom: theme.tokens.spacing["4xl"],
-          gap: theme.tokens.spacing.sm,
-        },
-        exerciseRow: {
-          backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          padding: theme.tokens.spacing.sm + 2,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: theme.tokens.spacing.sm,
-        },
-        libraryRow: {
-          backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          padding: theme.tokens.spacing.sm + 2,
-          gap: theme.tokens.spacing.xxs + 1,
-        },
       }),
     [theme],
   );
 
-  if (routinesData === undefined || exercisesData === undefined) {
+  if (routinesData === undefined) {
     return (
-      <WorkoutPage title="Routine Editor" subtitle="Loading routine...">
+      <WorkoutPage headerChip={{ icon: "create-outline", label: "Edit" }}>
         <View style={styles.card}><Text style={styles.cardTitle}>Syncing...</Text></View>
       </WorkoutPage>
     );
@@ -514,8 +405,8 @@ export default function RoutineEditorScreen() {
 
   if (!isNew && !selectedRoutine) {
     return (
-      <WorkoutPage title="Routine Editor" subtitle="Routine not found.">
-        <Pressable style={styles.primaryButton} onPress={() => { router.back(); }}>
+      <WorkoutPage headerChip={{ icon: "create-outline", label: "Edit" }}>
+        <Pressable style={styles.primaryButton} onPress={handleBackPress}>
           <Text style={styles.primaryButtonText}>Back</Text>
         </Pressable>
       </WorkoutPage>
@@ -524,10 +415,12 @@ export default function RoutineEditorScreen() {
 
   return (
     <WorkoutPage
-      title={selectedRoutine ? `Edit ${selectedRoutine.name}` : "Create Routine"}
-      subtitle="Manage sessions, exercises, and weekly plan."
+      headerChip={{
+        icon: selectedRoutine ? "create-outline" : "add-circle-outline",
+        label: selectedRoutine ? "Edit" : "Create",
+      }}
     >
-      <Pressable style={styles.backButton} onPress={() => { router.back(); }}>
+      <Pressable style={styles.backButton} onPress={handleBackPress}>
         <Text style={styles.backButtonText}>← Back</Text>
       </Pressable>
 
@@ -589,10 +482,13 @@ export default function RoutineEditorScreen() {
                 <Pressable
                   style={styles.smallBtn}
                   onPress={() => {
-                    setSelectedSessionId(String(session._id));
-                    setSessionDraftName(session.name);
-                    setReplaceSessionExerciseId(null);
-                    setSessionEditorVisible(true);
+                    router.push({
+                      pathname: "/(workout)/session-editor",
+                      params: {
+                        routineId: String(selectedRoutine._id),
+                        sessionId: String(session._id),
+                      },
+                    });
                   }}
                 >
                   <Text style={styles.smallBtnText}>Edit</Text>
@@ -636,247 +532,6 @@ export default function RoutineEditorScreen() {
       <Pressable style={styles.saveButton} onPress={() => { void handleSaveRoutine(); }}>
         <Text style={styles.saveButtonText}>{selectedRoutine ? "Save changes" : "Create routine"}</Text>
       </Pressable>
-
-      <Modal
-        visible={sessionEditorVisible}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => { setSessionEditorVisible(false); }}
-      >
-        <View style={styles.modalBackdrop}>
-          <KeyboardAvoidingView
-            style={styles.modalRoot}
-            behavior={Platform.OS === "ios" ? "padding" : "position"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
-          >
-            <View style={styles.modalCard}>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Session editor</Text>
-                <Pressable onPress={() => { setSessionEditorVisible(false); }}>
-                  <Text style={styles.closeText}>Close</Text>
-                </Pressable>
-              </View>
-
-              {selectedRoutine && selectedSession ? (
-                <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-                  <TextInput
-                    style={styles.input}
-                    value={sessionDraftName}
-                    onChangeText={setSessionDraftName}
-                    placeholder="Session name"
-                    placeholderTextColor={theme.colors.textSubtle}
-                  />
-
-                  <Pressable
-                    style={styles.primaryButton}
-                    onPress={async () => {
-                      await upsertSession({
-                        routineId: selectedRoutine._id,
-                        sessionId: selectedSession._id,
-                        name: sessionDraftName.trim() || selectedSession.name,
-                      });
-                    }}
-                  >
-                    <Text style={styles.primaryButtonText}>Save session name</Text>
-                  </Pressable>
-
-                  <View style={styles.subHeaderRow}>
-                    <Text style={styles.subHeader}>Exercises</Text>
-                    <Pressable
-                      style={styles.primaryButton}
-                      onPress={() => {
-                        setReplaceSessionExerciseId(null);
-                        setExercisePickerVisible(true);
-                      }}
-                    >
-                      <Text style={styles.primaryButtonText}>Add exercise</Text>
-                    </Pressable>
-                  </View>
-
-                  {[...selectedSession.exercises].sort((a, b) => a.order - b.order).map((entry) => (
-                    <View key={String(entry._id)} style={styles.exerciseRow}>
-                      <View style={styles.flexOne}>
-                        <Text style={styles.sessionName}>{entry.exercise.name}</Text>
-                        <Text style={styles.sessionMeta}>
-                          {entry.exercise.setsTarget} sets • {entry.exercise.repsTarget} reps • {entry.exercise.restSeconds}s
-                        </Text>
-                      </View>
-
-                      <View style={styles.sessionActions}>
-                        <Pressable style={styles.smallBtn} onPress={() => { void moveSessionExercise(entry._id, -1); }}>
-                          <Text style={styles.smallBtnText}>↑</Text>
-                        </Pressable>
-                        <Pressable style={styles.smallBtn} onPress={() => { void moveSessionExercise(entry._id, 1); }}>
-                          <Text style={styles.smallBtnText}>↓</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.smallBtn}
-                          onPress={() => {
-                            setReplaceSessionExerciseId(String(entry._id));
-                            setExercisePickerVisible(true);
-                          }}
-                        >
-                          <Text style={styles.smallBtnText}>Replace</Text>
-                        </Pressable>
-                        <Pressable
-                          style={[styles.smallBtn, styles.smallDangerBtn]}
-                          onPress={() => {
-                            deleteSessionExercise({
-                              sessionId: selectedSession._id,
-                              sessionExerciseId: entry._id,
-                            }).catch(() => {
-                              Alert.alert("Failed", "Could not remove exercise.");
-                            });
-                          }}
-                        >
-                          <Text style={styles.smallBtnText}>Del</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : null}
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={exercisePickerVisible}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => {
-          setReplaceSessionExerciseId(null);
-          setExercisePickerVisible(false);
-        }}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Exercise library</Text>
-              <Pressable
-                onPress={() => {
-                  setReplaceSessionExerciseId(null);
-                  setExercisePickerVisible(false);
-                }}
-              >
-                <Text style={styles.closeText}>Close</Text>
-              </Pressable>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.sheetContent}>
-              <Pressable style={styles.primaryButton} onPress={() => { setCustomExerciseVisible(true); }}>
-                <Text style={styles.primaryButtonText}>Create custom exercise</Text>
-              </Pressable>
-
-              {selectedSession
-                ? exercises.map((exercise) => (
-                  <Pressable
-                    key={String(exercise._id)}
-                    style={styles.libraryRow}
-                    onPress={async () => {
-                      await upsertSessionExercise({
-                        sessionId: selectedSession._id,
-                        sessionExerciseId: replaceSessionExerciseId
-                          ? (replaceSessionExerciseId as Id<"sessionExercises">)
-                          : undefined,
-                        exerciseId: exercise._id,
-                      });
-                      setReplaceSessionExerciseId(null);
-                      setExercisePickerVisible(false);
-                    }}
-                  >
-                    <Text style={styles.sessionName}>{exercise.name}</Text>
-                    <Text style={styles.sessionMeta}>{exercise.variant} • {exercise.setsTarget} x {exercise.repsTarget}</Text>
-                  </Pressable>
-                ))
-                : null}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={customExerciseVisible}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => { setCustomExerciseVisible(false); }}
-      >
-        <View style={styles.modalBackdrop}>
-          <KeyboardAvoidingView
-            style={styles.modalRoot}
-            behavior={Platform.OS === "ios" ? "padding" : "position"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
-          >
-            <View style={styles.modalCard}>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Custom exercise</Text>
-                <Pressable onPress={() => { setCustomExerciseVisible(false); }}>
-                  <Text style={styles.closeText}>Close</Text>
-                </Pressable>
-              </View>
-
-              <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-                <TextInput style={styles.input} value={customName} onChangeText={setCustomName} placeholder="Name" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customVariant} onChangeText={setCustomVariant} placeholder="Variant" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customSets} onChangeText={setCustomSets} keyboardType="number-pad" placeholder="Sets" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customReps} onChangeText={setCustomReps} placeholder="Reps" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customRest} onChangeText={setCustomRest} keyboardType="number-pad" placeholder="Rest seconds" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customPrimary} onChangeText={setCustomPrimary} placeholder="Primary muscles (comma separated)" placeholderTextColor={theme.colors.textSubtle} />
-                <TextInput style={styles.input} value={customSecondary} onChangeText={setCustomSecondary} placeholder="Secondary muscles (comma separated)" placeholderTextColor={theme.colors.textSubtle} />
-
-                <Pressable
-                  style={styles.saveButton}
-                  onPress={async () => {
-                    if (!customName.trim()) {
-                      return;
-                    }
-
-                    const exerciseId = await createCustomExercise({
-                      name: customName.trim(),
-                      variant: customVariant.trim() || "Custom",
-                      setsTarget: Math.max(1, Number(customSets) || 3),
-                      repsTarget: customReps.trim() || "8-12",
-                      restSeconds: Math.max(15, Number(customRest) || 90),
-                      primaryMuscles: customPrimary
-                        .split(",")
-                        .map((item) => item.trim())
-                        .filter(Boolean),
-                      secondaryMuscles: customSecondary
-                        .split(",")
-                        .map((item) => item.trim())
-                        .filter(Boolean),
-                    });
-
-                    if (selectedSession) {
-                      await upsertSessionExercise({
-                        sessionId: selectedSession._id,
-                        sessionExerciseId: replaceSessionExerciseId
-                          ? (replaceSessionExerciseId as Id<"sessionExercises">)
-                          : undefined,
-                        exerciseId,
-                      });
-                    }
-
-                    setReplaceSessionExerciseId(null);
-                    setCustomExerciseVisible(false);
-                    setExercisePickerVisible(false);
-                    setCustomName("");
-                  }}
-                >
-                  <Text style={styles.saveButtonText}>Create and add</Text>
-                </Pressable>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </WorkoutPage>
   );
 }

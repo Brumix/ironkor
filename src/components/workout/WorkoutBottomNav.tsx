@@ -59,9 +59,9 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
     () =>
       StyleSheet.create({
         wrapper: {
-          backgroundColor: "transparent",
+          backgroundColor: theme.colors.background,
           paddingHorizontal: theme.tokens.spacing.xl - 2,
-          paddingTop: theme.tokens.spacing.sm,
+          paddingTop: 0,
         },
         pill: {
           minHeight: 76,

@@ -1,6 +1,7 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
@@ -8,6 +9,7 @@ import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import AppChip from "@/components/ui/AppChip";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import FloatingActionButton from "@/components/ui/FloatingActionButton";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
@@ -24,6 +26,8 @@ export default function RoutinesScreen() {
   const deleteRoutine = useMutation(api.routines.deleteRoutine);
   const setActive = useMutation(api.routines.setActive);
   const toggleActive = useMutation(api.routines.toggleActive);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
 
   const routines = useMemo(() => routinesData ?? [], [routinesData]);
   const activeRoutine = useMemo(() => routines.find((routine) => routine.isActive) ?? null, [routines]);
@@ -91,24 +95,42 @@ export default function RoutinesScreen() {
     [theme],
   );
 
-  function handleDeleteRoutine(routineId: string, routineName: string) {
-    Alert.alert("Delete routine", `Delete "${routineName}"?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          deleteRoutine({ routineId: routineId as never }).catch(() => {
-            Alert.alert("Failed", "Could not delete routine.");
-          });
-        },
-      },
-    ]);
+  function openDeleteRoutineModal(routineId: string, routineName: string) {
+    if (isDeletingRoutine) {
+      return;
+    }
+
+    setDeleteTarget({ id: routineId, name: routineName });
+  }
+
+  function closeDeleteRoutineModal() {
+    if (isDeletingRoutine) {
+      return;
+    }
+
+    setDeleteTarget(null);
+  }
+
+  async function confirmDeleteRoutine() {
+    if (!deleteTarget || isDeletingRoutine) {
+      return;
+    }
+
+    setIsDeletingRoutine(true);
+
+    try {
+      await deleteRoutine({ routineId: deleteTarget.id as never });
+      setDeleteTarget(null);
+    } catch {
+      Alert.alert("Failed", "Could not delete routine.");
+    } finally {
+      setIsDeletingRoutine(false);
+    }
   }
 
   if (routinesData === undefined || exercisesData === undefined) {
     return (
-      <WorkoutPage title="Routines" subtitle="Loading your routine workspace...">
+      <WorkoutPage headerChip={{ icon: "barbell-outline", label: "Routines" }}>
         <AppCard variant="muted">
           <Text style={styles.helper}>Syncing routines and exercise library...</Text>
         </AppCard>
@@ -118,11 +140,12 @@ export default function RoutinesScreen() {
 
   return (
     <WorkoutPage
-      title="Routines"
-      subtitle="Build, activate, and tune your routines with fast actions and swipe controls."
+      headerChip={{ icon: "barbell-outline", label: "Routines" }}
       floatingAction={
         <FloatingActionButton
-          label="New routine"
+          accessibilityLabel="Create routine"
+          iconName="add"
+          label="Add routine"
           onPress={() => {
             router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
           }}
@@ -141,18 +164,7 @@ export default function RoutinesScreen() {
         </AppCard>
       </Animated.View>
 
-      <SectionHeader
-        action={
-          <AppButton
-            label="New routine"
-            onPress={() => {
-              router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
-            }}
-            size="sm"
-          />
-        }
-        title="All routines"
-      />
+      <SectionHeader title="All routines" />
 
       {routines.map((routine, index) => (
         <Animated.View
@@ -164,9 +176,10 @@ export default function RoutinesScreen() {
             renderRightActions={() => (
               <View style={styles.swipeActions}>
                 <AppButton
-                  label="Delete"
+                  accessibilityLabel={`Delete ${routine.name}`}
+                  icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
                   onPress={() => {
-                    handleDeleteRoutine(String(routine._id), routine.name);
+                    openDeleteRoutineModal(String(routine._id), routine.name);
                   }}
                   size="sm"
                   variant="danger"
@@ -187,7 +200,8 @@ export default function RoutinesScreen() {
 
               <View style={styles.actionRow}>
                 <AppButton
-                  label="Edit"
+                  accessibilityLabel={`Edit ${routine.name}`}
+                  icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
                   onPress={() => {
                     router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
                   }}
@@ -196,6 +210,8 @@ export default function RoutinesScreen() {
                 />
                 {routine.isActive ? (
                   <AppButton
+                    accessibilityLabel={`Deactivate ${routine.name}`}
+                    icon={<Ionicons color={theme.colors.text} name="pause-circle-outline" size={16} />}
                     label="Deactivate"
                     onPress={() => {
                       toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
@@ -207,6 +223,8 @@ export default function RoutinesScreen() {
                   />
                 ) : (
                   <AppButton
+                    accessibilityLabel={`Activate ${routine.name}`}
+                    icon={<Ionicons color={theme.colors.onPrimary} name="checkmark-circle-outline" size={16} />}
                     label="Activate"
                     onPress={() => {
                       setActive({ routineId: routine._id }).catch(() => {
@@ -217,9 +235,10 @@ export default function RoutinesScreen() {
                   />
                 )}
                 <AppButton
-                  label="Delete"
+                  accessibilityLabel={`Delete ${routine.name}`}
+                  icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
                   onPress={() => {
-                    handleDeleteRoutine(String(routine._id), routine.name);
+                    openDeleteRoutineModal(String(routine._id), routine.name);
                   }}
                   size="sm"
                   variant="danger"
@@ -229,6 +248,19 @@ export default function RoutinesScreen() {
           </ReanimatedSwipeable>
         </Animated.View>
       ))}
+
+      <ConfirmActionModal
+        visible={Boolean(deleteTarget)}
+        title="Delete routine"
+        message={deleteTarget ? `Delete "${deleteTarget.name}"?` : undefined}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        closeOnBackdropPress
+        isSubmitting={isDeletingRoutine}
+        onConfirm={confirmDeleteRoutine}
+        onCancel={closeDeleteRoutineModal}
+      />
     </WorkoutPage>
   );
 }

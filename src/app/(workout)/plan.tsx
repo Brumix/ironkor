@@ -52,7 +52,7 @@ export default function PlanScreen() {
 
   if (activeRoutineData === undefined) {
     return (
-      <WorkoutPage title="Plan" subtitle="Loading your weekly plan...">
+      <WorkoutPage headerChip={{ icon: "calendar-outline", label: "Weekly plan" }}>
         <AppCard variant="muted">
           <Text style={styles.helper}>Syncing current split and day assignments...</Text>
         </AppCard>
@@ -62,7 +62,7 @@ export default function PlanScreen() {
 
   if (!activeRoutine || !weeklyPlan) {
     return (
-      <WorkoutPage title="Plan" subtitle="Automatic weekly planning with training and recovery days.">
+      <WorkoutPage headerChip={{ icon: "calendar-outline", label: "Weekly plan" }}>
         <AppCard variant="muted">
           <Text style={styles.helper}>Create and activate a routine to unlock your weekly schedule.</Text>
         </AppCard>
@@ -71,7 +71,7 @@ export default function PlanScreen() {
   }
 
   return (
-    <WorkoutPage title="Plan" subtitle="Automatic weekly planning with training and recovery days.">
+    <WorkoutPage headerChip={{ icon: "calendar-outline", label: "Weekly plan" }}>
       {weeklyPlan.dayPlans.map((dayPlan, index) => (
         <Animated.View entering={FadeInUp.delay(30 + index * 22)} key={dayPlan.dateISO}>
           <AppCard variant={dayPlan.type === "train" ? "default" : "muted"}>

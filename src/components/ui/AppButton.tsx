@@ -9,15 +9,25 @@ import type { ReactNode } from "react";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
-interface AppButtonProps {
-  label: string;
+interface AppButtonBaseProps {
   onPress: () => void;
   variant?: ButtonVariant;
   size?: ButtonSize;
-  icon?: ReactNode;
   fullWidth?: boolean;
   disabled?: boolean;
+  accessibilityLabel?: string;
 }
+
+type AppButtonProps =
+  | (AppButtonBaseProps & {
+      label: string;
+      icon?: ReactNode;
+    })
+  | (AppButtonBaseProps & {
+      label?: never;
+      icon: ReactNode;
+      accessibilityLabel: string;
+    });
 
 interface ButtonStyleSet {
   backgroundColor: string;
@@ -90,8 +100,10 @@ function AppButton({
   icon,
   fullWidth = false,
   disabled = false,
+  accessibilityLabel,
 }: AppButtonProps) {
   const { theme } = useTheme();
+  const isIconOnly = !label;
 
   const styles = useMemo(
     () =>
@@ -124,6 +136,8 @@ function AppButton({
     <PressableScale
       onPress={onPress}
       disabled={disabled}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
       pressedOpacity={0.96}
       pressedScale={0.975}
       style={[
@@ -135,18 +149,19 @@ function AppButton({
           borderRightColor: variantStyle.borderDark,
           borderBottomColor: variantStyle.borderDark,
           paddingVertical: buttonSize.paddingVertical,
-          paddingHorizontal: buttonSize.paddingHorizontal,
+          paddingHorizontal: isIconOnly ? theme.tokens.spacing.sm : buttonSize.paddingHorizontal,
           opacity: disabled ? 0.5 : 1,
           shadowColor: "#000000",
           shadowOpacity: theme.isDark ? 0.28 : 0.1,
           shadowRadius: 12,
           shadowOffset: { width: 2, height: 5 },
           elevation: theme.tokens.elevation.sm,
+          minWidth: isIconOnly ? 44 : undefined,
         },
       ]}
     >
       {icon ? <View>{icon}</View> : null}
-      <Text style={[styles.label, { color: variantStyle.textColor, fontSize: buttonSize.fontSize }]}>{label}</Text>
+      {label ? <Text style={[styles.label, { color: variantStyle.textColor, fontSize: buttonSize.fontSize }]}>{label}</Text> : null}
     </PressableScale>
   );
 }
