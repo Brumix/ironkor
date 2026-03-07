@@ -1,16 +1,31 @@
+import { useQuery } from "convex/react";
 import { StyleSheet, Text, View } from "react-native";
 
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mockExercises, mockRoutine } from "@/features/workout/mockData";
-import { getExerciseMap, getMockWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+import { mapRoutineDetailed } from "@/features/workout/mappers";
+import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+
+import { api } from "@convex/_generated/api";
 
 export default function StartScreen() {
-  const weeklyPlan = getMockWeeklyPlan();
-  const todayPlan = getTodayPlan(weeklyPlan);
-  const todaySession = getSessionById(mockRoutine, todayPlan?.sessionId);
-  const exerciseMap = getExerciseMap(mockExercises);
+  const activeRoutineData = useQuery(api.routines.getActiveDetailed);
+  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
+  const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
+  const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
 
-  if (!todayPlan || todayPlan.type === "rest" || !todaySession) {
+  if (activeRoutineData === undefined) {
+    return (
+      <WorkoutPage title="Start" subtitle="Loading today's workout...">
+        <View style={styles.restCard}>
+          <Text style={styles.restTitle}>Preparing session</Text>
+          <Text style={styles.restText}>Syncing your active routine and weekly plan.</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
+
+  if (!activeRoutine || !todayPlan || todayPlan.type === "rest" || !todaySession) {
     return (
       <WorkoutPage
         title="Start"
@@ -31,17 +46,14 @@ export default function StartScreen() {
     >
       <View style={styles.sessionCard}>
         <Text style={styles.sessionTitle}>{todaySession.name}</Text>
-        <Text style={styles.sessionMeta}>{todaySession.exerciseIds.length} planned exercises</Text>
+        <Text style={styles.sessionMeta}>{todaySession.exercises.length} planned exercises</Text>
       </View>
 
-      {todaySession.exerciseIds.map((exerciseId, index) => {
-        const exercise = exerciseMap.get(exerciseId);
-        if (!exercise) {
-          return null;
-        }
+      {todaySession.exercises.map((sessionExercise, index) => {
+        const exercise = sessionExercise.exercise;
 
         return (
-          <View key={exercise.id} style={styles.exerciseCard}>
+          <View key={sessionExercise.id} style={styles.exerciseCard}>
             <Text style={styles.exerciseIndex}>{index + 1}</Text>
             <View style={styles.exerciseInfo}>
               <Text style={styles.exerciseName}>{exercise.name}</Text>

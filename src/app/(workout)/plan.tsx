@@ -1,11 +1,36 @@
+import { useQuery } from "convex/react";
 import { StyleSheet, Text, View } from "react-native";
 
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mockRoutine } from "@/features/workout/mockData";
-import { getMockWeeklyPlan, getSessionById } from "@/features/workout/selectors";
+import { mapRoutineDetailed } from "@/features/workout/mappers";
+import { buildWeeklyPlan } from "@/features/workout/selectors";
+
+import { api } from "@convex/_generated/api";
 
 export default function PlanScreen() {
-  const weeklyPlan = getMockWeeklyPlan();
+  const activeRoutineData = useQuery(api.routines.getActiveDetailed);
+  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
+
+  if (activeRoutineData === undefined) {
+    return (
+      <WorkoutPage title="Plan" subtitle="Loading your weekly plan...">
+        <View style={styles.rowTrain}>
+          <Text style={styles.session}>Syncing plan...</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
+
+  if (!activeRoutine || !weeklyPlan) {
+    return (
+      <WorkoutPage title="Plan" subtitle="Automatic weekly planning with training and rest days.">
+        <View style={styles.rowRest}>
+          <Text style={styles.session}>Create and activate a routine to see your weekly plan.</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
 
   return (
     <WorkoutPage
@@ -13,8 +38,6 @@ export default function PlanScreen() {
       subtitle="Automatic weekly planning with training and rest days."
     >
       {weeklyPlan.dayPlans.map((dayPlan) => {
-        const session = getSessionById(mockRoutine, dayPlan.sessionId);
-
         return (
           <View
             key={dayPlan.dateISO}
@@ -22,7 +45,7 @@ export default function PlanScreen() {
           >
             <View>
               <Text style={styles.date}>{new Date(dayPlan.dateISO).toLocaleDateString("en-US", { weekday: "long", day: "2-digit", month: "2-digit" })}</Text>
-              <Text style={styles.session}>{dayPlan.type === "train" ? session?.name ?? "Workout" : "Rest"}</Text>
+              <Text style={styles.session}>{dayPlan.type === "train" ? dayPlan.sessionName ?? "Workout" : "Rest"}</Text>
             </View>
 
             <View style={styles.right}>
@@ -49,9 +72,13 @@ const styles = StyleSheet.create({
   },
   rowTrain: {
     backgroundColor: "#16181D",
+    borderRadius: 18,
+    padding: 14,
   },
   rowRest: {
     backgroundColor: "#131923",
+    borderRadius: 18,
+    padding: 14,
   },
   date: {
     color: "#CAD1DD",

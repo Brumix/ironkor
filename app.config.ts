@@ -46,6 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
             backgroundImage: "./assets/images/android-icon-background.png",
             monochromeImage: "./assets/images/android-icon-monochrome.png"
         },
+        softwareKeyboardLayoutMode: "resize",
         predictiveBackGestureEnabled: false,
         package: getUniqueIdentifier(),
     },

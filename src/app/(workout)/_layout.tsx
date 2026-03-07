@@ -17,6 +17,12 @@ export default function WorkoutLayout() {
       <Tabs.Screen name="plan" />
       <Tabs.Screen name="settings" />
       <Tabs.Screen
+        name="routine-editor"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
           href: null,

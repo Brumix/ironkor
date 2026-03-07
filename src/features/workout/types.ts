@@ -1,4 +1,5 @@
 export type TrainingDayType = "train" | "rest";
+export type AssignmentMode = "auto" | "manual";
 
 export interface WorkoutSessionTemplate {
   id: string;
@@ -22,6 +23,37 @@ export interface Exercise {
   restSeconds: number;
   primaryMuscles: string[];
   secondaryMuscles: string[];
+  isCustom?: boolean;
+}
+
+export interface SessionExercise {
+  id: string;
+  order: number;
+  exercise: Exercise;
+}
+
+export interface RoutineSessionDetailed {
+  id: string;
+  name: string;
+  order: number;
+  exercises: SessionExercise[];
+}
+
+export interface WeeklyPlanTemplateEntry {
+  day: number;
+  type: TrainingDayType;
+  assignmentMode: AssignmentMode;
+  manualSessionId?: string;
+}
+
+export interface RoutineDetailed {
+  id: string;
+  name: string;
+  daysPerWeek: number;
+  isActive: boolean;
+  sessionOrder: string[];
+  weeklyPlan: WeeklyPlanTemplateEntry[];
+  sessions: RoutineSessionDetailed[];
 }
 
 export interface WorkoutPerformedSet {
@@ -48,6 +80,7 @@ export interface WeeklyDayPlan {
   dateISO: string;
   type: TrainingDayType;
   sessionId?: string;
+  sessionName?: string;
   estimatedDurationMinutes: number;
 }
 

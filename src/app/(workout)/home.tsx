@@ -1,9 +1,35 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useQuery } from "convex/react";
+import { StyleSheet, Text, View } from "react-native";
 
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mockRoutine } from "@/features/workout/mockData";
+import { mapRoutineDetailed } from "@/features/workout/mappers";
+
+import { api } from "@convex/_generated/api";
 
 export default function HomeScreen() {
+  const activeRoutineData = useQuery(api.routines.getActiveDetailed);
+  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+
+  if (activeRoutineData === undefined) {
+    return (
+      <WorkoutPage title="Home" subtitle="Loading your active routine...">
+        <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderText}>Syncing routines...</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
+
+  if (!activeRoutine) {
+    return (
+      <WorkoutPage title="Home" subtitle="No active routine yet.">
+        <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderText}>Create and activate your first routine in the Routines tab.</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
+
   return (
     <WorkoutPage
       title="Home"
@@ -11,32 +37,38 @@ export default function HomeScreen() {
     >
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{mockRoutine.name}</Text>
+          <Text style={styles.cardTitle}>{activeRoutine.name}</Text>
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{mockRoutine.daysPerWeek} days/week</Text>
+            <Text style={styles.badgeText}>{activeRoutine.daysPerWeek} days/week</Text>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>Routine sessions</Text>
-        {mockRoutine.sessions.map((session, index) => (
+        {activeRoutine.sessions.map((session, index) => (
           <View key={session.id} style={styles.sessionRow}>
             <Text style={styles.sessionIndex}>{index + 1}</Text>
             <View style={styles.sessionInfo}>
               <Text style={styles.sessionName}>{session.name}</Text>
-              <Text style={styles.sessionMeta}>{session.exerciseIds.length} exercises</Text>
+              <Text style={styles.sessionMeta}>{session.exercises.length} exercises</Text>
             </View>
           </View>
         ))}
-
-        <Pressable style={styles.editButton}>
-          <Text style={styles.editButtonText}>Edit routine</Text>
-        </Pressable>
       </View>
     </WorkoutPage>
   );
 }
 
 const styles = StyleSheet.create({
+  placeholderCard: {
+    backgroundColor: "#16181D",
+    borderRadius: 20,
+    padding: 18,
+  },
+  placeholderText: {
+    color: "#B7BEC8",
+    fontSize: 14,
+    lineHeight: 20,
+  },
   card: {
     backgroundColor: "#16181D",
     borderRadius: 24,
@@ -101,17 +133,5 @@ const styles = StyleSheet.create({
   sessionMeta: {
     color: "#AFB4BD",
     fontSize: 13,
-  },
-  editButton: {
-    marginTop: 4,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  editButtonText: {
-    color: "#121317",
-    fontSize: 14,
-    fontWeight: "700",
   },
 });
