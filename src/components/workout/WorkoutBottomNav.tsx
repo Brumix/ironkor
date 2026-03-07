@@ -52,6 +52,8 @@ function resolveRouteName(name: string): RouteName | undefined {
 export default function WorkoutBottomNav({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const bevelLight = theme.isDark ? "rgba(255,255,255,0.06)" : "#FFFFFF";
+  const bevelDark = theme.isDark ? "rgba(0,0,0,0.64)" : "#D3D9E2";
 
   const styles = useMemo(
     () =>
@@ -62,32 +64,35 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
           paddingTop: theme.tokens.spacing.sm,
         },
         pill: {
-          minHeight: 78,
-          borderRadius: theme.tokens.radius.sm,
-          borderTopWidth: 2,
-          borderLeftWidth: 2,
-          borderBottomWidth: 4,
-          borderRightWidth: 4,
-          borderTopColor: theme.colors.backgroundElevated,
-          borderLeftColor: theme.colors.backgroundElevated,
-          borderBottomColor: theme.colors.borderStrong,
-          borderRightColor: theme.colors.borderStrong,
-          backgroundColor: theme.colors.surfaceAlt,
+          minHeight: 76,
+          borderRadius: theme.tokens.radius.lg,
+          borderTopWidth: 1,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderBottomWidth: 1.5,
+          borderTopColor: bevelLight,
+          borderLeftColor: bevelLight,
+          borderRightColor: bevelDark,
+          borderBottomColor: bevelDark,
+          backgroundColor: theme.colors.surface,
           paddingHorizontal: theme.tokens.spacing.sm + 2,
           paddingVertical: theme.tokens.spacing.md,
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
+          shadowColor: "#000000",
+          shadowOpacity: theme.isDark ? 0.34 : 0.12,
+          shadowRadius: 18,
+          shadowOffset: { width: 2, height: 8 },
+          elevation: theme.tokens.elevation.md,
         },
         tabButton: {
-          width: 58,
+          width: 56,
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xxs + 1,
-          borderRadius: theme.tokens.radius.xs,
-          borderWidth: 2,
-          borderColor: "transparent",
-          paddingVertical: theme.tokens.spacing.xs + 1,
+          borderRadius: theme.tokens.radius.md,
+          paddingVertical: theme.tokens.spacing.xs,
         },
         group: {
           flexDirection: "row",
@@ -99,11 +104,9 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
           width: 78,
         },
         tabLabel: {
-          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.xs,
           fontWeight: theme.tokens.typography.fontWeight.medium,
-          textTransform: "uppercase",
-          letterSpacing: 0.8,
         },
         tabLabelActive: {
           fontWeight: theme.tokens.typography.fontWeight.bold,
@@ -111,24 +114,29 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         centerButton: {
           position: "absolute",
           alignSelf: "center",
-          top: -8,
-          width: 74,
-          height: 62,
-          borderRadius: theme.tokens.radius.xs,
+          top: -10,
+          width: 68,
+          height: 68,
+          borderRadius: theme.tokens.radius.pill,
           backgroundColor: theme.colors.primary,
           alignItems: "center",
           justifyContent: "center",
-          borderTopWidth: 2,
-          borderLeftWidth: 2,
-          borderBottomWidth: 4,
-          borderRightWidth: 4,
-          borderTopColor: theme.colors.primarySoft,
-          borderLeftColor: theme.colors.primarySoft,
-          borderBottomColor: theme.colors.borderStrong,
-          borderRightColor: theme.colors.borderStrong,
+          borderTopWidth: 1,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderBottomWidth: 1.5,
+          borderTopColor: theme.isDark ? "rgba(255,255,255,0.22)" : "#40454E",
+          borderLeftColor: theme.isDark ? "rgba(255,255,255,0.22)" : "#40454E",
+          borderRightColor: theme.isDark ? "rgba(0,0,0,0.74)" : "#070A0F",
+          borderBottomColor: theme.isDark ? "rgba(0,0,0,0.74)" : "#070A0F",
+          shadowColor: "#000000",
+          shadowOpacity: theme.isDark ? 0.4 : 0.2,
+          shadowRadius: 18,
+          shadowOffset: { width: 2, height: 9 },
+          elevation: theme.tokens.elevation.lg,
         },
       }),
-    [theme],
+    [bevelDark, bevelLight, theme],
   );
 
   const centerRoute = state.routes.find((route) => resolveRouteName(route.name) === CENTER_TAB);
@@ -179,11 +187,15 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         style={[
           styles.tabButton,
           isFocused && {
-            backgroundColor: theme.colors.surface,
-            borderTopColor: theme.colors.backgroundElevated,
-            borderLeftColor: theme.colors.backgroundElevated,
-            borderBottomColor: theme.colors.border,
-            borderRightColor: theme.colors.border,
+            backgroundColor: theme.colors.surfaceAlt,
+            borderTopWidth: 1,
+            borderLeftWidth: 1,
+            borderRightWidth: 1,
+            borderBottomWidth: 1.5,
+            borderTopColor: bevelLight,
+            borderLeftColor: bevelLight,
+            borderRightColor: bevelDark,
+            borderBottomColor: bevelDark,
           },
         ]}
         testID={descriptors[route.key].options.tabBarButtonTestID}
@@ -212,8 +224,8 @@ export default function WorkoutBottomNav({ state, descriptors, navigation }: Bot
         <PressableScale
           accessibilityLabel="Start today's workout"
           accessibilityRole="button"
-          pressedOpacity={1}
-          pressedScale={0.99}
+          pressedOpacity={0.92}
+          pressedScale={0.985}
           onPress={() => {
             navigation.navigate(centerRoute.name, centerRoute.params);
           }}

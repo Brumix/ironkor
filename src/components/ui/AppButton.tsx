@@ -21,8 +21,8 @@ interface AppButtonProps {
 
 interface ButtonStyleSet {
   backgroundColor: string;
-  borderDark: string;
   borderLight: string;
+  borderDark: string;
   textColor: string;
 }
 
@@ -33,26 +33,26 @@ function resolveButtonStyle(
   const variantMap: Record<ButtonVariant, ButtonStyleSet> = {
     primary: {
       backgroundColor: theme.colors.primary,
-      borderDark: theme.colors.borderStrong,
-      borderLight: theme.colors.primarySoft,
+      borderLight: theme.isDark ? "rgba(255,255,255,0.24)" : "#3C4149",
+      borderDark: theme.isDark ? "rgba(0,0,0,0.74)" : "#070A0F",
       textColor: theme.colors.onPrimary,
     },
     secondary: {
       backgroundColor: theme.colors.secondarySoft,
-      borderDark: theme.colors.secondary,
-      borderLight: theme.colors.surface,
-      textColor: theme.colors.onSecondary,
+      borderLight: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
+      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#D3D9E2",
+      textColor: theme.colors.text,
     },
     ghost: {
       backgroundColor: theme.colors.surface,
-      borderDark: theme.colors.borderStrong,
-      borderLight: theme.colors.backgroundElevated,
+      borderLight: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
+      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#D3D9E2",
       textColor: theme.colors.text,
     },
     danger: {
       backgroundColor: theme.colors.errorSoft,
-      borderDark: theme.colors.error,
-      borderLight: theme.colors.surface,
+      borderLight: theme.isDark ? "rgba(255,255,255,0.1)" : "#FFF4F2",
+      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#E9C2BE",
       textColor: theme.colors.error,
     },
   };
@@ -101,19 +101,17 @@ function AppButton({
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xs,
-          borderRadius: theme.tokens.radius.xs,
-          borderTopWidth: 2,
-          borderLeftWidth: 2,
-          borderBottomWidth: 4,
-          borderRightWidth: 4,
+          borderRadius: theme.tokens.radius.sm,
+          borderTopWidth: 1,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderBottomWidth: 1.5,
           minHeight: 44,
           alignSelf: fullWidth ? "stretch" : "flex-start",
         },
         label: {
-          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontFamily: theme.tokens.typography.fontFamily.body,
           fontWeight: theme.tokens.typography.fontWeight.bold,
-          textTransform: "uppercase",
-          letterSpacing: 1.05,
         },
       }),
     [fullWidth, theme],
@@ -126,19 +124,24 @@ function AppButton({
     <PressableScale
       onPress={onPress}
       disabled={disabled}
-      pressedOpacity={1}
-      pressedScale={0.99}
+      pressedOpacity={0.96}
+      pressedScale={0.975}
       style={[
         styles.button,
         {
           backgroundColor: variantStyle.backgroundColor,
           borderTopColor: variantStyle.borderLight,
           borderLeftColor: variantStyle.borderLight,
-          borderBottomColor: variantStyle.borderDark,
           borderRightColor: variantStyle.borderDark,
+          borderBottomColor: variantStyle.borderDark,
           paddingVertical: buttonSize.paddingVertical,
           paddingHorizontal: buttonSize.paddingHorizontal,
           opacity: disabled ? 0.5 : 1,
+          shadowColor: "#000000",
+          shadowOpacity: theme.isDark ? 0.28 : 0.1,
+          shadowRadius: 12,
+          shadowOffset: { width: 2, height: 5 },
+          elevation: theme.tokens.elevation.sm,
         },
       ]}
     >

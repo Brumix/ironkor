@@ -31,7 +31,7 @@ function ProgressBar({ progress, height }: ProgressBarProps) {
         fill: {
           height: "100%",
           borderRadius: theme.tokens.radius.pill,
-          backgroundColor: theme.colors.primary,
+          backgroundColor: theme.colors.accent,
         },
       }),
     [height, theme],

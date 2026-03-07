@@ -41,23 +41,33 @@ function resolveVariantStyle(variant: CardVariant, theme: ReturnType<typeof useT
 
 function AppCard({ children, variant = "default", style, onPress }: AppCardProps) {
   const { theme } = useTheme();
+  const bevelLight = theme.isDark ? "rgba(255,255,255,0.06)" : "#FFFFFF";
+  const bevelDark = theme.isDark ? "rgba(0,0,0,0.62)" : "#D7DDE7";
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         base: {
-          borderRadius: theme.tokens.radius.lg,
-          borderWidth: 2,
+          borderRadius: theme.tokens.radius.md,
+          borderTopWidth: 1,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderBottomWidth: 1.5,
           padding: theme.tokens.spacing.lg,
           gap: theme.tokens.spacing.sm,
           overflow: "hidden",
-          shadowColor: theme.colors.text,
-          shadowOpacity: 0.12,
-          shadowRadius: 0,
-          shadowOffset: { width: 0, height: 3 },
+          shadowColor: "#000000",
+          shadowOpacity: theme.isDark ? 0.34 : 0.1,
+          shadowRadius: theme.isDark ? 22 : 14,
+          shadowOffset: { width: 3, height: 6 },
+          elevation: theme.tokens.elevation.sm,
+          borderTopColor: bevelLight,
+          borderLeftColor: bevelLight,
+          borderRightColor: bevelDark,
+          borderBottomColor: bevelDark,
         },
       }),
-    [theme],
+    [bevelDark, bevelLight, theme],
   );
 
   const variantStyle = resolveVariantStyle(variant, theme);

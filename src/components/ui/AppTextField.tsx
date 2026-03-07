@@ -11,6 +11,8 @@ interface AppTextFieldProps extends TextInputProps {
 
 function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
   const { theme } = useTheme();
+  const insetLight = theme.isDark ? "rgba(255,255,255,0.06)" : "#FFFFFF";
+  const insetDark = theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2";
 
   const styles = useMemo(
     () =>
@@ -22,15 +24,19 @@ function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
           color: theme.colors.textMuted,
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.xs,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-          textTransform: "uppercase",
-          letterSpacing: 0.7,
+          fontWeight: theme.tokens.typography.fontWeight.semibold,
         },
         input: {
           backgroundColor: theme.colors.surfaceAlt,
           borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
+          borderTopWidth: 1.5,
+          borderLeftWidth: 1.5,
+          borderRightWidth: 1,
+          borderBottomWidth: 1,
+          borderTopColor: insetDark,
+          borderLeftColor: insetDark,
+          borderRightColor: insetLight,
+          borderBottomColor: insetLight,
           color: theme.colors.text,
           paddingHorizontal: theme.tokens.spacing.md,
           paddingVertical: theme.tokens.spacing.sm + 2,
@@ -38,7 +44,7 @@ function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
           fontWeight: theme.tokens.typography.fontWeight.medium,
         },
       }),
-    [theme],
+    [insetDark, insetLight, theme],
   );
 
   return (
