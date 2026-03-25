@@ -54,7 +54,7 @@ export default function HomeScreen() {
   const greeting = resolveGreeting();
   const activeSessionName = isRestDay ? "Recover strong" : todaySession.name;
   const activeSessionExerciseCount = isRestDay ? 0 : todaySession.exercises.length;
-  const activeSessionDuration = isRestDay ? 0 : todayPlan.estimatedDurationMinutes;
+  const activeSessionDuration = isRestDay ? 0 : (todayPlan?.estimatedDurationMinutes ?? 0);
 
   const styles = useMemo(
     () =>

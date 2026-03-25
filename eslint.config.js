@@ -16,6 +16,7 @@ module.exports = defineConfig([
       "android/**",
       "ios/**",
       "coverage/**",
+      "convex/_generated/**",
     ],
   },
   ...tseslint.configs.strictTypeChecked,
