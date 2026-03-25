@@ -1,24 +1,32 @@
 import type {
-  Exercise,
+  ExerciseLookupItem,
   RoutineDetailed,
-  RoutineSessionDetailed,
+  RoutineSection,
+  SessionExercise,
   WeeklyDayPlan,
   WeeklyPlan,
 } from "@/features/workout/types";
 
-export function getExerciseMap(exercises: Exercise[]) {
-  return new Map(exercises.map((exercise) => [exercise.id, exercise]));
+function toLocalDateISO(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-export function estimateExerciseDurationMinutes(exercise: Exercise) {
-  const activeSeconds = exercise.setsTarget * 45;
-  const restSeconds = Math.max(exercise.setsTarget - 1, 0) * exercise.restSeconds;
+export function getExerciseMap<T extends ExerciseLookupItem>(exercises: T[]) {
+  return new Map(exercises.map((exercise) => [exercise.id, exercise] as const));
+}
+
+export function estimateSectionExerciseDurationMinutes(entry: SessionExercise) {
+  const activeSeconds = entry.sets * 45;
+  const restSeconds = Math.max(entry.sets - 1, 0) * (entry.restSeconds ?? 90);
   return Math.ceil((activeSeconds + restSeconds) / 60);
 }
 
-export function estimateSessionDurationMinutes(session: RoutineSessionDetailed) {
+export function estimateSessionDurationMinutes(session: RoutineSection) {
   const totalMinutes = session.exercises.reduce((accumulator, sessionExercise) => {
-    return accumulator + estimateExerciseDurationMinutes(sessionExercise.exercise);
+    return accumulator + estimateSectionExerciseDurationMinutes(sessionExercise);
   }, 0);
 
   return Math.max(totalMinutes, 20);
@@ -33,23 +41,26 @@ export function getWeekStart(date = new Date()) {
   return monday;
 }
 
-function sortSessionsByRoutineOrder(routine: RoutineDetailed) {
-  const sessionMap = new Map(routine.sessions.map((session) => [session.id, session]));
-  const orderedBySessionOrder = routine.sessionOrder
-    .map((sessionId) => sessionMap.get(sessionId))
-    .filter((session): session is RoutineSessionDetailed => Boolean(session));
+function sortSectionsByRoutineOrder(routine: RoutineDetailed) {
+  const sectionMap = new Map(routine.sessions.map((section) => [section._id, section] as const));
+  const orderedSections = routine.sessionOrder
+    .map((sectionId) => sectionMap.get(sectionId))
+    .filter((section): section is RoutineSection => Boolean(section));
 
-  const remaining = routine.sessions
-    .filter((session) => !routine.sessionOrder.includes(session.id))
+  const remainingSections = routine.sessions
+    .filter((section) => !routine.sessionOrder.includes(section._id))
     .sort((a, b) => a.order - b.order);
 
-  return [...orderedBySessionOrder, ...remaining];
+  return [...orderedSections, ...remainingSections];
 }
 
-export function buildWeeklyPlan(routine: RoutineDetailed, weekStart = getWeekStart()): WeeklyPlan {
+export function buildWeeklyPlan(
+  routine: RoutineDetailed,
+  weekStart = getWeekStart(),
+): WeeklyPlan {
   const sortedTemplate = [...routine.weeklyPlan].sort((a, b) => a.day - b.day);
-  const orderedSessions = sortSessionsByRoutineOrder(routine);
-  const sessionMap = new Map(orderedSessions.map((session) => [session.id, session]));
+  const orderedSections = sortSectionsByRoutineOrder(routine);
+  const sectionMap = new Map(orderedSections.map((section) => [section._id, section] as const));
 
   let autoCursor = 0;
 
@@ -57,57 +68,53 @@ export function buildWeeklyPlan(routine: RoutineDetailed, weekStart = getWeekSta
     const currentDate = new Date(weekStart);
     currentDate.setDate(currentDate.getDate() + dayTemplate.day);
 
-    if (dayTemplate.type === "rest") {
+    if (dayTemplate.type === "rest" || orderedSections.length === 0) {
       return {
-        dateISO: currentDate.toISOString().slice(0, 10),
+        dateISO: toLocalDateISO(currentDate),
         type: "rest",
         estimatedDurationMinutes: 0,
       };
     }
 
-    if (orderedSessions.length === 0) {
-      return {
-        dateISO: currentDate.toISOString().slice(0, 10),
-        type: "rest",
-        estimatedDurationMinutes: 0,
-      };
-    }
-
-    const manualSession =
+    const manualSection =
       dayTemplate.assignmentMode === "manual" && dayTemplate.manualSessionId
-        ? sessionMap.get(dayTemplate.manualSessionId)
+        ? sectionMap.get(dayTemplate.manualSessionId)
         : undefined;
 
-    const selectedSession = manualSession ?? orderedSessions[autoCursor % orderedSessions.length];
+    const selectedSection =
+      manualSection ?? orderedSections[autoCursor % orderedSections.length];
 
-    if (!manualSession) {
+    if (!manualSection) {
       autoCursor += 1;
     }
 
     return {
-      dateISO: currentDate.toISOString().slice(0, 10),
+      dateISO: toLocalDateISO(currentDate),
       type: "train",
-      sessionId: selectedSession.id,
-      sessionName: selectedSession.name,
-      estimatedDurationMinutes: estimateSessionDurationMinutes(selectedSession),
+      sessionId: selectedSection._id,
+      sessionName: selectedSection.name,
+      estimatedDurationMinutes: estimateSessionDurationMinutes(selectedSection),
     };
   });
 
   return {
-    weekStartISO: weekStart.toISOString().slice(0, 10),
+    weekStartISO: toLocalDateISO(weekStart),
     dayPlans,
   };
 }
 
 export function getTodayPlan(plan: WeeklyPlan, date = new Date()) {
-  const todayISO = date.toISOString().slice(0, 10);
+  const todayISO = toLocalDateISO(date);
   return plan.dayPlans.find((dayPlan) => dayPlan.dateISO === todayISO);
 }
 
-export function getSessionById(routine: RoutineDetailed, sessionId?: string) {
+export function getSessionById(
+  routine: RoutineDetailed,
+  sessionId?: RoutineSection["_id"],
+) {
   if (!sessionId) {
     return undefined;
   }
 
-  return routine.sessions.find((session) => session.id === sessionId);
+  return routine.sessions.find((session) => session._id === sessionId);
 }

@@ -1,5 +1,20 @@
-export type TrainingDayType = "train" | "rest";
-export type AssignmentMode = "auto" | "manual";
+import type {
+  ExerciseCatalogRecord,
+  RoutineDetailedRecord,
+} from "@convex/types";
+
+export type RoutineDetailed = RoutineDetailedRecord;
+export type RoutineSection = RoutineDetailedRecord["sessions"][number];
+export type SessionExercise = RoutineSection["exercises"][number];
+export type ExerciseCatalog = ExerciseCatalogRecord;
+export type TrainingDayType = RoutineDetailedRecord["weeklyPlan"][number]["type"];
+export type AssignmentMode =
+  RoutineDetailedRecord["weeklyPlan"][number]["assignmentMode"];
+
+export interface ExerciseLookupItem {
+  id: string;
+  name: string;
+}
 
 export interface WorkoutSessionTemplate {
   id: string;
@@ -12,48 +27,6 @@ export interface WorkoutRoutine {
   name: string;
   daysPerWeek: number;
   sessions: WorkoutSessionTemplate[];
-}
-
-export interface Exercise {
-  id: string;
-  name: string;
-  variant: string;
-  setsTarget: number;
-  repsTarget: string;
-  restSeconds: number;
-  primaryMuscles: string[];
-  secondaryMuscles: string[];
-  isCustom?: boolean;
-}
-
-export interface SessionExercise {
-  id: string;
-  order: number;
-  exercise: Exercise;
-}
-
-export interface RoutineSessionDetailed {
-  id: string;
-  name: string;
-  order: number;
-  exercises: SessionExercise[];
-}
-
-export interface WeeklyPlanTemplateEntry {
-  day: number;
-  type: TrainingDayType;
-  assignmentMode: AssignmentMode;
-  manualSessionId?: string;
-}
-
-export interface RoutineDetailed {
-  id: string;
-  name: string;
-  daysPerWeek: number;
-  isActive: boolean;
-  sessionOrder: string[];
-  weeklyPlan: WeeklyPlanTemplateEntry[];
-  sessions: RoutineSessionDetailed[];
 }
 
 export interface WorkoutPerformedSet {
@@ -79,7 +52,7 @@ export interface WorkoutLog {
 export interface WeeklyDayPlan {
   dateISO: string;
   type: TrainingDayType;
-  sessionId?: string;
+  sessionId?: RoutineSection["_id"];
   sessionName?: string;
   estimatedDurationMinutes: number;
 }

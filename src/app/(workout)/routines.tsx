@@ -20,7 +20,7 @@ import { api } from "@convex/_generated/api";
 export default function RoutinesScreen() {
   const { theme } = useTheme();
   const routinesData = useQuery(api.routines.listDetailed);
-  const exercisesData = useQuery(api.exercises.list);
+  const exercisesData = useQuery(api.exercises.list, {});
 
   const seedDefaults = useMutation(api.routines.seedDefaultsIfEmpty);
   const deleteRoutine = useMutation(api.routines.deleteRoutine);
@@ -188,7 +188,7 @@ export default function RoutinesScreen() {
                     <AppChip label={`${routine.daysPerWeek} days/week`} variant="neutral" />
                   </View>
                   <Text style={styles.routineTitle}>{routine.name}</Text>
-                  <Text style={styles.routineMeta}>{routine.sessions.length} sessions ready for training</Text>
+                  <Text style={styles.routineMeta}>{routine.sessions.length} sections ready for training</Text>
                 </View>
                 <Ionicons color={routine.isActive ? theme.colors.accent : theme.colors.textSubtle} name="sparkles-outline" size={18} />
               </View>

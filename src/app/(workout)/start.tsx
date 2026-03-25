@@ -12,7 +12,6 @@ import MetricCard from "@/components/ui/MetricCard";
 import ProgressBar from "@/components/ui/ProgressBar";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mapRoutineDetailed } from "@/features/workout/mappers";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
@@ -23,7 +22,7 @@ export default function StartScreen() {
   const [completedExerciseIds, setCompletedExerciseIds] = useState<string[]>([]);
 
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
-  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const activeRoutine = activeRoutineData ?? null;
   const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
   const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
   const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
@@ -33,7 +32,7 @@ export default function StartScreen() {
   const completionProgress = totalExercises > 0 ? completedCount / totalExercises : 0;
   const isWorkoutComplete = totalExercises > 0 && completedCount === totalExercises;
   const estimatedRestMinutes = todaySession
-    ? Math.round(todaySession.exercises.reduce((sum, entry) => sum + entry.exercise.restSeconds, 0) / 60)
+    ? Math.round(todaySession.exercises.reduce((sum, entry) => sum + (entry.restSeconds ?? 0), 0) / 60)
     : 0;
 
   const styles = useMemo(
@@ -218,26 +217,28 @@ export default function StartScreen() {
 
       {todaySession.exercises.map((sessionExercise, index) => {
         const exercise = sessionExercise.exercise;
-        const isCompleted = completedExerciseIds.includes(sessionExercise.id);
+        const sessionExerciseKey = String(sessionExercise._id);
+        const isCompleted = completedExerciseIds.includes(sessionExerciseKey);
 
         return (
           <Animated.View
             entering={FadeInUp.delay(100 + index * 35).springify().damping(20)}
-            key={sessionExercise.id}
+            key={sessionExerciseKey}
             layout={LinearTransition.springify().damping(20)}
           >
             <ExerciseSetRow
               index={index}
               isCompleted={isCompleted}
               name={exercise.name}
-              reps={exercise.repsTarget}
-              restSeconds={exercise.restSeconds}
-              sets={exercise.setsTarget}
+              reps={sessionExercise.repsText}
+              restSeconds={sessionExercise.restSeconds}
+              sets={sessionExercise.sets}
+              targetWeightKg={sessionExercise.targetWeightKg}
               onToggle={() => {
                 setCompletedExerciseIds((current) =>
-                  current.includes(sessionExercise.id)
-                    ? current.filter((id) => id !== sessionExercise.id)
-                    : [...current, sessionExercise.id],
+                  current.includes(sessionExerciseKey)
+                    ? current.filter((id) => id !== sessionExerciseKey)
+                    : [...current, sessionExerciseKey],
                 );
               }}
             />

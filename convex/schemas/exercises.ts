@@ -1,15 +1,24 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
+import {
+  bodyPartSet,
+  equipmentSet,
+  muscleSet,
+} from "./unions";
+
 export const exercises = defineTable({
   name: v.string(),
-  variant: v.string(),
-  setsTarget: v.number(),
-  repsTarget: v.string(),
-  restSeconds: v.number(),
-  primaryMuscles: v.array(v.string()),
-  secondaryMuscles: v.array(v.string()),
   isCustom: v.boolean(),
-  createdAt: v.number(),
-  updatedAt: v.number(),
-}).index("by_name", ["name"]);
+  bodyPart: bodyPartSet,
+  equipment: equipmentSet,
+  primaryMuscle: muscleSet,
+  muscleGroups: v.array(muscleSet),
+  description: v.optional(v.string()),
+  nameText: v.string(),
+  musclesText: v.string(),
+})
+  .index("by_nameText", ["nameText"])
+  .index("by_musclesText", ["musclesText"])
+  .index("by_bodyPart", ["bodyPart"])
+  .index("by_primaryMuscle", ["primaryMuscle"]);

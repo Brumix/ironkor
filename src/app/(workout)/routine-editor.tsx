@@ -118,13 +118,12 @@ export default function RoutineEditorScreen() {
     setHydratedFor(currentId);
   }, [hydratedFor, isNew, routinesData, selectedRoutine]);
 
-  function handleBackPress() {
-    if (isNew) {
-      router.replace("/(workout)/routines");
-      return;
-    }
+  function navigateToRoutines() {
+    router.replace("/(workout)/routines");
+  }
 
-    router.back();
+  function handleBackPress() {
+    navigateToRoutines();
   }
 
   async function handleSaveRoutine() {
@@ -163,7 +162,7 @@ export default function RoutineEditorScreen() {
       });
     }
 
-    router.back();
+    navigateToRoutines();
   }
 
   async function moveSession(sessionId: Id<"routineSessions">, direction: -1 | 1) {
@@ -205,6 +204,59 @@ export default function RoutineEditorScreen() {
           }
 
           return { day, type: "train" as const, assignmentMode: "auto" as const };
+        }),
+      ),
+    );
+  }
+
+  function toggleAssignmentMode(day: number) {
+    if (!selectedRoutine || selectedRoutine.sessions.length === 0) {
+      return;
+    }
+
+    const defaultSectionId = selectedRoutine.sessions[0]?._id;
+    if (!defaultSectionId) {
+      return;
+    }
+
+    setPlannerDraft((current) =>
+      sortPlanner(
+        current.map((entry) => {
+          if (entry.day !== day || entry.type === "rest") {
+            return entry;
+          }
+
+          if (entry.assignmentMode === "auto") {
+            return {
+              ...entry,
+              assignmentMode: "manual" as const,
+              manualSessionId: entry.manualSessionId ?? defaultSectionId,
+            };
+          }
+
+          return {
+            day: entry.day,
+            type: entry.type,
+            assignmentMode: "auto" as const,
+          };
+        }),
+      ),
+    );
+  }
+
+  function setManualSection(day: number, sectionId: Id<"routineSessions">) {
+    setPlannerDraft((current) =>
+      sortPlanner(
+        current.map((entry) => {
+          if (entry.day !== day || entry.type === "rest") {
+            return entry;
+          }
+
+          return {
+            ...entry,
+            assignmentMode: "manual" as const,
+            manualSessionId: sectionId,
+          };
         }),
       ),
     );
@@ -363,6 +415,50 @@ export default function RoutineEditorScreen() {
           fontSize: theme.tokens.typography.fontSize.md,
           lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
         },
+        plannerRow: {
+          backgroundColor: theme.colors.surfaceAlt,
+          borderRadius: theme.tokens.radius.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: theme.tokens.spacing.sm + 2,
+          gap: theme.tokens.spacing.sm,
+        },
+        plannerRowHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: theme.tokens.spacing.sm,
+        },
+        plannerRowTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.md,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        plannerModeButton: {
+          backgroundColor: theme.colors.secondarySoft,
+          borderRadius: theme.tokens.radius.xs,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs + 2,
+        },
+        plannerModeButtonActive: {
+          backgroundColor: theme.colors.primary,
+          borderColor: theme.colors.primary,
+        },
+        plannerModeButtonText: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        plannerModeButtonTextActive: {
+          color: theme.colors.onPrimary,
+        },
+        plannerSectionRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.xs,
+        },
         saveButton: {
           marginTop: theme.tokens.spacing.sm,
           backgroundColor: theme.colors.primary,
@@ -436,13 +532,13 @@ export default function RoutineEditorScreen() {
       {selectedRoutine ? (
         <>
           <View style={styles.subHeaderRow}>
-            <Text style={styles.subHeader}>Sessions</Text>
+            <Text style={styles.subHeader}>Sections</Text>
             <View style={styles.addRow}>
               <TextInput
                 style={[styles.input, styles.sessionNameInput]}
                 value={newSessionName}
                 onChangeText={setNewSessionName}
-                placeholder="New session"
+                placeholder="New section"
                 placeholderTextColor={theme.colors.textSubtle}
               />
               <Pressable
@@ -511,11 +607,11 @@ export default function RoutineEditorScreen() {
           ))}
         </>
       ) : (
-        <Text style={styles.helperText}>Save the routine first, then add sessions and exercises.</Text>
+        <Text style={styles.helperText}>Save the routine first, then add sections and exercises.</Text>
       )}
 
       <Text style={[styles.subHeader, { marginTop: 14 }]}>Weekly planner</Text>
-      <Text style={styles.helperText}>Tap days to mark them as rest days.</Text>
+      <Text style={styles.helperText}>Tap days to mark them as rest days. Training days can stay on auto rotation or be manually assigned to a section.</Text>
       <View style={styles.plannerDaysGrid}>
         {sortPlanner(plannerDraft).map((entry) => (
           <Pressable
@@ -528,6 +624,78 @@ export default function RoutineEditorScreen() {
           </Pressable>
         ))}
       </View>
+
+      {plannerDraft.some((entry) => entry.type === "train") ? (
+        <View style={{ gap: theme.tokens.spacing.sm }}>
+          {sortPlanner(plannerDraft)
+            .filter((entry) => entry.type === "train")
+            .map((entry) => (
+              <View key={`planner-${entry.day}`} style={styles.plannerRow}>
+                <View style={styles.plannerRowHeader}>
+                  <View style={styles.flexOne}>
+                    <Text style={styles.plannerRowTitle}>{DAYS[entry.day]}</Text>
+                    <Text style={styles.sessionMeta}>
+                      {entry.assignmentMode === "manual" ? "Manual section assignment" : "Auto rotation"}
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    disabled={!selectedRoutine || selectedRoutine.sessions.length === 0}
+                    onPress={() => {
+                      toggleAssignmentMode(entry.day);
+                    }}
+                    style={[
+                      styles.plannerModeButton,
+                      entry.assignmentMode === "manual" && styles.plannerModeButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.plannerModeButtonText,
+                        entry.assignmentMode === "manual" && styles.plannerModeButtonTextActive,
+                      ]}
+                    >
+                      {entry.assignmentMode === "manual" ? "Manual" : "Auto"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {entry.assignmentMode === "manual" ? (
+                  selectedRoutine && selectedRoutine.sessions.length > 0 ? (
+                    <View style={styles.plannerSectionRow}>
+                      {selectedRoutine.sessions
+                        .slice()
+                        .sort((a, b) => a.order - b.order)
+                        .map((session) => (
+                          <Pressable
+                            key={`manual-${entry.day}-${String(session._id)}`}
+                            onPress={() => {
+                              setManualSection(entry.day, session._id);
+                            }}
+                            style={[
+                              styles.smallBtn,
+                              entry.manualSessionId === session._id && styles.plannerModeButtonActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.smallBtnText,
+                                entry.manualSessionId === session._id && styles.plannerModeButtonTextActive,
+                              ]}
+                            >
+                              {session.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.helperText}>Add sections to unlock manual day assignment.</Text>
+                  )
+                ) : null}
+              </View>
+            ))}
+        </View>
+      ) : null}
 
       <Pressable style={styles.saveButton} onPress={() => { void handleSaveRoutine(); }}>
         <Text style={styles.saveButtonText}>{selectedRoutine ? "Save changes" : "Create routine"}</Text>

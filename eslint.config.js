@@ -16,6 +16,7 @@ module.exports = defineConfig([
       "android/**",
       "ios/**",
       "coverage/**",
+      "seed/**",
       "convex/_generated/**",
     ],
   },
@@ -98,7 +99,7 @@ module.exports = defineConfig([
     },
   },
   {
-    files: ["**/*.js"],
+    files: ["**/*.{js,mjs,cjs}"],
     ...tseslint.configs.disableTypeChecked,
   },
   {

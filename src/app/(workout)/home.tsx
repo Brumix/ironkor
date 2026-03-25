@@ -14,7 +14,6 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import QuickActionTile from "@/components/ui/QuickActionTile";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mapRoutineDetailed } from "@/features/workout/mappers";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
@@ -37,7 +36,7 @@ function resolveGreeting() {
 export default function HomeScreen() {
   const { theme } = useTheme();
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
-  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const activeRoutine = activeRoutineData ?? null;
   const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
   const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
   const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
@@ -378,14 +377,17 @@ export default function HomeScreen() {
       {activeRoutine.sessions.map((session, index) => (
         <Animated.View
           entering={FadeInUp.delay(150 + index * 35).springify().damping(20)}
-          key={session.id}
+          key={String(session._id)}
           layout={LinearTransition.springify().damping(20)}
         >
           <AppCard
             onPress={() => {
               router.push({
                 pathname: "/(workout)/session-editor",
-                params: { routineId: activeRoutine.id, sessionId: session.id },
+                params: {
+                  routineId: String(activeRoutine._id),
+                  sessionId: String(session._id),
+                },
               });
             }}
             style={styles.sessionCard}

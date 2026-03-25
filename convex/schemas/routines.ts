@@ -16,7 +16,6 @@ export const routines = defineTable({
     isActive: v.boolean(),
     sessionOrder: v.array(v.id("routineSessions")),
     weeklyPlan: v.array(weeklyPlanEntry),
-    createdAt: v.number(),
     updatedAt: v.number(),
 })
     .index("by_isActive", ["isActive"])

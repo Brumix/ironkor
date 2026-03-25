@@ -17,14 +17,24 @@ interface ExerciseSetRowProps {
   name: string;
   sets: number;
   reps: string;
-  restSeconds: number;
+  restSeconds?: number;
+  targetWeightKg?: number;
   isCompleted: boolean;
   onToggle: () => void;
 }
 
 const COMPLETION_SPRING = { damping: 12, stiffness: 200, mass: 0.7 };
 
-function ExerciseSetRow({ index, name, sets, reps, restSeconds, isCompleted, onToggle }: ExerciseSetRowProps) {
+function ExerciseSetRow({
+  index,
+  name,
+  sets,
+  reps,
+  restSeconds,
+  targetWeightKg,
+  isCompleted,
+  onToggle,
+}: ExerciseSetRowProps) {
   const { theme } = useTheme();
   const checkScale = useSharedValue(isCompleted ? 1 : 0);
 
@@ -134,7 +144,13 @@ function ExerciseSetRow({ index, name, sets, reps, restSeconds, isCompleted, onT
     [theme],
   );
 
-  const formatRest = (seconds: number) => (seconds >= 60 ? `${Math.floor(seconds / 60)}m` : `${seconds}s`);
+  const formatRest = (seconds?: number) => {
+    if (typeof seconds !== "number") {
+      return "self-paced";
+    }
+
+    return seconds >= 60 ? `${Math.floor(seconds / 60)}m` : `${seconds}s`;
+  };
 
   return (
     <PressableScale onPress={handleToggle} pressedScale={0.98} style={[styles.row, isCompleted ? styles.rowCompleted : styles.rowDefault]}>
@@ -152,6 +168,7 @@ function ExerciseSetRow({ index, name, sets, reps, restSeconds, isCompleted, onT
         <Text style={[styles.name, isCompleted && styles.nameCompleted]}>{name}</Text>
         <Text style={styles.meta}>
           {sets} sets · {reps} reps · {formatRest(restSeconds)} rest
+          {typeof targetWeightKg === "number" ? ` · ${targetWeightKg}kg target` : ""}
         </Text>
       </View>
 

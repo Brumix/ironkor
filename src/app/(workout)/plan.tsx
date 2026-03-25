@@ -9,7 +9,6 @@ import GradientCard from "@/components/ui/GradientCard";
 import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { mapRoutineDetailed } from "@/features/workout/mappers";
 import { buildWeeklyPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
@@ -24,7 +23,7 @@ const WEEKDAY_FORMAT: Intl.DateTimeFormatOptions = {
 export default function PlanScreen() {
   const { theme } = useTheme();
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
-  const activeRoutine = activeRoutineData ? mapRoutineDetailed(activeRoutineData) : null;
+  const activeRoutine = activeRoutineData ?? null;
   const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
 
   const trainingDays = weeklyPlan?.dayPlans.filter((dayPlan) => dayPlan.type === "train").length ?? 0;
