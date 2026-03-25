@@ -10,9 +10,7 @@ import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import AppChip from "@/components/ui/AppChip";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import FloatingActionButton from "@/components/ui/FloatingActionButton";
 import GradientCard from "@/components/ui/GradientCard";
-import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
@@ -33,7 +31,6 @@ export default function RoutinesScreen() {
 
   const routines = useMemo(() => routinesData ?? [], [routinesData]);
   const activeRoutine = useMemo(() => routines.find((routine) => routine.isActive) ?? null, [routines]);
-  const totalSessions = routines.reduce((sum, routine) => sum + routine.sessions.length, 0);
 
   useEffect(() => {
     if (routinesData === undefined || exercisesData === undefined) {
@@ -64,14 +61,6 @@ export default function RoutinesScreen() {
           color: theme.colors.heroTextMuted,
           fontSize: theme.tokens.typography.fontSize.md,
           lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
-        },
-        metricRow: {
-          flexDirection: "row",
-          gap: theme.tokens.spacing.md,
-        },
-        metricColumn: {
-          flex: 1,
-          gap: theme.tokens.spacing.md,
         },
         routineCard: {
           gap: theme.tokens.spacing.md,
@@ -152,20 +141,7 @@ export default function RoutinesScreen() {
   }
 
   return (
-    <WorkoutPage
-      headerChip={{ icon: "barbell-outline", label: "Routines" }}
-      subtitle={activeRoutine?.name ?? "Routine manager"}
-      floatingAction={
-        <FloatingActionButton
-          accessibilityLabel="Create routine"
-          iconName="add"
-          label="New Routine"
-          onPress={() => {
-            router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
-          }}
-        />
-      }
-    >
+    <WorkoutPage headerChip={{ icon: "barbell-outline", label: "Routines" }} subtitle={activeRoutine?.name ?? "Routine manager"}>
       <Animated.View entering={FadeInUp.delay(20).springify().damping(18)} layout={LinearTransition.springify()}>
         <GradientCard>
           <AppChip label={activeRoutine ? "Active routine" : "Routine library"} variant="neutral" />
@@ -176,20 +152,6 @@ export default function RoutinesScreen() {
               : "Create multiple routines, activate the one you want, and keep your week structured without friction."}
           </Text>
         </GradientCard>
-      </Animated.View>
-
-      <SectionHeader
-        title="Library overview"
-        subtitle="A fast summary of what’s available right now"
-      />
-
-      <Animated.View entering={FadeInUp.delay(50).springify().damping(18)} style={styles.metricRow}>
-        <View style={styles.metricColumn}>
-          <MetricCard helper="Total routines saved" icon="albums-outline" label="Routines" tone="accent" value={routines.length} />
-        </View>
-        <View style={styles.metricColumn}>
-          <MetricCard helper="Workout sessions across all splits" icon="fitness-outline" label="Sessions" value={totalSessions} />
-        </View>
       </Animated.View>
 
       <SectionHeader
