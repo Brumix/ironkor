@@ -99,14 +99,6 @@ function TabButton({ routeName, isFocused, accessibilityLabel, testID, onPress, 
           fontSize: theme.tokens.typography.fontSize.xs,
           fontWeight: theme.tokens.typography.fontWeight.medium,
         },
-        activeIndicator: {
-          position: "absolute",
-          bottom: -2,
-          width: 4,
-          height: 4,
-          borderRadius: 2,
-          backgroundColor: theme.colors.accent,
-        },
       }),
     [theme],
   );
@@ -141,7 +133,6 @@ function TabButton({ routeName, isFocused, accessibilityLabel, testID, onPress, 
         >
           {meta.label}
         </Text>
-        {isFocused ? <View style={styles.activeIndicator} /> : null}
       </Animated.View>
     </Pressable>
   );

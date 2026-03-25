@@ -8,7 +8,6 @@ import Animated, { FadeInDown, FadeInUp, LinearTransition } from "react-native-r
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import AppChip from "@/components/ui/AppChip";
-import FloatingActionButton from "@/components/ui/FloatingActionButton";
 import GradientCard from "@/components/ui/GradientCard";
 import MetricCard from "@/components/ui/MetricCard";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -209,20 +208,7 @@ export default function HomeScreen() {
 
   if (!activeRoutine) {
     return (
-      <WorkoutPage
-        headerChip={{ icon: "home-outline", label: "Dashboard" }}
-        subtitle="No active routine"
-        floatingAction={
-          <FloatingActionButton
-            accessibilityLabel="Create routine"
-            iconName="add"
-            label="New Routine"
-            onPress={() => {
-              router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
-            }}
-          />
-        }
-      >
+      <WorkoutPage headerChip={{ icon: "home-outline", label: "Dashboard" }} subtitle="No active routine">
         <GradientCard>
           <AppChip label="Welcome" variant="neutral" />
           <Text style={styles.heroTitle}>{greeting}</Text>
@@ -245,21 +231,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <WorkoutPage
-      headerChip={{ icon: "flash-outline", label: "Dashboard" }}
-      subtitle={activeRoutine.name}
-      floatingAction={
-        <FloatingActionButton
-          accessibilityLabel="Start workout"
-          iconName="flash"
-          label="Start Workout"
-          onPress={() => {
-            router.push("/(workout)/start");
-          }}
-          pulsing={!isRestDay}
-        />
-      }
-    >
+    <WorkoutPage headerChip={{ icon: "flash-outline", label: "Dashboard" }} subtitle={activeRoutine.name}>
       <Animated.View entering={FadeInDown.delay(30).springify().damping(18)}>
         <GradientCard>
           <AppChip label={greeting} variant="neutral" />

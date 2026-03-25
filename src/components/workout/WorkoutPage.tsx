@@ -1,15 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import mooseMascot from "@/assets/moose.png";
 import { useTheme } from "@/theme";
 
-import type { ImageSource } from "expo-image";
 import type { ReactNode } from "react";
 
 interface WorkoutPageProps {
@@ -22,8 +19,6 @@ interface WorkoutPageProps {
   children: ReactNode;
   floatingAction?: ReactNode;
 }
-
-const mascotSource = mooseMascot as ImageSource;
 
 export default function WorkoutPage({ headerChip, subtitle, headerAction, children, floatingAction }: WorkoutPageProps) {
   const insets = useSafeAreaInsets();
@@ -104,23 +99,6 @@ export default function WorkoutPage({ headerChip, subtitle, headerAction, childr
         titleRow: {
           gap: theme.tokens.spacing.xs,
         },
-        mascotWrap: {
-          borderRadius: theme.tokens.radius.lg,
-          borderWidth: 1,
-          borderColor: theme.colors.borderSoft,
-          backgroundColor: theme.colors.surface,
-          padding: theme.tokens.spacing.xs,
-          shadowColor: theme.colors.shadow,
-          shadowOpacity: theme.isDark ? 0.25 : 0.08,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: theme.tokens.elevation.sm,
-        },
-        mascot: {
-          width: 36,
-          height: 36,
-          borderRadius: theme.tokens.radius.md,
-        },
       }),
     [theme],
   );
@@ -160,9 +138,6 @@ export default function WorkoutPage({ headerChip, subtitle, headerAction, childr
                 {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
                 {headerAction}
               </View>
-            </View>
-            <View style={styles.mascotWrap}>
-              <Image contentFit="cover" source={mascotSource} style={styles.mascot} />
             </View>
           </View>
         </Animated.View>
