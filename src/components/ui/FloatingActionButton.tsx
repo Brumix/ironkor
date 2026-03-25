@@ -1,6 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { memo, useMemo } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { memo, useEffect, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import PressableScale from "@/components/ui/PressableScale";
@@ -12,6 +20,8 @@ interface FloatingActionButtonProps {
   accessibilityLabel?: string;
   onPress: () => void;
   bottomOffset?: number;
+  pulsing?: boolean;
+  variant?: "primary" | "accent";
 }
 
 function FloatingActionButton({
@@ -20,63 +30,109 @@ function FloatingActionButton({
   accessibilityLabel,
   onPress,
   bottomOffset = 112,
+  pulsing = false,
+  variant = "accent",
 }: FloatingActionButtonProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const edgeLight = theme.isDark ? "rgba(255,255,255,0.22)" : "#40454E";
-  const edgeDark = theme.isDark ? "rgba(0,0,0,0.74)" : "#070A0F";
+  const pulseScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (pulsing) {
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.06, { duration: 800 }),
+          withTiming(1, { duration: 800 }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      pulseScale.value = withTiming(1, { duration: 200 });
+    }
+  }, [pulsing, pulseScale]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseScale.value }],
+  }));
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        button: {
+        wrapper: {
           position: "absolute",
           right: theme.tokens.spacing.lg,
           bottom: Math.max(insets.bottom + theme.tokens.spacing.lg, bottomOffset),
-          minHeight: 54,
+        },
+        button: {
+          minHeight: 58,
           borderRadius: theme.tokens.radius.pill,
-          backgroundColor: theme.colors.primary,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
-          borderTopColor: edgeLight,
-          borderLeftColor: edgeLight,
-          borderRightColor: edgeDark,
-          borderBottomColor: edgeDark,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: variant === "accent" ? theme.colors.borderAccent : theme.colors.borderStrong,
           paddingHorizontal: theme.tokens.spacing.lg,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xs,
-          shadowColor: "#000000",
-          shadowOpacity: theme.isDark ? 0.4 : 0.2,
-          shadowRadius: 18,
-          shadowOffset: { width: 2, height: 9 },
+          shadowColor: variant === "accent" ? theme.colors.shadowAccent : theme.colors.shadow,
+          shadowOpacity: 0.34,
+          shadowRadius: 24,
+          shadowOffset: { width: 0, height: 10 },
           elevation: theme.tokens.elevation.lg,
         },
+        gradient: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+        },
+        content: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.xs,
+        },
         label: {
-          color: theme.colors.onPrimary,
+          color: variant === "accent" ? theme.colors.onAccent : theme.colors.onPrimary,
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.md,
           fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
         },
       }),
-    [bottomOffset, edgeDark, edgeLight, insets.bottom, theme],
+    [bottomOffset, insets.bottom, theme, variant],
   );
 
+  const gradientColors: [string, string] =
+    variant === "accent"
+      ? [theme.gradients.heroAccentStart, theme.gradients.heroAccentEnd]
+      : [theme.gradients.heroNeutralStart, theme.gradients.heroNeutralEnd];
+
+  const iconColor = variant === "accent" ? theme.colors.onAccent : theme.colors.onPrimary;
+
   return (
-    <PressableScale
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityRole="button"
-      pressedOpacity={0.95}
-      pressedScale={0.975}
-      style={styles.button}
-      onPress={onPress}
-    >
-      <Ionicons color={theme.colors.onPrimary} name={iconName} size={20} />
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-    </PressableScale>
+    <Animated.View style={[styles.wrapper, pulseStyle]}>
+      <PressableScale
+        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityRole="button"
+        onPress={onPress}
+        pressedOpacity={0.95}
+        pressedScale={0.96}
+        style={styles.button}
+      >
+        <LinearGradient
+          colors={gradientColors}
+          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0 }}
+          style={styles.gradient}
+        />
+        <Animated.View style={styles.content}>
+          <Ionicons color={iconColor} name={iconName} size={22} />
+          {label ? <Text style={styles.label}>{label}</Text> : null}
+        </Animated.View>
+      </PressableScale>
+    </Animated.View>
   );
 }
 

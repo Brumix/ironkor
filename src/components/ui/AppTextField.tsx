@@ -11,8 +11,6 @@ interface AppTextFieldProps extends TextInputProps {
 
 function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
   const { theme } = useTheme();
-  const insetLight = theme.isDark ? "rgba(255,255,255,0.06)" : "#FFFFFF";
-  const insetDark = theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2";
 
   const styles = useMemo(
     () =>
@@ -27,16 +25,10 @@ function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
           fontWeight: theme.tokens.typography.fontWeight.semibold,
         },
         input: {
-          backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.tokens.radius.sm,
-          borderTopWidth: 1.5,
-          borderLeftWidth: 1.5,
-          borderRightWidth: 1,
-          borderBottomWidth: 1,
-          borderTopColor: insetDark,
-          borderLeftColor: insetDark,
-          borderRightColor: insetLight,
-          borderBottomColor: insetLight,
+          backgroundColor: theme.colors.input,
+          borderRadius: theme.tokens.radius.md,
+          borderWidth: 1,
+          borderColor: theme.colors.inputBorder,
           color: theme.colors.text,
           paddingHorizontal: theme.tokens.spacing.md,
           paddingVertical: theme.tokens.spacing.sm + 2,
@@ -44,7 +36,7 @@ function AppTextField({ label, ...inputProps }: AppTextFieldProps) {
           fontWeight: theme.tokens.typography.fontWeight.medium,
         },
       }),
-    [insetDark, insetLight, theme],
+    [theme],
   );
 
   return (

@@ -7,10 +7,11 @@ import type { ReactNode } from "react";
 
 interface SectionHeaderProps {
   title: string;
+  subtitle?: string;
   action?: ReactNode;
 }
 
-function SectionHeader({ title, action }: SectionHeaderProps) {
+function SectionHeader({ title, subtitle, action }: SectionHeaderProps) {
   const { theme } = useTheme();
 
   const styles = useMemo(
@@ -18,15 +19,23 @@ function SectionHeader({ title, action }: SectionHeaderProps) {
       StyleSheet.create({
         row: {
           flexDirection: "row",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "space-between",
           gap: theme.tokens.spacing.sm,
+        },
+        textBlock: {
+          flex: 1,
+          gap: theme.tokens.spacing.xxs,
         },
         title: {
           color: theme.colors.text,
           fontFamily: theme.tokens.typography.fontFamily.display,
-          fontSize: theme.tokens.typography.fontSize.lg,
+          fontSize: theme.tokens.typography.fontSize.xl,
           fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        subtitle: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
         },
       }),
     [theme],
@@ -34,7 +43,10 @@ function SectionHeader({ title, action }: SectionHeaderProps) {
 
   return (
     <View style={styles.row}>
-      <Text style={styles.title}>{title}</Text>
+      <View style={styles.textBlock}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
       {action}
     </View>
   );

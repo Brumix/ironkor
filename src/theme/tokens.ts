@@ -1,43 +1,50 @@
 export const tokens = {
   spacing: {
     none: 0,
-    xxs: 2,
-    xs: 4,
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 20,
-    "2xl": 24,
-    "3xl": 32,
-    "4xl": 40,
-    "5xl": 48,
-  },
-  radius: {
+    hairline: 1,
+    xxs: 4,
     xs: 8,
     sm: 12,
     md: 16,
     lg: 20,
     xl: 24,
+    "2xl": 32,
+    "3xl": 40,
+    "4xl": 48,
+    "5xl": 64,
+    "6xl": 80,
+  },
+  radius: {
+    xs: 10,
+    sm: 14,
+    md: 18,
+    lg: 24,
+    xl: 30,
+    "2xl": 38,
     pill: 999,
   },
   typography: {
     fontFamily: {
       display: "System",
       body: "System",
+      mono: "Courier",
     },
     fontSize: {
-      xs: 11,
-      sm: 12,
-      md: 14,
-      lg: 16,
-      xl: 18,
-      "2xl": 22,
-      "3xl": 28,
-      "4xl": 34,
+      xxs: 10,
+      xs: 12,
+      sm: 13,
+      md: 15,
+      lg: 17,
+      xl: 20,
+      "2xl": 24,
+      "3xl": 30,
+      "4xl": 38,
+      "5xl": 48,
     },
     lineHeight: {
-      tight: 1.15,
-      normal: 1.35,
+      tight: 1.08,
+      snug: 1.2,
+      normal: 1.4,
       relaxed: 1.55,
     },
     fontWeight: {
@@ -47,35 +54,79 @@ export const tokens = {
       bold: "700",
       black: "800",
     },
+    letterSpacing: {
+      tight: -0.5,
+      normal: 0,
+      wide: 0.4,
+      wider: 0.8,
+    },
   },
   elevation: {
     none: 0,
     sm: 2,
     md: 8,
     lg: 16,
+    xl: 24,
   },
   motion: {
     quick: 120,
     normal: 220,
     slow: 320,
+    spring: {
+      responsive: { damping: 26, stiffness: 300, mass: 0.8 },
+      bouncy: { damping: 14, stiffness: 240, mass: 0.9 },
+      gentle: { damping: 30, stiffness: 180, mass: 1.0 },
+      completion: { damping: 12, stiffness: 200, mass: 0.7 },
+    },
+  },
+  shadow: {
+    sm: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+    },
+    md: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 16,
+    },
+    lg: {
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowRadius: 24,
+    },
+    accent: {
+      shadowColor: "#F97316",
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 16,
+    },
   },
 } as const;
 
 export interface ThemeColors {
   background: string;
   backgroundElevated: string;
+  surfaceRaised: string;
+  surfacePressed: string;
   surface: string;
   surfaceAlt: string;
   surfaceMuted: string;
+  input: string;
+  inputBorder: string;
+  inputBorderStrong: string;
   text: string;
   textMuted: string;
   textSubtle: string;
+  textInverse: string;
+  heroText: string;
+  heroTextMuted: string;
   primary: string;
   primarySoft: string;
   secondary: string;
   secondarySoft: string;
   accent: string;
   accentSoft: string;
+  accentStrong: string;
   success: string;
   successSoft: string;
   warning: string;
@@ -83,11 +134,19 @@ export interface ThemeColors {
   error: string;
   errorSoft: string;
   border: string;
+  borderSoft: string;
   borderStrong: string;
+  borderAccent: string;
+  borderSuccess: string;
   overlay: string;
+  overlaySoft: string;
+  shadow: string;
+  shadowAccent: string;
+  shadowSuccess: string;
   onPrimary: string;
   onSecondary: string;
   onAccent: string;
+  onSuccess: string;
 }
 
 export interface ThemeGradients {
@@ -95,6 +154,18 @@ export interface ThemeGradients {
   screenGlowBottom: string;
   heroPrimary: string;
   heroSecondary: string;
+  heroAccentStart: string;
+  heroAccentEnd: string;
+  heroNeutralStart: string;
+  heroNeutralEnd: string;
+  cardGlowStart: string;
+  cardGlowEnd: string;
+  surfaceStart: string;
+  surfaceEnd: string;
+  successStart: string;
+  successEnd: string;
+  progressStart: string;
+  progressEnd: string;
 }
 
 export interface AppTheme {

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/theme";
 
-type ChipVariant = "neutral" | "primary" | "success" | "warning" | "error";
+type ChipVariant = "neutral" | "primary" | "success" | "warning" | "error" | "accent";
 
 interface AppChipProps {
   label: string;
@@ -11,26 +11,36 @@ interface AppChipProps {
 }
 
 function resolveChipStyle(variant: ChipVariant, theme: ReturnType<typeof useTheme>["theme"]) {
-  const variantMap: Record<ChipVariant, { backgroundColor: string; textColor: string }> = {
+  const variantMap: Record<ChipVariant, { backgroundColor: string; textColor: string; borderColor: string }> = {
     neutral: {
       backgroundColor: theme.colors.secondarySoft,
       textColor: theme.colors.textMuted,
+      borderColor: theme.colors.borderSoft,
     },
     primary: {
       backgroundColor: theme.colors.primarySoft,
       textColor: theme.colors.primary,
+      borderColor: theme.colors.borderStrong,
     },
     success: {
       backgroundColor: theme.colors.successSoft,
       textColor: theme.colors.success,
+      borderColor: theme.colors.borderSuccess,
     },
     warning: {
       backgroundColor: theme.colors.warningSoft,
       textColor: theme.colors.warning,
+      borderColor: theme.colors.borderSoft,
     },
     error: {
       backgroundColor: theme.colors.errorSoft,
       textColor: theme.colors.error,
+      borderColor: theme.colors.error,
+    },
+    accent: {
+      backgroundColor: theme.colors.accentSoft,
+      textColor: theme.colors.accent,
+      borderColor: theme.colors.borderAccent,
     },
   };
 
@@ -39,8 +49,7 @@ function resolveChipStyle(variant: ChipVariant, theme: ReturnType<typeof useThem
 
 function AppChip({ label, variant = "neutral" }: AppChipProps) {
   const { theme } = useTheme();
-  const bevelLight = theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF";
-  const bevelDark = theme.isDark ? "rgba(0,0,0,0.56)" : "#D6DCE6";
+  const chipStyle = resolveChipStyle(variant, theme);
 
   const styles = useMemo(
     () =>
@@ -48,30 +57,24 @@ function AppChip({ label, variant = "neutral" }: AppChipProps) {
         chip: {
           alignSelf: "flex-start",
           borderRadius: theme.tokens.radius.pill,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
-          borderTopColor: bevelLight,
-          borderLeftColor: bevelLight,
-          borderRightColor: bevelDark,
-          borderBottomColor: bevelDark,
-          paddingHorizontal: theme.tokens.spacing.sm + 1,
-          paddingVertical: theme.tokens.spacing.xxs + 1,
+          borderWidth: 1,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xxs,
+          minHeight: 28,
+          justifyContent: "center",
         },
         label: {
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.xs,
-          fontWeight: theme.tokens.typography.fontWeight.semibold,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
         },
       }),
-    [bevelDark, bevelLight, theme],
+    [theme],
   );
 
-  const chipStyle = resolveChipStyle(variant, theme);
-
   return (
-    <View style={[styles.chip, { backgroundColor: chipStyle.backgroundColor }]}>
+    <View style={[styles.chip, { backgroundColor: chipStyle.backgroundColor, borderColor: chipStyle.borderColor }]}>
       <Text style={[styles.label, { color: chipStyle.textColor }]}>{label}</Text>
     </View>
   );

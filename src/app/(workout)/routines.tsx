@@ -11,6 +11,8 @@ import AppCard from "@/components/ui/AppCard";
 import AppChip from "@/components/ui/AppChip";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import FloatingActionButton from "@/components/ui/FloatingActionButton";
+import GradientCard from "@/components/ui/GradientCard";
+import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
@@ -31,6 +33,7 @@ export default function RoutinesScreen() {
 
   const routines = useMemo(() => routinesData ?? [], [routinesData]);
   const activeRoutine = useMemo(() => routines.find((routine) => routine.isActive) ?? null, [routines]);
+  const totalSessions = routines.reduce((sum, routine) => sum + routine.sessions.length, 0);
 
   useEffect(() => {
     if (routinesData === undefined || exercisesData === undefined) {
@@ -38,53 +41,71 @@ export default function RoutinesScreen() {
     }
 
     if (routinesData.length === 0) {
-      seedDefaults().catch(() => {
-        // no-op
-      });
+      seedDefaults().catch(() => undefined);
     }
   }, [exercisesData, routinesData, seedDefaults]);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        title: {
-          color: theme.colors.text,
-          fontFamily: theme.tokens.typography.fontFamily.display,
-          fontSize: theme.tokens.typography.fontSize["2xl"],
-          fontWeight: theme.tokens.typography.fontWeight.black,
-        },
-        meta: {
-          color: theme.colors.textMuted,
-          fontSize: theme.tokens.typography.fontSize.md,
-        },
-        cardTopRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: theme.tokens.spacing.sm,
-        },
-        cardBody: {
-          flex: 1,
-        },
-        rowTitle: {
-          color: theme.colors.text,
-          fontSize: theme.tokens.typography.fontSize.xl,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-        },
-        rowMeta: {
-          color: theme.colors.textMuted,
-          fontSize: theme.tokens.typography.fontSize.sm,
-          marginTop: 1,
-        },
-        actionRow: {
-          flexDirection: "row",
-          gap: theme.tokens.spacing.xs,
-          flexWrap: "wrap",
-        },
         helper: {
           color: theme.colors.textMuted,
           fontSize: theme.tokens.typography.fontSize.md,
           lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        heroTitle: {
+          color: theme.colors.heroText,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize["4xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+          letterSpacing: theme.tokens.typography.letterSpacing.tight,
+        },
+        heroBody: {
+          color: theme.colors.heroTextMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
+        },
+        metricRow: {
+          flexDirection: "row",
+          gap: theme.tokens.spacing.md,
+        },
+        metricColumn: {
+          flex: 1,
+          gap: theme.tokens.spacing.md,
+        },
+        routineCard: {
+          gap: theme.tokens.spacing.md,
+        },
+        routineHeader: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: theme.tokens.spacing.md,
+        },
+        routineTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+          letterSpacing: theme.tokens.typography.letterSpacing.tight,
+        },
+        routineMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+        },
+        routineMetaRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.xs,
+        },
+        actionRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.xs,
+        },
+        sessionPillRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.xs,
         },
         swipeActions: {
           justifyContent: "center",
@@ -96,25 +117,17 @@ export default function RoutinesScreen() {
   );
 
   function openDeleteRoutineModal(routineId: string, routineName: string) {
-    if (isDeletingRoutine) {
-      return;
-    }
-
+    if (isDeletingRoutine) return;
     setDeleteTarget({ id: routineId, name: routineName });
   }
 
   function closeDeleteRoutineModal() {
-    if (isDeletingRoutine) {
-      return;
-    }
-
+    if (isDeletingRoutine) return;
     setDeleteTarget(null);
   }
 
   async function confirmDeleteRoutine() {
-    if (!deleteTarget || isDeletingRoutine) {
-      return;
-    }
+    if (!deleteTarget || isDeletingRoutine) return;
 
     setIsDeletingRoutine(true);
 
@@ -141,36 +154,54 @@ export default function RoutinesScreen() {
   return (
     <WorkoutPage
       headerChip={{ icon: "barbell-outline", label: "Routines" }}
+      subtitle={activeRoutine?.name ?? "Routine manager"}
       floatingAction={
         <FloatingActionButton
           accessibilityLabel="Create routine"
           iconName="add"
-          label="Add routine"
+          label="New Routine"
           onPress={() => {
             router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
           }}
         />
       }
     >
-      <Animated.View entering={FadeInUp.delay(20)} layout={LinearTransition.springify()}>
-        <AppCard style={{ backgroundColor: theme.gradients.heroPrimary }}>
-          <AppChip label="Active routine" variant="primary" />
-          <Text style={styles.title}>{activeRoutine?.name ?? "No active routine"}</Text>
-          <Text style={styles.meta}>
+      <Animated.View entering={FadeInUp.delay(20).springify().damping(18)} layout={LinearTransition.springify()}>
+        <GradientCard>
+          <AppChip label={activeRoutine ? "Active routine" : "Routine library"} variant="neutral" />
+          <Text style={styles.heroTitle}>{activeRoutine?.name ?? "Build your next split"}</Text>
+          <Text style={styles.heroBody}>
             {activeRoutine
-              ? `${activeRoutine.daysPerWeek} days/week • ${activeRoutine.sessions.length} sessions`
-              : "Create one and activate to start training flow."}
+              ? `${activeRoutine.daysPerWeek} training days each week with ${activeRoutine.sessions.length} sessions ready to go.`
+              : "Create multiple routines, activate the one you want, and keep your week structured without friction."}
           </Text>
-        </AppCard>
+        </GradientCard>
       </Animated.View>
 
-      <SectionHeader title="All routines" />
+      <SectionHeader
+        title="Library overview"
+        subtitle="A fast summary of what’s available right now"
+      />
+
+      <Animated.View entering={FadeInUp.delay(50).springify().damping(18)} style={styles.metricRow}>
+        <View style={styles.metricColumn}>
+          <MetricCard helper="Total routines saved" icon="albums-outline" label="Routines" tone="accent" value={routines.length} />
+        </View>
+        <View style={styles.metricColumn}>
+          <MetricCard helper="Workout sessions across all splits" icon="fitness-outline" label="Sessions" value={totalSessions} />
+        </View>
+      </Animated.View>
+
+      <SectionHeader
+        title="All routines"
+        subtitle="Swipe left to delete, or tap actions to edit and activate"
+      />
 
       {routines.map((routine, index) => (
         <Animated.View
-          entering={FadeInUp.delay(40 + index * 40)}
+          entering={FadeInUp.delay(90 + index * 35).springify().damping(20)}
           key={String(routine._id)}
-          layout={LinearTransition.springify()}
+          layout={LinearTransition.springify().damping(20)}
         >
           <ReanimatedSwipeable
             renderRightActions={() => (
@@ -187,27 +218,40 @@ export default function RoutinesScreen() {
               </View>
             )}
           >
-            <AppCard>
-              <View style={styles.cardTopRow}>
-                <View style={styles.cardBody}>
-                  <Text style={styles.rowTitle}>{routine.name}</Text>
-                  <Text style={styles.rowMeta}>
-                    {routine.daysPerWeek} days/week • {routine.sessions.length} sessions
-                  </Text>
+            <AppCard style={styles.routineCard} variant={routine.isActive ? "highlight" : "default"}>
+              <View style={styles.routineHeader}>
+                <View style={{ flex: 1, gap: theme.tokens.spacing.xs }}>
+                  <View style={styles.routineMetaRow}>
+                    <AppChip label={routine.isActive ? "Active" : "Inactive"} variant={routine.isActive ? "accent" : "neutral"} />
+                    <AppChip label={`${routine.daysPerWeek} days/week`} variant="neutral" />
+                  </View>
+                  <Text style={styles.routineTitle}>{routine.name}</Text>
+                  <Text style={styles.routineMeta}>{routine.sessions.length} sessions ready for training</Text>
                 </View>
-                {routine.isActive ? <AppChip label="Active" variant="success" /> : null}
+                <Ionicons color={routine.isActive ? theme.colors.accent : theme.colors.textSubtle} name="sparkles-outline" size={18} />
+              </View>
+
+              <View style={styles.sessionPillRow}>
+                {routine.sessions.slice(0, 3).map((session) => (
+                  <AppChip key={String(session._id)} label={session.name} variant={routine.isActive ? "accent" : "neutral"} />
+                ))}
+                {routine.sessions.length > 3 ? (
+                  <AppChip label={`+${routine.sessions.length - 3} more`} variant="neutral" />
+                ) : null}
               </View>
 
               <View style={styles.actionRow}>
                 <AppButton
                   accessibilityLabel={`Edit ${routine.name}`}
                   icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
+                  label="Edit"
                   onPress={() => {
                     router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
                   }}
                   size="sm"
                   variant="secondary"
                 />
+
                 {routine.isActive ? (
                   <AppButton
                     accessibilityLabel={`Deactivate ${routine.name}`}
@@ -224,7 +268,7 @@ export default function RoutinesScreen() {
                 ) : (
                   <AppButton
                     accessibilityLabel={`Activate ${routine.name}`}
-                    icon={<Ionicons color={theme.colors.onPrimary} name="checkmark-circle-outline" size={16} />}
+                    icon={<Ionicons color={theme.colors.onAccent} name="checkmark-circle-outline" size={16} />}
                     label="Activate"
                     onPress={() => {
                       setActive({ routineId: routine._id }).catch(() => {
@@ -232,8 +276,10 @@ export default function RoutinesScreen() {
                       });
                     }}
                     size="sm"
+                    variant="accent"
                   />
                 )}
+
                 <AppButton
                   accessibilityLabel={`Delete ${routine.name}`}
                   icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
@@ -251,8 +297,8 @@ export default function RoutinesScreen() {
 
       <ConfirmActionModal
         visible={Boolean(deleteTarget)}
-        title="Delete routine"
-        message={deleteTarget ? `Delete "${deleteTarget.name}"?` : undefined}
+        title="Delete Routine"
+        message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"?` : undefined}
         confirmLabel="Delete"
         cancelLabel="Cancel"
         confirmVariant="danger"

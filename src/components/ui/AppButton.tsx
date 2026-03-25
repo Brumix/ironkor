@@ -1,12 +1,12 @@
 import { memo, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import PressableScale from "@/components/ui/PressableScale";
 import { useTheme } from "@/theme";
 
 import type { ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface AppButtonBaseProps {
@@ -15,6 +15,7 @@ interface AppButtonBaseProps {
   size?: ButtonSize;
   fullWidth?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   accessibilityLabel?: string;
 }
 
@@ -31,9 +32,9 @@ type AppButtonProps =
 
 interface ButtonStyleSet {
   backgroundColor: string;
-  borderLight: string;
-  borderDark: string;
+  borderColor: string;
   textColor: string;
+  shadowColor: string;
 }
 
 function resolveButtonStyle(
@@ -43,27 +44,33 @@ function resolveButtonStyle(
   const variantMap: Record<ButtonVariant, ButtonStyleSet> = {
     primary: {
       backgroundColor: theme.colors.primary,
-      borderLight: theme.isDark ? "rgba(255,255,255,0.24)" : "#3C4149",
-      borderDark: theme.isDark ? "rgba(0,0,0,0.74)" : "#070A0F",
+      borderColor: theme.colors.primary,
       textColor: theme.colors.onPrimary,
+      shadowColor: theme.colors.shadow,
     },
     secondary: {
       backgroundColor: theme.colors.secondarySoft,
-      borderLight: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#D3D9E2",
+      borderColor: theme.colors.border,
       textColor: theme.colors.text,
+      shadowColor: theme.colors.shadow,
     },
     ghost: {
-      backgroundColor: theme.colors.surface,
-      borderLight: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#D3D9E2",
+      backgroundColor: theme.colors.surfaceRaised,
+      borderColor: theme.colors.borderSoft,
       textColor: theme.colors.text,
+      shadowColor: theme.colors.shadow,
     },
     danger: {
       backgroundColor: theme.colors.errorSoft,
-      borderLight: theme.isDark ? "rgba(255,255,255,0.1)" : "#FFF4F2",
-      borderDark: theme.isDark ? "rgba(0,0,0,0.62)" : "#E9C2BE",
+      borderColor: theme.colors.error,
       textColor: theme.colors.error,
+      shadowColor: theme.colors.shadow,
+    },
+    accent: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.borderAccent,
+      textColor: theme.colors.onAccent,
+      shadowColor: theme.colors.shadowAccent,
     },
   };
 
@@ -78,12 +85,12 @@ function resolveButtonSize(size: ButtonSize, theme: ReturnType<typeof useTheme>[
       fontSize: theme.tokens.typography.fontSize.sm,
     },
     md: {
-      paddingVertical: theme.tokens.spacing.sm,
+      paddingVertical: theme.tokens.spacing.sm + 1,
       paddingHorizontal: theme.tokens.spacing.lg,
       fontSize: theme.tokens.typography.fontSize.md,
     },
     lg: {
-      paddingVertical: theme.tokens.spacing.md - 1,
+      paddingVertical: theme.tokens.spacing.md,
       paddingHorizontal: theme.tokens.spacing.xl,
       fontSize: theme.tokens.typography.fontSize.lg,
     },
@@ -100,10 +107,12 @@ function AppButton({
   icon,
   fullWidth = false,
   disabled = false,
+  loading = false,
   accessibilityLabel,
 }: AppButtonProps) {
   const { theme } = useTheme();
   const isIconOnly = !label;
+  const isDisabled = disabled || loading;
 
   const styles = useMemo(
     () =>
@@ -113,17 +122,15 @@ function AppButton({
           alignItems: "center",
           justifyContent: "center",
           gap: theme.tokens.spacing.xs,
-          borderRadius: theme.tokens.radius.sm,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
+          borderRadius: theme.tokens.radius.md,
+          borderWidth: 1,
           minHeight: 44,
           alignSelf: fullWidth ? "stretch" : "flex-start",
         },
         label: {
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
         },
       }),
     [fullWidth, theme],
@@ -134,34 +141,41 @@ function AppButton({
 
   return (
     <PressableScale
-      onPress={onPress}
-      disabled={disabled}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
-      pressedOpacity={0.96}
+      disabled={isDisabled}
+      onPress={onPress}
+      pressedOpacity={0.95}
       pressedScale={0.975}
       style={[
         styles.button,
         {
           backgroundColor: variantStyle.backgroundColor,
-          borderTopColor: variantStyle.borderLight,
-          borderLeftColor: variantStyle.borderLight,
-          borderRightColor: variantStyle.borderDark,
-          borderBottomColor: variantStyle.borderDark,
+          borderColor: variantStyle.borderColor,
           paddingVertical: buttonSize.paddingVertical,
           paddingHorizontal: isIconOnly ? theme.tokens.spacing.sm : buttonSize.paddingHorizontal,
-          opacity: disabled ? 0.5 : 1,
-          shadowColor: "#000000",
-          shadowOpacity: theme.isDark ? 0.28 : 0.1,
-          shadowRadius: 12,
-          shadowOffset: { width: 2, height: 5 },
+          opacity: isDisabled ? 0.5 : 1,
+          shadowColor: variantStyle.shadowColor,
+          shadowOpacity: variant === "accent" ? 0.28 : (theme.isDark ? 0.2 : 0.1),
+          shadowRadius: variant === "accent" ? 16 : 10,
+          shadowOffset: { width: 0, height: variant === "accent" ? 8 : 4 },
           elevation: theme.tokens.elevation.sm,
           minWidth: isIconOnly ? 44 : undefined,
         },
       ]}
     >
-      {icon ? <View>{icon}</View> : null}
-      {label ? <Text style={[styles.label, { color: variantStyle.textColor, fontSize: buttonSize.fontSize }]}>{label}</Text> : null}
+      {loading ? (
+        <ActivityIndicator color={variantStyle.textColor} size="small" />
+      ) : (
+        <>
+          {icon ? <View>{icon}</View> : null}
+          {label ? (
+            <Text style={[styles.label, { color: variantStyle.textColor, fontSize: buttonSize.fontSize }]}>
+              {label}
+            </Text>
+          ) : null}
+        </>
+      )}
     </PressableScale>
   );
 }

@@ -2,9 +2,10 @@
 
 ## Design Direction
 - Minimalist + energetic fitness UI
-- Rounded modular cards with high contrast hierarchy
-- Soft ambient glows to make screens feel alive
-- Fast, thumb-friendly actions for between-set usage
+- Premium workout dashboard language with warm gradients and strong contrast
+- Rounded modular cards with clear hierarchy for fast between-set scanning
+- Soft ambient glows, elevated heroes, and tactile micro-interactions
+- Thumb-friendly actions that keep common tasks within one or two taps
 
 ## Token Architecture
 - Core tokens: `src/theme/tokens.ts`
@@ -13,23 +14,28 @@
 
 ## Semantic Color Palette
 - `background`, `backgroundElevated`
-- `surface`, `surfaceAlt`, `surfaceMuted`
-- `text`, `textMuted`, `textSubtle`
+- `surface`, `surfaceAlt`, `surfaceMuted`, `surfaceRaised`, `surfacePressed`
+- `input`, `inputBorder`, `inputBorderStrong`
+- `text`, `textMuted`, `textSubtle`, `textInverse`
+- `heroText`, `heroTextMuted`
 - `primary`, `primarySoft`, `onPrimary`
 - `secondary`, `secondarySoft`, `onSecondary`
-- `accent`, `accentSoft`, `onAccent`
-- `success`, `successSoft`, `warning`, `warningSoft`, `error`, `errorSoft`
-- `border`, `borderStrong`, `overlay`
+- `accent`, `accentSoft`, `accentStrong`, `onAccent`
+- `success`, `successSoft`, `warning`, `warningSoft`, `error`, `errorSoft`, `onSuccess`
+- `border`, `borderSoft`, `borderStrong`, `borderAccent`, `borderSuccess`
+- `overlay`, `overlaySoft`, `shadow`, `shadowAccent`, `shadowSuccess`
 
 ## Typography Scale
-- `xs` 11
-- `sm` 12
-- `md` 14
-- `lg` 16
-- `xl` 18
-- `2xl` 22
-- `3xl` 28
-- `4xl` 34
+- `xxs` 10
+- `xs` 12
+- `sm` 13
+- `md` 15
+- `lg` 17
+- `xl` 20
+- `2xl` 24
+- `3xl` 30
+- `4xl` 38
+- `5xl` 48
 
 Weights:
 - `regular` 400
@@ -44,6 +50,8 @@ Weights:
 - `AppButton`: semantic button variants/sizes
 - `AppChip`: compact status labels
 - `ProgressBar`: workout progress indicator
+- `MetricCard`: summary tiles for momentum, performance, and plan snapshots
+- `QuickActionTile`: shortcut cards for common gym actions
 - `AppTextField`: labeled semantic text inputs
 - `SectionHeader`: section title + action row
 - `FloatingActionButton`: primary CTA for add/start actions
@@ -60,28 +68,38 @@ Weights:
   - Scale-to-press on all actionable cards/buttons (`PressableScale`)
 - Completion feedback:
   - Toggle state color shift + chip state update + progress bar fill
+- Suggested next pass:
+  - Swipeable set history rows
+  - Animated check-in confetti on workout completion
+  - Shared sheet component for add/edit flows
 
 ## Main Screen Layouts
 - Home:
-  - Hero active-routine card
-  - Today card with quick status
-  - Session list cards
+  - Motivational hero with today’s focus
+  - Momentum metrics in modular cards
+  - Quick actions for planning and routine management
+  - Today card with workout density and fast start CTA
+  - Session list cards with edit access
   - Floating "Start now" action
 - Routines:
   - Active routine summary hero
-  - Routine cards with quick action buttons
+  - Library overview metrics
+  - Routine cards with status chips and quick action buttons
   - Swipe-to-delete action
   - Floating "New routine" action
 - Start:
   - Today's workout hero with progress
+  - Summary metrics for remaining work and rest demand
   - Interactive exercise checklist rows
-  - Completion chips + progress updates
+  - Completion gradient state when the session is done
 - Plan:
-  - Weekly day cards with workout/rest states
-  - Day metadata and duration chips
+  - Weekly overview hero
+  - Daily workout/rest cards with stronger hierarchy
+  - Metadata chips and quick-scanning durations
 - Settings:
   - Fast toggles
   - Theme mode switcher
+  - Preference summary metrics
 - Routine Editor:
   - Tokenized form controls
   - Animated session/exercise rows

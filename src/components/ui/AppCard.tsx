@@ -7,7 +7,7 @@ import { useTheme } from "@/theme";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 
-type CardVariant = "default" | "muted" | "highlight" | "outline";
+type CardVariant = "default" | "muted" | "highlight" | "outline" | "accent";
 
 interface AppCardProps {
   children: ReactNode;
@@ -24,15 +24,19 @@ function resolveVariantStyle(variant: CardVariant, theme: ReturnType<typeof useT
     },
     muted: {
       backgroundColor: theme.colors.surfaceAlt,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.borderSoft,
     },
     highlight: {
-      backgroundColor: theme.colors.primarySoft,
-      borderColor: theme.colors.borderStrong,
+      backgroundColor: theme.colors.surfaceRaised,
+      borderColor: theme.colors.borderSoft,
     },
     outline: {
       backgroundColor: "transparent",
       borderColor: theme.colors.borderStrong,
+    },
+    accent: {
+      backgroundColor: theme.colors.accentSoft,
+      borderColor: theme.colors.borderAccent,
     },
   };
 
@@ -41,33 +45,24 @@ function resolveVariantStyle(variant: CardVariant, theme: ReturnType<typeof useT
 
 function AppCard({ children, variant = "default", style, onPress }: AppCardProps) {
   const { theme } = useTheme();
-  const bevelLight = theme.isDark ? "rgba(255,255,255,0.06)" : "#FFFFFF";
-  const bevelDark = theme.isDark ? "rgba(0,0,0,0.62)" : "#D7DDE7";
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         base: {
-          borderRadius: theme.tokens.radius.md,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
+          borderRadius: theme.tokens.radius.lg,
+          borderWidth: 1,
           padding: theme.tokens.spacing.lg,
           gap: theme.tokens.spacing.sm,
           overflow: "hidden",
-          shadowColor: "#000000",
-          shadowOpacity: theme.isDark ? 0.34 : 0.1,
-          shadowRadius: theme.isDark ? 22 : 14,
-          shadowOffset: { width: 3, height: 6 },
+          shadowColor: theme.colors.shadow,
+          shadowOpacity: theme.isDark ? 0.34 : 0.12,
+          shadowRadius: theme.isDark ? 18 : 14,
+          shadowOffset: { width: 0, height: 8 },
           elevation: theme.tokens.elevation.sm,
-          borderTopColor: bevelLight,
-          borderLeftColor: bevelLight,
-          borderRightColor: bevelDark,
-          borderBottomColor: bevelDark,
         },
       }),
-    [bevelDark, bevelLight, theme],
+    [theme],
   );
 
   const variantStyle = resolveVariantStyle(variant, theme);

@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -16,6 +17,7 @@ interface WorkoutPageProps {
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
   };
+  subtitle?: string;
   headerAction?: ReactNode;
   children: ReactNode;
   floatingAction?: ReactNode;
@@ -23,9 +25,10 @@ interface WorkoutPageProps {
 
 const mascotSource = mooseMascot as ImageSource;
 
-export default function WorkoutPage({ headerChip, headerAction, children, floatingAction }: WorkoutPageProps) {
+export default function WorkoutPage({ headerChip, subtitle, headerAction, children, floatingAction }: WorkoutPageProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const headerTitle = subtitle ?? headerChip.label;
 
   const styles = useMemo(
     () =>
@@ -34,23 +37,37 @@ export default function WorkoutPage({ headerChip, headerAction, children, floati
           flex: 1,
           backgroundColor: theme.colors.background,
         },
+        glowOverlay: {
+          position: "absolute",
+          top: -40,
+          left: 0,
+          right: 0,
+          height: 260,
+          pointerEvents: "none",
+        },
+        lowerGlowOverlay: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 180,
+          pointerEvents: "none",
+        },
         content: {
           paddingHorizontal: theme.tokens.spacing.xl,
-          gap: theme.tokens.spacing.md,
+          gap: theme.tokens.spacing.lg,
         },
         header: {
-          marginBottom: theme.tokens.spacing.sm,
+          marginBottom: theme.tokens.spacing.xs,
         },
         headerRow: {
           flexDirection: "row",
           justifyContent: "space-between",
-          alignItems: "center",
-          gap: theme.tokens.spacing.sm,
+          alignItems: "flex-start",
+          gap: theme.tokens.spacing.md,
         },
         headerLead: {
           flex: 1,
-          flexDirection: "row",
-          alignItems: "center",
           gap: theme.tokens.spacing.sm,
         },
         chip: {
@@ -58,44 +75,51 @@ export default function WorkoutPage({ headerChip, headerAction, children, floati
           flexDirection: "row",
           alignItems: "center",
           gap: theme.tokens.spacing.xs,
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
-          borderTopColor: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-          borderLeftColor: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-          borderRightColor: theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2",
-          borderBottomColor: theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2",
           borderRadius: theme.tokens.radius.pill,
-          backgroundColor: theme.colors.surfaceAlt,
-          paddingHorizontal: theme.tokens.spacing.sm + 1,
-          paddingVertical: theme.tokens.spacing.xs + 1,
+          borderWidth: 1,
+          borderColor: theme.colors.borderAccent,
+          backgroundColor: theme.colors.accentSoft,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs,
         },
         chipLabel: {
-          color: theme.colors.text,
+          color: theme.colors.accent,
           fontFamily: theme.tokens.typography.fontFamily.body,
           fontSize: theme.tokens.typography.fontSize.sm,
-          fontWeight: theme.tokens.typography.fontWeight.semibold,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
+        },
+        title: {
+          color: theme.colors.text,
+          fontFamily: theme.tokens.typography.fontFamily.display,
+          fontSize: theme.tokens.typography.fontSize["4xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+          letterSpacing: theme.tokens.typography.letterSpacing.tight,
+        },
+        subtitle: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          fontWeight: theme.tokens.typography.fontWeight.medium,
+        },
+        titleRow: {
+          gap: theme.tokens.spacing.xs,
         },
         mascotWrap: {
-          borderTopWidth: 1,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
-          borderBottomWidth: 1.5,
-          borderTopColor: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-          borderLeftColor: theme.isDark ? "rgba(255,255,255,0.08)" : "#FFFFFF",
-          borderRightColor: theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2",
-          borderBottomColor: theme.isDark ? "rgba(0,0,0,0.58)" : "#D2D8E2",
-          borderRadius: theme.tokens.radius.md,
+          borderRadius: theme.tokens.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.borderSoft,
           backgroundColor: theme.colors.surface,
-          padding: theme.tokens.spacing.xxs + 2,
+          padding: theme.tokens.spacing.xs,
+          shadowColor: theme.colors.shadow,
+          shadowOpacity: theme.isDark ? 0.25 : 0.08,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: theme.tokens.elevation.sm,
         },
         mascot: {
-          width: 34,
-          height: 34,
-          borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
+          width: 36,
+          height: 36,
+          borderRadius: theme.tokens.radius.md,
         },
       }),
     [theme],
@@ -103,24 +127,39 @@ export default function WorkoutPage({ headerChip, headerAction, children, floati
 
   return (
     <View style={styles.screen}>
+      <LinearGradient
+        colors={[theme.gradients.screenGlowTop, "transparent"]}
+        pointerEvents="none"
+        style={styles.glowOverlay}
+      />
+      <LinearGradient
+        colors={["transparent", theme.gradients.screenGlowBottom]}
+        pointerEvents="none"
+        style={styles.lowerGlowOverlay}
+      />
+
       <ScrollView
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + theme.tokens.spacing.md,
-            paddingBottom: insets.bottom + 132,
+            paddingTop: insets.top + theme.tokens.spacing.lg,
+            paddingBottom: insets.bottom + 140,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal)} style={styles.header}>
+        <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal).springify()} style={styles.header}>
           <View style={styles.headerRow}>
             <View style={styles.headerLead}>
-              <View style={styles.chip}>
-                <Ionicons color={theme.colors.textMuted} name={headerChip.icon} size={16} />
-                <Text style={styles.chipLabel}>{headerChip.label}</Text>
+              <View style={styles.titleRow}>
+                <View style={styles.chip}>
+                  <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
+                  <Text style={styles.chipLabel}>{headerChip.label}</Text>
+                </View>
+                <Text style={styles.title}>{headerTitle}</Text>
+                {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+                {headerAction}
               </View>
-              {headerAction}
             </View>
             <View style={styles.mascotWrap}>
               <Image contentFit="cover" source={mascotSource} style={styles.mascot} />
