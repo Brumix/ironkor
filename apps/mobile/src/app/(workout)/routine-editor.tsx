@@ -2,8 +2,9 @@ import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   NestableDraggableFlatList,
@@ -17,6 +18,7 @@ import AppCard from "@/components/ui/AppCard";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import InfoPopoverButton from "@/components/ui/InfoPopoverButton";
+import PressableScale from "@/components/ui/PressableScale";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
@@ -24,6 +26,7 @@ import type { DraftWeeklyPlanEntry } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
 import type { Id } from "@convex/_generated/dataModel";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -34,6 +37,105 @@ interface SessionOption {
   exerciseCount: number;
   persistedId?: Id<"routineSessions">;
 }
+
+interface SessionRowStyles {
+  sessionActions: StyleProp<ViewStyle>;
+  sessionCell: StyleProp<ViewStyle>;
+  sessionHeader: StyleProp<ViewStyle>;
+  sessionMeta: StyleProp<TextStyle>;
+  sessionName: StyleProp<TextStyle>;
+  sessionRow: StyleProp<ViewStyle>;
+  sessionRowActive: StyleProp<ViewStyle>;
+  sessionTitleBlock: StyleProp<ViewStyle>;
+  dragHandle: StyleProp<ViewStyle>;
+  dragHandleActive: StyleProp<ViewStyle>;
+}
+
+interface RoutineSessionRowProps {
+  accentColor: string;
+  drag: () => void;
+  errorColor: string;
+  isDragging: boolean;
+  item: SessionOption;
+  onDeleteSession: (session: SessionOption) => void;
+  onOpenSession: (session: SessionOption) => void;
+  onPrimaryColor: string;
+  styles: SessionRowStyles;
+  textColor: string;
+}
+
+const RoutineSessionRow = memo(function RoutineSessionRow({
+  accentColor,
+  drag,
+  errorColor,
+  isDragging,
+  item,
+  onDeleteSession,
+  onOpenSession,
+  onPrimaryColor,
+  styles,
+  textColor,
+}: RoutineSessionRowProps) {
+  return (
+    <View
+      renderToHardwareTextureAndroid={isDragging}
+      shouldRasterizeIOS={isDragging}
+      style={styles.sessionCell}
+    >
+      <AppCard
+        style={[styles.sessionRow, isDragging && styles.sessionRowActive]}
+        variant={item.persistedId ? "default" : "highlight"}
+      >
+        <View style={styles.sessionHeader}>
+          <View style={styles.sessionTitleBlock}>
+            <Text style={styles.sessionName}>{item.name}</Text>
+            <Text style={styles.sessionMeta}>
+              {item.exerciseCount} {item.exerciseCount === 1 ? "exercise" : "exercises"}
+            </Text>
+          </View>
+          <PressableScale
+            accessibilityHint="Long press and drag to reorder this section"
+            accessibilityLabel={`Reorder ${item.name}`}
+            hitSlop={12}
+            onPressIn={() => {
+              drag();
+            }}
+            pressedOpacity={1}
+            pressedScale={0.97}
+            style={[styles.dragHandle, isDragging && styles.dragHandleActive]}
+          >
+            <Ionicons
+              color={isDragging ? onPrimaryColor : accentColor}
+              name="reorder-four-outline"
+              size={18}
+            />
+          </PressableScale>
+        </View>
+
+        <View style={styles.sessionActions}>
+          <AppButton
+            accessibilityLabel={`Edit ${item.name}`}
+            icon={<Ionicons color={textColor} name="create-outline" size={16} />}
+            onPress={() => {
+              onOpenSession(item);
+            }}
+            size="sm"
+            variant="secondary"
+          />
+          <AppButton
+            accessibilityLabel={`Delete ${item.name}`}
+            icon={<Ionicons color={errorColor} name="trash-outline" size={16} />}
+            onPress={() => {
+              onDeleteSession(item);
+            }}
+            size="sm"
+            variant="danger"
+          />
+        </View>
+      </AppCard>
+    </View>
+  );
+});
 
 function sortPlanner(entries: DraftWeeklyPlanEntry[]) {
   return [...entries].sort((a, b) => a.day - b.day);
@@ -404,16 +506,16 @@ export default function RoutineEditorScreen() {
     }
   }
 
-  function handleDeleteSession(session: SessionOption) {
+  const handleDeleteSession = useCallback((session: SessionOption) => {
     if (isNew) {
       removeDraftSession(session.key);
       return;
     }
 
     setSessionListData((current) => current.filter((entry) => entry.key !== session.key));
-  }
+  }, [isNew, removeDraftSession]);
 
-  function openSessionEditor(session: SessionOption) {
+  const openSessionEditor = useCallback((session: SessionOption) => {
     if (session.persistedId && selectedRoutine) {
       router.push({
         pathname: "/(workout)/session-editor",
@@ -437,7 +539,7 @@ export default function RoutineEditorScreen() {
         draftSessionKey: session.key,
       },
     });
-  }
+  }, [isNew, router, selectedRoutine]);
 
   function cycleDayType(day: number) {
     updatePlannerEntries((current) =>
@@ -454,52 +556,6 @@ export default function RoutineEditorScreen() {
 
   function resolvePlannerSummary(entry: DraftWeeklyPlanEntry) {
     return entry.type === "train" ? "Training day" : "Rest and recovery";
-  }
-
-  function renderSessionItem({ item, drag }: RenderItemParams<SessionOption>) {
-    return (
-      <View style={styles.sessionCell}>
-        <AppCard
-          delayLongPress={180}
-          onLongPress={drag}
-          pressedOpacity={1}
-          pressedScale={1}
-          style={[styles.sessionRow, draggingSessionKey === item.key && styles.sessionRowActive]}
-          variant={item.persistedId ? "default" : "highlight"}
-        >
-          <View style={styles.sessionHeader}>
-            <View style={styles.sessionTitleBlock}>
-              <Text style={styles.sessionName}>{item.name}</Text>
-              <Text style={styles.sessionMeta}>
-                {item.exerciseCount} {item.exerciseCount === 1 ? "exercise" : "exercises"}
-              </Text>
-            </View>
-            <Ionicons color={theme.colors.accent} name="reorder-four-outline" size={18} />
-          </View>
-
-          <View style={styles.sessionActions}>
-            <AppButton
-              accessibilityLabel={`Edit ${item.name}`}
-              icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
-              onPress={() => {
-                openSessionEditor(item);
-              }}
-              size="sm"
-              variant="secondary"
-            />
-            <AppButton
-              accessibilityLabel={`Delete ${item.name}`}
-              icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
-              onPress={() => {
-                handleDeleteSession(item);
-              }}
-              size="sm"
-              variant="danger"
-            />
-          </View>
-        </AppCard>
-      </View>
-    );
   }
 
   const styles = useMemo(
@@ -557,6 +613,11 @@ export default function RoutineEditorScreen() {
         },
         sessionRow: {
           gap: theme.tokens.spacing.md,
+          shadowColor: "transparent",
+          shadowOpacity: 0,
+          shadowRadius: 0,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 0,
         },
         sessionRowActive: {
           borderColor: theme.colors.borderAccent,
@@ -567,6 +628,21 @@ export default function RoutineEditorScreen() {
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: theme.tokens.spacing.sm,
+        },
+        dragHandle: {
+          width: 36,
+          height: 36,
+          borderRadius: theme.tokens.radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.accentSoft,
+          borderWidth: 1,
+          borderColor: theme.colors.borderAccent,
+          flexShrink: 0,
+        },
+        dragHandleActive: {
+          backgroundColor: theme.colors.accent,
+          borderColor: theme.colors.accent,
         },
         sessionTitleBlock: {
           flex: 1,
@@ -646,6 +722,30 @@ export default function RoutineEditorScreen() {
       }),
     [theme],
   );
+
+  const renderSessionItem = useCallback(({ item, drag }: RenderItemParams<SessionOption>) => (
+    <RoutineSessionRow
+      accentColor={theme.colors.accent}
+      drag={drag}
+      errorColor={theme.colors.error}
+      isDragging={draggingSessionKey === item.key}
+      item={item}
+      onDeleteSession={handleDeleteSession}
+      onOpenSession={openSessionEditor}
+      onPrimaryColor={theme.colors.onPrimary}
+      styles={styles}
+      textColor={theme.colors.text}
+    />
+  ), [
+    draggingSessionKey,
+    handleDeleteSession,
+    openSessionEditor,
+    styles,
+    theme.colors.accent,
+    theme.colors.error,
+    theme.colors.onPrimary,
+    theme.colors.text,
+  ]);
 
   if (routinesData === undefined || (isNew && !draft)) {
     return (
@@ -741,7 +841,7 @@ export default function RoutineEditorScreen() {
 
       {sessionListData.length > 0 ? (
         <NestableDraggableFlatList
-          activationDistance={8}
+          activateAfterLongPress={220}
           containerStyle={{ flexGrow: 0 }}
           data={sessionListData}
           keyExtractor={(item) => item.key}
@@ -749,6 +849,7 @@ export default function RoutineEditorScreen() {
             dragStartIndexRef.current = index;
             placeholderIndexRef.current = index;
             setDraggingSessionKey(sessionListData[index]?.key ?? null);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
           }}
           onDragEnd={handleSessionDragEnd}
           onPlaceholderIndexChange={(index) => {
