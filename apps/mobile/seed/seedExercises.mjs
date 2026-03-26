@@ -1,10 +1,11 @@
 // seedExercises.mjs
 import { ConvexClient } from "convex/browser";
-import dotenv from "dotenv";
+const convexUrl = process.env.CONVEX_URL;
+if (!convexUrl) {
+  throw new Error("Missing CONVEX_URL. Set it in environment or root .env.local.");
+}
 
-dotenv.config();
-
-const client = new ConvexClient(process.env.CONVEX_URL);
+const client = new ConvexClient(convexUrl);
 
 
 const auxExercises = [
@@ -1925,29 +1926,48 @@ const auxExercises = [
 
 async function seed() {
 	const alreadySaved = {};
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
   for (const ex of auxExercises) {
     try {
-      if (alreadySaved[ex.Name]) {
-		console.log("💥 Already saved:", ex.Name);
+      const nameKey = ex.Name.toLowerCase().trim();
+      if (alreadySaved[nameKey]) {
+		console.log("💥 Duplicate in file, skipped:", ex.Name);
+        skipped += 1;
         continue;
       }
-      await client.mutation("seedFunctions:seedExercises", {
+      const result = await client.mutation("seedFunctions:seedExercises", {
         name: ex.Name,
         bodyPart: ex.BodyPart,
+        equipment: ex.Equipment,
         primaryMuscle: ex.Muscle,
         muscleGroups: [ex.Muscle],
         description: undefined,
-        nameText: ex.Name.toLowerCase(),
-        musclesText: ex.Muscle.toLowerCase(),
-        updatedAt: Date.now(),
       });
-      console.log("✅ Inserted:", ex.Name);
-      alreadySaved[ex.Name] = true;
+
+      if (result?.status === "skipped") {
+        skipped += 1;
+        console.log("⏭️ Already in DB:", ex.Name);
+      } else {
+        inserted += 1;
+        console.log("✅ Inserted:", ex.Name);
+      }
+
+      alreadySaved[nameKey] = true;
     } catch (err) {
       console.error("❌ Failed:", ex.Name, err);
+      failed += 1;
     }
   }
-  console.log("🎉 Done seeding");
+  console.log(`🎉 Done seeding. Inserted: ${inserted}, Skipped: ${skipped}, Failed: ${failed}`);
 }
 
-seed();
+seed()
+  .catch((error) => {
+    console.error("❌ Seed failed:", error);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    client.close();
+  });

@@ -1,0 +1,39 @@
+import { v } from "convex/values";
+
+import { mutation } from "./_generated/server";
+import { normalizeExerciseCatalog, normalizeNameText } from "./exerciseCatalog";
+
+export const seedExercises = mutation({
+  args: {
+    name: v.string(),
+    bodyPart: v.optional(v.string()),
+    equipment: v.optional(v.string()),
+    primaryMuscle: v.optional(v.string()),
+    muscleGroups: v.optional(v.array(v.string())),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const normalized = normalizeExerciseCatalog({
+      ...args,
+      isCustom: false,
+    });
+
+    const existing = await ctx.db
+      .query("exercises")
+      .withIndex("by_nameText", (q) => q.eq("nameText", normalizeNameText(args.name)))
+      .take(1);
+
+    if (existing.length > 0) {
+      return {
+        status: "skipped" as const,
+        exerciseId: existing[0]._id,
+      };
+    }
+
+    const exerciseId = await ctx.db.insert("exercises", normalized);
+    return {
+      status: "inserted" as const,
+      exerciseId,
+    };
+  },
+});

@@ -90,6 +90,20 @@ Guidelines:
 - For workout-editor UX in the mobile app, check `apps/mobile/AGENTS.md` before changing routine creation/editing flows or planner behavior.
 - For the mobile routine editor, treat page-level edits as local until the user presses Save. Do not persist add/delete/reorder/name/planner changes for an existing routine during routine-editor interactions.
 
+## Exercise Catalog Performance Guardrails
+
+- Treat `convex/schemas/exercises.ts` as a high-read catalog table.
+- Keep catalog fields denormalized in `exercises` for read speed. Do not split `equipment`, `bodyPart`, or `primaryMuscle` into separate tables unless there is a non-performance product need.
+- Avoid unbounded `.collect()` in user-facing exercise queries. Prefer:
+  - `withIndex(...).take(n)` for bounded reads
+  - `.paginate(...)` for browsing lists
+  - `withSearchIndex(...)` for text search.
+- For search endpoints, move as much filtering as possible into `withSearchIndex(...).eq(...)` filter fields.
+- Maintain indexes around real query shapes from mobile picker/browse flows. Remove unused/redundant indexes because extra indexes increase write costs.
+- Use staged indexes for large backfills on production-scale `exercises` data.
+- Keep seed/import paths idempotent (match on normalized `nameText`) and normalize server-side before inserts.
+- For mobile search UX, debounce user input to reduce query churn under concurrent usage.
+
 ## Scaling Playbook
 
 ### Add a new app (web/admin/nutrition)

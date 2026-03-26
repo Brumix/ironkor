@@ -32,6 +32,16 @@ This repository is a **Bun workspace monorepo** designed to support multiple app
 - On mobile workout editor screens, the chip is the primary page-context label; avoid reintroducing a large duplicated title or floating back button for those screens.
 - The mobile drag-reorder flow depends on a checked-in Bun patch for `react-native-draggable-flatlist@4.0.3`; keep that in mind before upgrading or replacing the drag list implementation.
 
+### Exercise catalog performance constraints
+
+- The `exercises` table is a high-read catalog and must stay optimized for heavy concurrent reads.
+- Keep `exercises` denormalized for hot lookups (do not split `equipment`, `bodyPart`, or `primaryMuscle` into separate lookup tables for performance reasons).
+- Avoid unbounded `.collect()` on `exercises` for user-facing queries; prefer `withIndex` / `withSearchIndex` with `take()` or pagination.
+- For text search, prefer a Convex `searchIndex` and push filter predicates (`bodyPart`, `equipment`, `primaryMuscle`, optional `isCustom`) into the index query.
+- Add composite indexes that match real UI filter patterns; remove redundant/unused indexes to reduce write overhead.
+- For large index additions on `exercises`, use staged indexes to avoid blocking deploys.
+- Keep exercise ingestion idempotent by normalized name (`nameText`) and normalize raw seed payloads server-side before insert.
+
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.
 
