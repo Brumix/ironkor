@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +15,6 @@ import Animated, { LinearTransition } from "react-native-reanimated";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
 
-import { api } from "@convex/_generated/api";
 
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -54,7 +54,7 @@ function defaultPlanner(daysPerWeek = 4): PlannerEntry[] {
 export default function RoutineEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ routineId?: string }>();
+  const params = useLocalSearchParams();
 
   const routinesData = useQuery(api.routines.listDetailed);
 
@@ -79,7 +79,7 @@ export default function RoutineEditorScreen() {
 
   const [routineName, setRoutineName] = useState("");
   const [newSessionName, setNewSessionName] = useState("");
-  const [plannerDraft, setPlannerDraft] = useState<PlannerEntry[]>(defaultPlanner(4));
+  const [plannerDraft, setPlannerDraft] = useState(defaultPlanner(4));
 
   useEffect(() => {
     if (routinesData === undefined) {

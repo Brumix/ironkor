@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -12,7 +13,6 @@ import WorkoutPage from "@/components/workout/WorkoutPage";
 import { buildWeeklyPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
-import { api } from "@convex/_generated/api";
 
 const WEEKDAY_FORMAT: Intl.DateTimeFormatOptions = {
   weekday: "short",

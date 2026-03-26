@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -14,10 +15,6 @@ import {
   View,
 } from "react-native";
 
-import WorkoutPage from "@/components/workout/WorkoutPage";
-import type { RoutineSection } from "@/features/workout/types";
-import { useTheme } from "@/theme";
-
 import {
   BODY_PART_VALUES,
   EQUIPMENT_VALUES,
@@ -25,8 +22,12 @@ import {
   type BodyPartType,
   type EquipmentType,
   type MuscleType,
-} from "../../../shared/constants";
-import { api } from "@convex/_generated/api";
+} from "@ironkor/shared/constants";
+
+import WorkoutPage from "@/components/workout/WorkoutPage";
+import type { RoutineSection } from "@/features/workout/types";
+import { useTheme } from "@/theme";
+
 
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -99,7 +100,7 @@ function formatProgrammingSummary(entry: RoutineSection["exercises"][number]) {
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ routineId?: string; sessionId?: string }>();
+  const params = useLocalSearchParams();
 
   const [searchText, setSearchText] = useState("");
   const [selectedBodyPart, setSelectedBodyPart] = useState<BodyPartType | undefined>();
@@ -147,7 +148,7 @@ export default function SessionEditorScreen() {
     useState<Id<"sessionExercises"> | null>(null);
   const [editingSessionExerciseId, setEditingSessionExerciseId] =
     useState<Id<"sessionExercises"> | null>(null);
-  const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDraft>(
+  const [programmingDraft, setProgrammingDraft] = useState(
     createProgrammingDraft(),
   );
 
@@ -159,7 +160,7 @@ export default function SessionEditorScreen() {
   const [customMuscleGroups, setCustomMuscleGroups] = useState<MuscleType[]>(["pectorals"]);
   const [customDescription, setCustomDescription] = useState("");
   const [customProgrammingDraft, setCustomProgrammingDraft] =
-    useState<ProgrammingDraft>(createProgrammingDraft());
+    useState(createProgrammingDraft());
 
   useEffect(() => {
     if (!selectedSession) {

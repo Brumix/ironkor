@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
@@ -15,7 +16,6 @@ import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
 
-import { api } from "@convex/_generated/api";
 
 export default function RoutinesScreen() {
   const { theme } = useTheme();

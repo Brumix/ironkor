@@ -1,141 +1,110 @@
-# Ironkor Mobile
+# Ironkor
 
-**Ironkor** is a gym-focused mobile app for planning strength-training **routines**, organizing **sessions** (splits), and mapping exercises to a **weekly calendar**. The client is built with **Expo** and **React Native**; data and business logic live on **Convex** for real-time sync and a single TypeScript stack end to end.
-
----
-
-## What it does
-
-- **Routines** — Create and manage multiple routines. One routine can be **active** at a time; switching active routines updates what the rest of the app shows.
-- **Sessions** — Each routine contains ordered **sessions** (for example Push / Pull / Legs). Sessions hold an ordered list of **exercises**.
-- **Exercises** — Exercises define targets (sets, rep ranges, rest), muscle groups, and variant (barbell, machine, etc.). Users can add **custom** exercises via Convex.
-- **Weekly plan** — Each routine has a **7-day plan**: train vs rest, with **auto** or **manual** assignment of a session to a given day. Changing `daysPerWeek` regenerates a sensible default spread of training days.
-- **Today’s flow** — **Home** summarizes the active routine and today’s focus; **Start** is the in-session checklist (local completion state). **Plan** shows the week ahead with estimated session load.
-
-Empty deployments **seed** a default Push / Pull / Legs routine with sample exercises when the routines list is empty (see `seedDefaultsIfEmpty` in Convex).
-
----
-
-## Tech stack
-
-| Layer | Choice |
-|--------|--------|
-| App framework | **Expo SDK 55** (`expo-router` file-based routes, typed routes, React Compiler experiment) |
-| UI | **React Native 0.83**, **Reanimated**, **Gesture Handler**, **Safe Area** |
-| Backend | **Convex** (queries/mutations, schema in `convex/`) |
-| Language | **TypeScript** (strict) |
-| Tooling | **ESLint** (Expo config, import resolver, sonarjs, unused-imports) |
-
-Optional targets: **iOS**, **Android**, **Web** (static export configured in Expo config).
+**Ironkor** is a fitness platform for planning strength-training routines, tracking workouts, and building healthy habits. The codebase is a **Bun workspace monorepo** with a single shared Convex backend, a shared TypeScript package, and separate client apps.
 
 ---
 
 ## Repository layout
 
 ```
-ironkor-mobile/
-├── app.config.ts          # Expo config (bundle IDs, EAS, variants)
-├── src/
-│   ├── app/               # Expo Router screens and layouts
-│   │   ├── _layout.tsx    # ConvexProvider, theme, root stack
-│   │   └── (workout)/     # Tabbed workout area (home, routines, start, plan, settings)
-│   ├── components/        # UI primitives + workout-specific layout (e.g. WorkoutPage, bottom nav)
-│   ├── features/workout/  # Mappers, selectors, types, mock data for UI experiments
-│   └── theme/             # Light/dark themes, tokens, ThemeProvider
-├── convex/                # Schema, routines & exercises API, generated types
-└── assets/                # Images (e.g. app icon)
+ironkor/
+├── convex/                   # Convex backend — schema, queries, mutations
+├── packages/
+│   └── shared/               # @ironkor/shared — pure TS constants, enums, validators
+└── apps/
+    └── mobile/               # Expo + React Native (iOS / Android / Web)
 ```
-
-Path aliases: `@/*` → `src/*`, `@convex/*` → `convex/*` (see `tsconfig.json`).
 
 ---
 
-## Convex data model (summary)
+## Apps
 
-- **`routines`** — Name, `daysPerWeek`, `isActive`, `sessionOrder`, `weeklyPlan` (7 entries), timestamps.
-- **`routineSessions`** — Belongs to a routine; ordered by `order`.
-- **`exercises`** — Library of movements; `isCustom` distinguishes user-created rows.
-- **`sessionExercises`** — Join of session ↔ exercise with ordering.
+| App | Path | Description |
+|-----|------|-------------|
+| Ironkor Mobile | `apps/mobile/` | Gym logbook: routines, sessions, weekly planning |
 
-Main API modules: `convex/routines.ts` (routine lifecycle, sessions, weekly plan, seeding), `convex/exercises.ts` (list, create custom).
+---
+
+## Tech stack
+
+| Layer | Choice |
+|-------|--------|
+| Backend | **Convex** (real-time sync, TypeScript functions) |
+| Shared | `@ironkor/shared` — workspace package |
+| Mobile | **Expo SDK 55**, React Native 0.83, Expo Router |
+| Language | **TypeScript** (strict) |
+| Package manager | **Bun** (workspaces) |
 
 ---
 
 ## Prerequisites
 
-- **Node.js** (LTS recommended)
-- A **Convex** project linked to this repo (`npx convex dev` will guide login and deployment selection)
-- **pnpm**, **npm**, or **bun** for installs (scripts reference `pnpm` for parallel dev tasks)
+- **Node.js** LTS
+- **Bun** (`curl -fsSL https://bun.sh/install | bash`)
+- A **Convex** project (`npx convex dev` will prompt for login and deployment selection)
+- Xcode / Android SDK for native builds
 
-For native builds, Xcode / Android SDK as required by Expo.
+---
+
+## Getting started
+
+```bash
+# Install all workspace dependencies
+bun install
+
+# Set up environment
+cp apps/mobile/.env.local.example apps/mobile/.env.local  # then fill in EXPO_PUBLIC_CONVEX_URL
+
+# Start Convex + Expo together
+bun run start
+```
 
 ---
 
 ## Environment variables
 
-The app expects a Convex deployment URL at runtime:
-
-| Variable | Purpose |
-|----------|---------|
-| `EXPO_PUBLIC_CONVEX_URL` | Convex HTTP URL (injected at build time for the client) |
-
-The root layout throws if this is missing (`src/app/_layout.tsx`). Configure it in your shell, `.env` (if you add one), or EAS secrets for production builds.
+| Variable | File | Purpose |
+|----------|------|---------|
+| `EXPO_PUBLIC_CONVEX_URL` | `apps/mobile/.env.local` | Convex HTTP URL for the mobile client |
+| `CONVEX_URL` | root `.env.local` or shell | URL used by seed scripts |
 
 ---
 
-## Scripts
+## Scripts (from repo root)
 
 | Command | Description |
 |---------|-------------|
-| `pnpm start` | Runs `convex dev --once` then **concurrently** starts Expo and `convex dev` |
-| `pnpm dev:expo` | `expo start --clear` |
-| `pnpm dev:convex` | `npx convex dev` |
-| `pnpm ios` / `pnpm android` / `pnpm web` | Platform runners |
-| `pnpm lint` / `pnpm lint:fix` / `pnpm lint:strict` | ESLint |
-
-The default **`start`** script runs nested `pnpm run dev:expo` and `pnpm run dev:convex`; use **pnpm** for that entry point, or run `dev:expo` and `dev:convex` in two terminals with your preferred package runner.
-
----
-
-## Local development (typical flow)
-
-1. Install dependencies: `pnpm install` (or equivalent).
-2. Ensure Convex is configured (`npx convex dev` from the repo root at least once).
-3. Set `EXPO_PUBLIC_CONVEX_URL` to your deployment URL.
-4. Run `pnpm start` to sync Convex once and run both the Convex dev server and Expo.
-
-Use a **development build** (`expo-dev-client`) when you rely on native modules beyond Expo Go, per your `package.json` dependencies.
+| `bun run start` | Codegen once, then run Convex + Expo concurrently |
+| `bun run dev` | Run Convex + Expo concurrently (skip initial codegen) |
+| `bun run convex:dev` | Convex dev server only |
+| `bun run convex:deploy` | Deploy Convex to production |
+| `bun run mobile:dev` | Expo dev server only |
+| `bun run lint` | Lint the mobile app |
+| `bun run typecheck` | Typecheck mobile + convex |
 
 ---
 
-## App variants
+## Adding a new app
 
-`app.config.ts` reads **`APP_VARIANT`**:
-
-- `development` → bundle id `com.ironkor.ironkor.development`, display name **Ironkor Dev**
-- `beta` → `com.ironkor.ironkor.beta`, **Ironkor Beta**
-- default → `com.ironkor.ironkor`, **Ironkor**
-
-Use this to install multiple builds side by side.
+1. Create `apps/<name>/` with its own `package.json`.
+2. Add `"@ironkor/shared": "workspace:*"` and `"convex"` as dependencies.
+3. Set `NEXT_PUBLIC_CONVEX_URL` (or equivalent) pointing to the same deployment.
+4. Run `bun install` from the repo root.
 
 ---
 
-## UI and theming
+## Convex data model
 
-- **ThemeProvider** supports **light**, **dark**, and **system** alignment with the OS color scheme.
-- Shared tokens live under `src/theme/` (colors, typography, spacing, radii).
-- The workout shell uses a custom **tab bar** (`WorkoutBottomNav`) with a prominent center **Start** action.
+- **`routines`** — Name, `daysPerWeek`, `isActive`, `sessionOrder`, `weeklyPlan` (7 entries).
+- **`routineSessions`** — Belongs to a routine; ordered by `order`.
+- **`exercises`** — Library of movements; `isCustom` distinguishes user-created rows.
+- **`sessionExercises`** — Join of session ↔ exercise with ordering.
 
----
-
-## Notes and limitations (current codebase)
-
-- **Authentication** is not wired; Convex functions are written for a single shared dataset as typical for early-stage apps—harden with auth and user-scoped tables before production.
-- **Workout history** (`src/app/(workout)/history.tsx`) is driven by **mock data** (`src/features/workout/mockData.ts`) to prototype the UI; it is not registered as a main tab and does not persist logs to Convex yet.
-- **Settings** toggles (e.g. auto-start timer, haptics) are **local UI state** and are not persisted or connected to workout execution in the backend.
+See `convex/README.md` for full function reference.
 
 ---
 
-## Contributing
+## Notes
 
-Follow the repository commit message convention: prefixes such as `feat:`, `fix:`, `docs:`, etc., with imperative descriptions (see `.cursor/rules/commit_rules.mdc` if present).
+- Authentication is not yet wired — Convex functions operate on a shared dataset suitable for early development.
+- Workout history in the mobile app uses mock data pending a real persistence layer.

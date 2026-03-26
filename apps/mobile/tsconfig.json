@@ -7,10 +7,16 @@
         "./src/*"
       ],
       "@convex/*": [
-        "./convex/*"
+        "../../convex/*"
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "@ironkor/shared": [
+        "../../packages/shared/constants.ts"
+      ],
+      "@ironkor/shared/*": [
+        "../../packages/shared/*.ts"
       ]
     }
   },

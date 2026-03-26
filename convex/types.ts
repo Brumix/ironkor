@@ -3,7 +3,7 @@ import type {
   BodyPartType,
   EquipmentType,
   MuscleType,
-} from "../shared/constants";
+} from "@ironkor/shared/constants";
 
 export interface ExerciseCatalogRecord {
   _id: Id<"exercises">;

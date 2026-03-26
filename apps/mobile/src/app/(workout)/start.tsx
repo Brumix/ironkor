@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { useMemo, useState } from "react";
@@ -15,7 +16,6 @@ import WorkoutPage from "@/components/workout/WorkoutPage";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
-import { api } from "@convex/_generated/api";
 
 export default function StartScreen() {
   const { theme } = useTheme();

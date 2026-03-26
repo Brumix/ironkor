@@ -1,3 +1,4 @@
+import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
@@ -17,7 +18,6 @@ import WorkoutPage from "@/components/workout/WorkoutPage";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
 import { useTheme } from "@/theme";
 
-import { api } from "@convex/_generated/api";
 
 function resolveGreeting() {
   const hour = new Date().getHours();

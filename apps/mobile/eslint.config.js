@@ -17,7 +17,6 @@ module.exports = defineConfig([
       "ios/**",
       "coverage/**",
       "seed/**",
-      "convex/_generated/**",
     ],
   },
   ...tseslint.configs.strictTypeChecked,
@@ -58,6 +57,11 @@ module.exports = defineConfig([
           "newlines-between": "always",
           groups: [["builtin", "external"], ["internal", "parent", "sibling", "index"], ["type"]],
           pathGroups: [
+            {
+              pattern: "@ironkor/**",
+              group: "internal",
+              position: "before",
+            },
             {
               pattern: "@/**",
               group: "internal",
@@ -103,7 +107,7 @@ module.exports = defineConfig([
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ["eslint.config.js"],
+    files: ["eslint.config.js", "metro.config.js"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {

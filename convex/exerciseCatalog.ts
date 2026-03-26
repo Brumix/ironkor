@@ -2,13 +2,13 @@ import {
   BODY_PART_VALUES,
   EQUIPMENT_VALUES,
   MUSCLE_VALUES,
-} from "../shared/constants";
+} from "@ironkor/shared/constants";
 
 import type {
   BodyPartType,
   EquipmentType,
   MuscleType,
-} from "../shared/constants";
+} from "@ironkor/shared/constants";
 
 const BODY_PART_SET = new Set<string>(BODY_PART_VALUES);
 const EQUIPMENT_SET = new Set<string>(EQUIPMENT_VALUES);

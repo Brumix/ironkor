@@ -18,8 +18,13 @@
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+
+    "paths": {
+      "@ironkor/shared": ["../packages/shared/constants.ts"],
+      "@ironkor/shared/*": ["../packages/shared/*.ts"]
+    }
   },
-  "include": ["./**/*", "../shared"],
+  "include": ["./**/*", "../packages/shared"],
   "exclude": ["./_generated"]
 }

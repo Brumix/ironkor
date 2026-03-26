@@ -7,7 +7,7 @@ import {
   FREQUENCY_VALUES,
   MUSCLE_VALUES,
   SET_TYPE_VALUES
-} from "../../shared/constants";
+} from "@ironkor/shared/constants";
 
 /** ----- Unions (enums) ----- */
 // Helper function to create union from array of values
