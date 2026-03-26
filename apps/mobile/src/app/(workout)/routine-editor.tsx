@@ -4,8 +4,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { LinearTransition } from "react-native-reanimated";
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  NestableDraggableFlatList,
+  NestableScrollContainer,
+  type DragEndParams,
+  type RenderItemParams,
+} from "react-native-draggable-flatlist";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
@@ -38,6 +43,21 @@ function sortByOrder<T extends { order: number }>(items: T[]) {
   return [...items].sort((a, b) => a.order - b.order);
 }
 
+function reorderSessionOptionsByIndex(
+  sessions: SessionOption[],
+  from: number,
+  to: number,
+) {
+  if (from === to || from < 0 || to < 0 || from >= sessions.length || to >= sessions.length) {
+    return sessions;
+  }
+
+  const reordered = [...sessions];
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  return reordered;
+}
+
 export default function RoutineEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -50,7 +70,7 @@ export default function RoutineEditorScreen() {
     setRoutineName: setDraftRoutineName,
     setWeeklyPlan,
     addSession,
-    moveSession: moveDraftSession,
+    reorderSessions: reorderDraftSessions,
     removeSession: removeDraftSession,
   } = useDraftRoutine();
 
@@ -60,7 +80,7 @@ export default function RoutineEditorScreen() {
   const updateRoutine = useMutation(api.routines.update);
   const upsertSession = useMutation(api.routines.upsertSession);
   const deleteSession = useMutation(api.routines.deleteSession);
-  const reorderSessions = useMutation(api.routines.reorderSessions);
+  const reorderPersistedSessions = useMutation(api.routines.reorderSessions);
   const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
   const updateWeeklyPlan = useMutation(api.routines.updateWeeklyPlan);
 
@@ -78,9 +98,14 @@ export default function RoutineEditorScreen() {
   const [routineName, setRoutineName] = useState("");
   const [newSessionName, setNewSessionName] = useState("");
   const [plannerDraft, setPlannerDraft] = useState<DraftWeeklyPlanEntry[]>([]);
+  const [sessionListData, setSessionListData] = useState<SessionOption[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [draggingSessionKey, setDraggingSessionKey] = useState<string | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const draftRef = useRef(draft);
+  const dragStartIndexRef = useRef<number | null>(null);
+  const placeholderIndexRef = useRef<number | null>(null);
+  const localSessionCounterRef = useRef(0);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -98,6 +123,17 @@ export default function RoutineEditorScreen() {
     clearDraft();
   }, [clearDraft, resetNewRoutineUi]);
 
+  const resetExistingRoutineUi = useCallback(() => {
+    setHydratedFor(null);
+    setRoutineName("");
+    setNewSessionName("");
+    setPlannerDraft([]);
+    setSessionListData([]);
+    setDraggingSessionKey(null);
+    dragStartIndexRef.current = null;
+    placeholderIndexRef.current = null;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (isNew && !draftRef.current) {
@@ -105,6 +141,25 @@ export default function RoutineEditorScreen() {
         ensureDraft();
       }
     }, [ensureDraft, isNew, resetNewRoutineUi]),
+  );
+
+  const sourceSessionOptions = useMemo<SessionOption[]>(
+    () =>
+      isNew
+        ? sortByOrder(draft?.sessions ?? []).map((session) => ({
+            key: session.key,
+            name: session.name,
+            order: session.order,
+            exerciseCount: session.exercises.length,
+          }))
+        : sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
+            key: String(session._id),
+            name: session.name,
+            order: session.order,
+            exerciseCount: session.exercises.length,
+            persistedId: session._id,
+          })),
+    [draft?.sessions, isNew, selectedRoutine?.sessions],
   );
 
   useEffect(() => {
@@ -126,30 +181,19 @@ export default function RoutineEditorScreen() {
         })),
       ),
     );
+    setSessionListData(sourceSessionOptions);
     setHydratedFor(currentId);
-  }, [hydratedFor, isNew, routinesData, selectedRoutine]);
+  }, [hydratedFor, isNew, routinesData, selectedRoutine, sourceSessionOptions]);
 
-  const sessionOptions = useMemo<SessionOption[]>(
-    () =>
-      isNew
-        ? sortByOrder(draft?.sessions ?? []).map((session) => ({
-            key: session.key,
-            name: session.name,
-            order: session.order,
-            exerciseCount: session.exercises.length,
-          }))
-        : sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
-            key: String(session._id),
-            name: session.name,
-            order: session.order,
-            exerciseCount: session.exercises.length,
-            persistedId: session._id,
-          })),
-    [draft?.sessions, isNew, selectedRoutine?.sessions],
-  );
+  useEffect(() => {
+    if (isNew) {
+      setSessionListData(sourceSessionOptions);
+    }
+  }, [isNew, sourceSessionOptions]);
 
   const routineNameValue = isNew ? draft?.name ?? "" : routineName;
   const plannerEntries = isNew ? sortPlanner(draft?.weeklyPlan ?? []) : sortPlanner(plannerDraft);
+  const canAddSession = newSessionName.trim().length > 0;
 
   function navigateToRoutines() {
     router.replace("/(workout)/routines");
@@ -172,6 +216,8 @@ export default function RoutineEditorScreen() {
       }
 
       clearNewRoutineDraft();
+    } else {
+      resetExistingRoutineUi();
     }
 
     navigateToRoutines();
@@ -203,6 +249,16 @@ export default function RoutineEditorScreen() {
 
     try {
       if (selectedRoutine) {
+        const currentPersistedSessionIds = new Set(
+          selectedRoutine.sessions.map((session) => String(session._id)),
+        );
+        const nextPersistedSessionIds = new Set(
+          sessionListData
+            .map((session) => session.persistedId)
+            .filter((sessionId): sessionId is Id<"routineSessions"> => Boolean(sessionId))
+            .map((sessionId) => String(sessionId)),
+        );
+
         await updateRoutine({
           routineId: selectedRoutine._id,
           name,
@@ -212,6 +268,42 @@ export default function RoutineEditorScreen() {
           routineId: selectedRoutine._id,
           weeklyPlan: buildWeeklyPlanPayload(),
         });
+
+        for (const session of selectedRoutine.sessions) {
+          if (!nextPersistedSessionIds.has(String(session._id))) {
+            await deleteSession({
+              routineId: selectedRoutine._id,
+              sessionId: session._id,
+            });
+          }
+        }
+
+        const createdSessionIdByKey = new Map<string, Id<"routineSessions">>();
+        for (const session of sessionListData) {
+          if (!session.persistedId) {
+            const sessionId = await upsertSession({
+              routineId: selectedRoutine._id,
+              name: session.name,
+            });
+            createdSessionIdByKey.set(session.key, sessionId);
+          }
+        }
+
+        const orderedSessionIds = sessionListData
+          .map((session) => session.persistedId ?? createdSessionIdByKey.get(session.key))
+          .filter((sessionId): sessionId is Id<"routineSessions"> => Boolean(sessionId));
+
+        if (
+          orderedSessionIds.length > 0 ||
+          currentPersistedSessionIds.size > 0
+        ) {
+          await reorderPersistedSessions({
+            routineId: selectedRoutine._id,
+            orderedSessionIds,
+          });
+        }
+
+        resetExistingRoutineUi();
       } else if (draft) {
         const routineId = await createRoutine({
           name,
@@ -255,11 +347,13 @@ export default function RoutineEditorScreen() {
     }
   }
 
-  async function handleAddSession() {
+  function handleAddSession() {
     const name = newSessionName.trim();
     if (!name) {
       return;
     }
+
+    Keyboard.dismiss();
 
     if (isNew) {
       addSession(name);
@@ -267,68 +361,56 @@ export default function RoutineEditorScreen() {
       return;
     }
 
-    if (!selectedRoutine) {
-      return;
-    }
-
-    try {
-      await upsertSession({
-        routineId: selectedRoutine._id,
+    const nextSessionKey = `local-session-${localSessionCounterRef.current}`;
+    localSessionCounterRef.current += 1;
+    setSessionListData((current) => [
+      ...current,
+      {
+        key: nextSessionKey,
         name,
-      });
-      setNewSessionName("");
-    } catch {
-      Alert.alert("Failed", "Could not add section.");
+        order: current.length,
+        exerciseCount: 0,
+      },
+    ]);
+    setNewSessionName("");
+  }
+
+  function handleSessionDragEnd({ data }: DragEndParams<SessionOption>) {
+    setSessionListData(data);
+    setDraggingSessionKey(null);
+    dragStartIndexRef.current = null;
+    placeholderIndexRef.current = null;
+
+    if (isNew) {
+      reorderDraftSessions(data.map((session) => session.key));
     }
   }
 
-  async function movePersistedSession(sessionId: Id<"routineSessions">, direction: -1 | 1) {
-    if (!selectedRoutine) {
+  function handleSessionRelease() {
+    const from = dragStartIndexRef.current;
+    const to = placeholderIndexRef.current;
+
+    setDraggingSessionKey(null);
+
+    if (from === null || to === null || from === to) {
       return;
     }
 
-    const sorted = [...selectedRoutine.sessions].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((session) => session._id === sessionId);
-    if (index < 0) {
-      return;
+    const reorderedData = reorderSessionOptionsByIndex(sessionListData, from, to);
+    setSessionListData(reorderedData);
+
+    if (isNew) {
+      reorderDraftSessions(reorderedData.map((session) => session.key));
     }
-
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= sorted.length) {
-      return;
-    }
-
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-
-    await reorderSessions({
-      routineId: selectedRoutine._id,
-      orderedSessionIds: reordered.map((session) => session._id),
-    });
-  }
-
-  function handleMoveSession(session: SessionOption, direction: -1 | 1) {
-    if (session.persistedId) {
-      void movePersistedSession(session.persistedId, direction);
-      return;
-    }
-
-    moveDraftSession(session.key, direction);
   }
 
   function handleDeleteSession(session: SessionOption) {
-    if (session.persistedId && selectedRoutine) {
-      deleteSession({
-        routineId: selectedRoutine._id,
-        sessionId: session.persistedId,
-      }).catch(() => {
-        Alert.alert("Failed", "Could not delete session.");
-      });
+    if (isNew) {
+      removeDraftSession(session.key);
       return;
     }
 
-    removeDraftSession(session.key);
+    setSessionListData((current) => current.filter((entry) => entry.key !== session.key));
   }
 
   function openSessionEditor(session: SessionOption) {
@@ -340,6 +422,11 @@ export default function RoutineEditorScreen() {
           sessionId: String(session.persistedId),
         },
       });
+      return;
+    }
+
+    if (!isNew) {
+      Alert.alert("Save first", "Save the routine before editing exercises for a new section.");
       return;
     }
 
@@ -367,6 +454,52 @@ export default function RoutineEditorScreen() {
 
   function resolvePlannerSummary(entry: DraftWeeklyPlanEntry) {
     return entry.type === "train" ? "Training day" : "Rest and recovery";
+  }
+
+  function renderSessionItem({ item, drag }: RenderItemParams<SessionOption>) {
+    return (
+      <View style={styles.sessionCell}>
+        <AppCard
+          delayLongPress={180}
+          onLongPress={drag}
+          pressedOpacity={1}
+          pressedScale={1}
+          style={[styles.sessionRow, draggingSessionKey === item.key && styles.sessionRowActive]}
+          variant={item.persistedId ? "default" : "highlight"}
+        >
+          <View style={styles.sessionHeader}>
+            <View style={styles.sessionTitleBlock}>
+              <Text style={styles.sessionName}>{item.name}</Text>
+              <Text style={styles.sessionMeta}>
+                {item.exerciseCount} {item.exerciseCount === 1 ? "exercise" : "exercises"}
+              </Text>
+            </View>
+            <Ionicons color={theme.colors.accent} name="reorder-four-outline" size={18} />
+          </View>
+
+          <View style={styles.sessionActions}>
+            <AppButton
+              accessibilityLabel={`Edit ${item.name}`}
+              icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
+              onPress={() => {
+                openSessionEditor(item);
+              }}
+              size="sm"
+              variant="secondary"
+            />
+            <AppButton
+              accessibilityLabel={`Delete ${item.name}`}
+              icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
+              onPress={() => {
+                handleDeleteSession(item);
+              }}
+              size="sm"
+              variant="danger"
+            />
+          </View>
+        </AppCard>
+      </View>
+    );
   }
 
   const styles = useMemo(
@@ -413,6 +546,9 @@ export default function RoutineEditorScreen() {
           alignItems: "center",
           gap: theme.tokens.spacing.xs + 2,
         },
+        sessionCell: {
+          paddingBottom: theme.tokens.spacing.md,
+        },
         sectionNameInput: {
           minWidth: 120,
           maxWidth: 156,
@@ -422,11 +558,19 @@ export default function RoutineEditorScreen() {
         sessionRow: {
           gap: theme.tokens.spacing.md,
         },
+        sessionRowActive: {
+          borderColor: theme.colors.borderAccent,
+          backgroundColor: theme.colors.accentSoft,
+        },
         sessionHeader: {
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "flex-start",
           gap: theme.tokens.spacing.sm,
+        },
+        sessionTitleBlock: {
+          flex: 1,
+          gap: theme.tokens.spacing.xxs,
         },
         sessionName: {
           color: theme.colors.text,
@@ -539,6 +683,7 @@ export default function RoutineEditorScreen() {
         icon: selectedRoutine ? "create-outline" : "add-circle-outline",
         label: selectedRoutine ? "Edit" : "Create",
       }}
+      scrollComponent={NestableScrollContainer}
       title={null}
     >
       <Text style={styles.fieldLabel}>Routine name</Text>
@@ -575,74 +720,46 @@ export default function RoutineEditorScreen() {
           style={[styles.input, styles.sectionNameInput]}
           value={newSessionName}
           onChangeText={setNewSessionName}
+          onSubmitEditing={() => {
+            handleAddSession();
+          }}
           placeholder="New section"
           placeholderTextColor={theme.colors.textSubtle}
+          returnKeyType="done"
         />
         <AppButton
           accessibilityLabel="Add section"
+          disabled={!canAddSession}
+          icon={<Ionicons color={theme.colors.onPrimary} name="add-outline" size={16} />}
           label="Add"
           onPress={() => {
-            void handleAddSession();
+            handleAddSession();
           }}
           size="sm"
         />
       </View>
 
-      {sessionOptions.length > 0 ? (
-        sessionOptions.map((session) => (
-          <Animated.View key={session.key} layout={LinearTransition.springify()}>
-            <AppCard style={styles.sessionRow} variant={session.persistedId ? "default" : "highlight"}>
-              <View style={styles.sessionHeader}>
-                <View style={{ flex: 1, gap: theme.tokens.spacing.xxs }}>
-                  <Text style={styles.sessionName}>{session.name}</Text>
-                  <Text style={styles.sessionMeta}>
-                    {session.exerciseCount} {session.exerciseCount === 1 ? "exercise" : "exercises"}
-                  </Text>
-                </View>
-                <Ionicons color={theme.colors.accent} name="barbell-outline" size={18} />
-              </View>
-
-              <View style={styles.sessionActions}>
-                <AppButton
-                  accessibilityLabel={`Open ${session.name}`}
-                  label="Edit"
-                  onPress={() => {
-                    openSessionEditor(session);
-                  }}
-                  size="sm"
-                  variant="secondary"
-                />
-                <AppButton
-                  accessibilityLabel={`Move ${session.name} up`}
-                  label="Up"
-                  onPress={() => {
-                    handleMoveSession(session, -1);
-                  }}
-                  size="sm"
-                  variant="ghost"
-                />
-                <AppButton
-                  accessibilityLabel={`Move ${session.name} down`}
-                  label="Down"
-                  onPress={() => {
-                    handleMoveSession(session, 1);
-                  }}
-                  size="sm"
-                  variant="ghost"
-                />
-                <AppButton
-                  accessibilityLabel={`Delete ${session.name}`}
-                  label="Delete"
-                  onPress={() => {
-                    handleDeleteSession(session);
-                  }}
-                  size="sm"
-                  variant="danger"
-                />
-              </View>
-            </AppCard>
-          </Animated.View>
-        ))
+      {sessionListData.length > 0 ? (
+        <NestableDraggableFlatList
+          activationDistance={8}
+          containerStyle={{ flexGrow: 0 }}
+          data={sessionListData}
+          keyExtractor={(item) => item.key}
+          onDragBegin={(index) => {
+            dragStartIndexRef.current = index;
+            placeholderIndexRef.current = index;
+            setDraggingSessionKey(sessionListData[index]?.key ?? null);
+          }}
+          onDragEnd={handleSessionDragEnd}
+          onPlaceholderIndexChange={(index) => {
+            placeholderIndexRef.current = index;
+          }}
+          onRelease={() => {
+            handleSessionRelease();
+          }}
+          renderItem={renderSessionItem}
+          scrollEnabled={false}
+        />
       ) : (
         <Text style={styles.emptyState}>No sections yet. Add the split you want before saving.</Text>
       )}

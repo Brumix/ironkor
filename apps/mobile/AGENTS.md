@@ -79,9 +79,31 @@ Path aliases: `@/*` → `src/*`, `@convex/*` → `../../convex/*` (see `tsconfig
 - Keep route files focused on composition, not heavy business logic.
 - Placement defaults:
   - workout screens: `src/app/(workout)`
-  - workout-specific reusable components: `src/components/workout`
-  - generic reusable UI: `src/components/ui`
-  - workout domain helpers: `src/features/workout`
+- workout-specific reusable components: `src/components/workout`
+- generic reusable UI: `src/components/ui`
+- workout domain helpers: `src/features/workout`
+
+## Current Workout Editor Decisions
+
+- New routine creation is a draft-first flow. Keep creation and editing aligned: users can name a routine, add/reorder/remove sections, edit section exercises, and save once at the end.
+- Shared draft state for unsaved routine creation lives in `src/features/workout/DraftRoutineProvider.tsx` and is scoped from `src/app/(workout)/_layout.tsx`. Prefer extending that draft flow instead of adding separate local draft state in individual screens.
+- The routine editor and section editor currently share this creation flow. When `routineId === "new"`, treat the experience as an unsaved draft rather than persisting partial data early.
+- Existing-routine editing in `src/app/(workout)/routine-editor.tsx` is also page-local until Save. Routine name, weekly planner, section add/delete/reorder, and similar page-level edits must not hit Convex before the user confirms with Save; backing out should restore the original server state.
+- For existing routines, do not create brand-new sections in Convex just to support in-editor drafting. If a section does not exist yet, defer exercise-level editing until after the routine is saved, or add a dedicated local section-draft flow first.
+- Weekly planner is intentionally simplified for now: only `train` or `rest` day states in the mobile UI. Do not reintroduce manual session/day assignment UI unless explicitly requested.
+- Automatic section rotation handles training-day assignment. Mobile still sends backend-compatible weekly-plan payloads, but the user-facing planner should stay train/rest only.
+
+## Drag Reorder Notes
+
+- Section drag-reorder in the routine editor uses `react-native-draggable-flatlist`.
+- The repo includes a Bun patch for `react-native-draggable-flatlist@4.0.3` under `/Volumes/Storage/Projects/ironkor/patches/react-native-draggable-flatlist@4.0.3.patch` to avoid the upstream nested-list `measureLayout` warning and deprecated `InteractionManager` usage. Preserve that patch unless the dependency is upgraded and revalidated.
+
+## Workout Header UX
+
+- On workout editor screens, the chip/badge already communicates context (`Create`, `Edit`, `Section`). Avoid repeating that context as a large title unless the user explicitly asks for it.
+- For routine and section editors, prefer `title={null}` on `WorkoutPage` and place the navigation affordance inline with the chip row.
+- Use the compact icon-only header chevron in `src/components/ui/HeaderBackButton.tsx` with `headerActionPosition="left"` for these editor screens.
+- Do not reintroduce a floating back button for the workout editors unless explicitly requested.
 
 ## Data and State Rules
 

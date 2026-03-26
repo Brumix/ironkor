@@ -5,7 +5,7 @@ import PressableScale from "@/components/ui/PressableScale";
 import { useTheme } from "@/theme";
 
 import type { ReactNode } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { PressableProps, StyleProp, ViewStyle } from "react-native";
 
 type CardVariant = "default" | "muted" | "highlight" | "outline" | "accent";
 
@@ -14,6 +14,11 @@ interface AppCardProps {
   variant?: CardVariant;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  onLongPress?: PressableProps["onLongPress"];
+  delayLongPress?: number;
+  disabled?: boolean;
+  pressedOpacity?: number;
+  pressedScale?: number;
 }
 
 function resolveVariantStyle(variant: CardVariant, theme: ReturnType<typeof useTheme>["theme"]): ViewStyle {
@@ -43,7 +48,17 @@ function resolveVariantStyle(variant: CardVariant, theme: ReturnType<typeof useT
   return variantMap[variant];
 }
 
-function AppCard({ children, variant = "default", style, onPress }: AppCardProps) {
+function AppCard({
+  children,
+  variant = "default",
+  style,
+  onPress,
+  onLongPress,
+  delayLongPress,
+  disabled = false,
+  pressedOpacity,
+  pressedScale,
+}: AppCardProps) {
   const { theme } = useTheme();
 
   const styles = useMemo(
@@ -67,9 +82,17 @@ function AppCard({ children, variant = "default", style, onPress }: AppCardProps
 
   const variantStyle = resolveVariantStyle(variant, theme);
 
-  if (onPress) {
+  if (onPress || onLongPress) {
     return (
-      <PressableScale onPress={onPress} style={[styles.base, variantStyle, style]}>
+      <PressableScale
+        delayLongPress={delayLongPress}
+        disabled={disabled}
+        onLongPress={onLongPress}
+        onPress={onPress}
+        pressedOpacity={pressedOpacity}
+        pressedScale={pressedScale}
+        style={[styles.base, variantStyle, style]}
+      >
         {children}
       </PressableScale>
     );

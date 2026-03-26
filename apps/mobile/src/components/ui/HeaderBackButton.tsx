@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 
 import { useTheme } from "@/theme";
 
@@ -15,21 +15,15 @@ export default function HeaderBackButton({ onPress }: HeaderBackButtonProps) {
     () =>
       StyleSheet.create({
         button: {
-          flexDirection: "row",
           alignItems: "center",
-          gap: theme.tokens.spacing.xs,
+          justifyContent: "center",
           alignSelf: "flex-start",
           backgroundColor: theme.colors.surfaceAlt,
           borderRadius: theme.tokens.radius.pill,
           borderWidth: 1,
           borderColor: theme.colors.border,
-          paddingHorizontal: theme.tokens.spacing.md,
-          paddingVertical: theme.tokens.spacing.sm,
-        },
-        label: {
-          color: theme.colors.text,
-          fontSize: theme.tokens.typography.fontSize.sm,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
+          width: 36,
+          height: 36,
         },
       }),
     [theme],
@@ -37,8 +31,7 @@ export default function HeaderBackButton({ onPress }: HeaderBackButtonProps) {
 
   return (
     <Pressable accessibilityLabel="Go back" hitSlop={12} onPress={onPress} style={styles.button}>
-      <Ionicons color={theme.colors.text} name="chevron-back" size={16} />
-      <Text style={styles.label}>Back</Text>
+      <Ionicons color={theme.colors.text} name="chevron-back" size={18} />
     </Pressable>
   );
 }

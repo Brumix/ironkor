@@ -87,6 +87,8 @@ Guidelines:
 - Do not duplicate Convex config or schema across apps — one deployment serves all.
 - Keep TypeScript strict; avoid `any`.
 - After non-trivial changes, run `bun run lint` and `bun run typecheck` from root.
+- For workout-editor UX in the mobile app, check `apps/mobile/AGENTS.md` before changing routine creation/editing flows or planner behavior.
+- For the mobile routine editor, treat page-level edits as local until the user presses Save. Do not persist add/delete/reorder/name/planner changes for an existing routine during routine-editor interactions.
 
 ## Scaling Playbook
 

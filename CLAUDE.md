@@ -23,6 +23,15 @@ This repository is a **Bun workspace monorepo** designed to support multiple app
 - Configure app env var to the same Convex URL
 - Run workspace install and typecheck from root
 
+### Current mobile workout constraints
+
+- The mobile workout routine-creation flow is draft-first: users build the full routine, sections, and exercises before the final save.
+- Existing routine editing now follows the same page-local contract for page-level changes: add/delete/reorder sections, rename routine, and planner edits stay local until Save. Leaving the editor without saving must restore the original server state.
+- For existing routines, new sections are not persisted incrementally just to support editing. Either save first or introduce a real local section draft flow before allowing exercise-level edits on unsaved sections.
+- Weekly planner in the mobile workout editor is currently train/rest only. Do not add manual session assignment back unless explicitly requested.
+- On mobile workout editor screens, the chip is the primary page-context label; avoid reintroducing a large duplicated title or floating back button for those screens.
+- The mobile drag-reorder flow depends on a checked-in Bun patch for `react-native-draggable-flatlist@4.0.3`; keep that in mind before upgrading or replacing the drag list implementation.
+
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.
 

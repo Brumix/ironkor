@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/theme";
 
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
+import type { ScrollViewProps } from "react-native";
 
 interface WorkoutPageProps {
   headerChip: {
@@ -18,6 +19,8 @@ interface WorkoutPageProps {
   subtitle?: string;
   headerAction?: ReactNode;
   headerActionPosition?: "left" | "right";
+  scrollComponent?: ComponentType<ScrollViewProps>;
+  scrollProps?: ScrollViewProps;
   children: ReactNode;
 }
 
@@ -27,11 +30,19 @@ export default function WorkoutPage({
   subtitle,
   headerAction,
   headerActionPosition = "right",
+  scrollComponent: ScrollComponent = ScrollView,
+  scrollProps,
   children,
 }: WorkoutPageProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const headerTitle = title === undefined ? (subtitle ?? headerChip.label) : title;
+  const {
+    contentContainerStyle,
+    keyboardShouldPersistTaps,
+    showsVerticalScrollIndicator,
+    ...restScrollProps
+  } = scrollProps ?? {};
 
   const styles = useMemo(
     () =>
@@ -76,8 +87,10 @@ export default function WorkoutPage({
         headerAction: {
           paddingTop: theme.tokens.spacing.xxs,
         },
-        headerActionLeft: {
-          paddingTop: theme.tokens.spacing.xs,
+        chipRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
         },
         chip: {
           alignSelf: "flex-start",
@@ -130,26 +143,29 @@ export default function WorkoutPage({
         style={styles.lowerGlowOverlay}
       />
 
-      <ScrollView
+      <ScrollComponent
+        {...restScrollProps}
         contentContainerStyle={[
           styles.content,
           {
             paddingTop: insets.top + theme.tokens.spacing.lg,
             paddingBottom: insets.bottom + 140,
           },
+          contentContainerStyle,
         ]}
-        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? "handled"}
+        showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
       >
         <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal).springify()} style={styles.header}>
           <View style={styles.headerRow}>
-            {headerAction && headerActionPosition === "left" ? (
-              <View style={[styles.headerAction, styles.headerActionLeft]}>{headerAction}</View>
-            ) : null}
             <View style={styles.headerLead}>
               <View style={styles.titleRow}>
-                <View style={styles.chip}>
-                  <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
-                  <Text style={styles.chipLabel}>{headerChip.label}</Text>
+                <View style={styles.chipRow}>
+                  {headerAction && headerActionPosition === "left" ? headerAction : null}
+                  <View style={styles.chip}>
+                    <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
+                    <Text style={styles.chipLabel}>{headerChip.label}</Text>
+                  </View>
                 </View>
                 {headerTitle ? <Text style={styles.title}>{headerTitle}</Text> : null}
                 {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
@@ -161,7 +177,7 @@ export default function WorkoutPage({
           </View>
         </Animated.View>
         {children}
-      </ScrollView>
+      </ScrollComponent>
     </View>
   );
 }

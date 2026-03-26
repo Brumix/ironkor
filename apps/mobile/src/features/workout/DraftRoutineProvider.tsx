@@ -65,6 +65,7 @@ interface DraftRoutineContextValue {
   addSession: (name: string) => string;
   updateSessionName: (sessionKey: string, name: string) => void;
   moveSession: (sessionKey: string, direction: -1 | 1) => void;
+  reorderSessions: (orderedSessionKeys: string[]) => void;
   removeSession: (sessionKey: string) => void;
   addOrReplaceExercise: (
     sessionKey: string,
@@ -175,6 +176,31 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
         sessions: reordered.map((session, nextIndex) => ({
           ...session,
           order: nextIndex,
+        })),
+      };
+    });
+  }, [updateDraft]);
+
+  const reorderSessions = useCallback((orderedSessionKeys: string[]) => {
+    updateDraft((current) => {
+      if (orderedSessionKeys.length !== current.sessions.length) {
+        return current;
+      }
+
+      const sessionMap = new Map(current.sessions.map((session) => [session.key, session] as const));
+      const reordered = orderedSessionKeys
+        .map((sessionKey) => sessionMap.get(sessionKey))
+        .filter((session): session is DraftRoutine["sessions"][number] => Boolean(session));
+
+      if (reordered.length !== current.sessions.length) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sessions: reordered.map((session, index) => ({
+          ...session,
+          order: index,
         })),
       };
     });
@@ -329,6 +355,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     addSession,
     updateSessionName,
     moveSession,
+    reorderSessions,
     removeSession,
     addOrReplaceExercise,
     updateExerciseProgramming,
@@ -343,6 +370,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     hasChanges,
     moveExercise,
     moveSession,
+    reorderSessions,
     removeExercise,
     removeSession,
     setRoutineName,

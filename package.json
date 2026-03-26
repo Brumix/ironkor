@@ -22,5 +22,8 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "convex": "^1.32.0"
+  },
+  "patchedDependencies": {
+    "react-native-draggable-flatlist@4.0.3": "patches/react-native-draggable-flatlist@4.0.3.patch"
   }
 }

@@ -467,6 +467,7 @@ export default function SessionEditorScreen() {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
+        headerActionPosition="left"
         headerChip={{ icon: "create-outline", label: "Section" }}
         title={null}
       >
@@ -481,6 +482,7 @@ export default function SessionEditorScreen() {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
+        headerActionPosition="left"
         headerChip={{ icon: "create-outline", label: "Section" }}
         title={null}
       >
@@ -492,6 +494,7 @@ export default function SessionEditorScreen() {
   return (
     <WorkoutPage
       headerAction={<HeaderBackButton onPress={handleBackPress} />}
+      headerActionPosition="left"
       headerChip={{ icon: "create-outline", label: "Section" }}
       title={null}
     >
