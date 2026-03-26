@@ -60,7 +60,6 @@ export function buildWeeklyPlan(
 ): WeeklyPlan {
   const sortedTemplate = [...routine.weeklyPlan].sort((a, b) => a.day - b.day);
   const orderedSections = sortSectionsByRoutineOrder(routine);
-  const sectionMap = new Map(orderedSections.map((section) => [section._id, section] as const));
 
   let autoCursor = 0;
 
@@ -76,17 +75,8 @@ export function buildWeeklyPlan(
       };
     }
 
-    const manualSection =
-      dayTemplate.assignmentMode === "manual" && dayTemplate.manualSessionId
-        ? sectionMap.get(dayTemplate.manualSessionId)
-        : undefined;
-
-    const selectedSection =
-      manualSection ?? orderedSections[autoCursor % orderedSections.length];
-
-    if (!manualSection) {
-      autoCursor += 1;
-    }
+    const selectedSection = orderedSections[autoCursor % orderedSections.length];
+    autoCursor += 1;
 
     return {
       dateISO: toLocalDateISO(currentDate),

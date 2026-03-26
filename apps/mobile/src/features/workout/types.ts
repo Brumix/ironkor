@@ -8,8 +8,35 @@ export type RoutineSection = RoutineDetailedRecord["sessions"][number];
 export type SessionExercise = RoutineSection["exercises"][number];
 export type ExerciseCatalog = ExerciseCatalogRecord;
 export type TrainingDayType = RoutineDetailedRecord["weeklyPlan"][number]["type"];
-export type AssignmentMode =
-  RoutineDetailedRecord["weeklyPlan"][number]["assignmentMode"];
+export type ExerciseProgrammingFields = Pick<
+  SessionExercise,
+  "sets" | "repsText" | "targetWeightKg" | "restSeconds" | "notes" | "tempo" | "rir"
+>;
+
+export interface DraftSessionExercise extends ExerciseProgrammingFields {
+  key: string;
+  exerciseId: ExerciseCatalog["_id"];
+  order: number;
+  exercise: ExerciseCatalog;
+}
+
+export interface DraftSession {
+  key: string;
+  name: string;
+  order: number;
+  exercises: DraftSessionExercise[];
+}
+
+export interface DraftWeeklyPlanEntry {
+  day: number;
+  type: TrainingDayType;
+}
+
+export interface DraftRoutine {
+  name: string;
+  sessions: DraftSession[];
+  weeklyPlan: DraftWeeklyPlanEntry[];
+}
 
 export interface ExerciseLookupItem {
   id: string;

@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -24,13 +25,17 @@ import {
   type MuscleType,
 } from "@ironkor/shared/constants";
 
+import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import type { RoutineSection } from "@/features/workout/types";
+import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
+import type {
+  DraftSessionExercise,
+  ExerciseCatalog,
+  SessionExercise,
+} from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
-
 import type { Id } from "@convex/_generated/dataModel";
-
 
 interface ProgrammingDraft {
   sets: string;
@@ -42,11 +47,13 @@ interface ProgrammingDraft {
   rir: string;
 }
 
+type ProgrammingSource = Pick<
+  SessionExercise | DraftSessionExercise,
+  "sets" | "repsText" | "targetWeightKg" | "restSeconds" | "notes" | "tempo" | "rir"
+>;
+
 function createProgrammingDraft(
-  entry?: Pick<
-    RoutineSection["exercises"][number],
-    "sets" | "repsText" | "targetWeightKg" | "restSeconds" | "notes" | "tempo" | "rir"
-  >,
+  entry?: ProgrammingSource,
 ): ProgrammingDraft {
   return {
     sets: `${entry?.sets ?? 3}`,
@@ -75,7 +82,7 @@ function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatProgrammingSummary(entry: RoutineSection["exercises"][number]) {
+function formatProgrammingSummary(entry: ProgrammingSource) {
   const pieces = [`${entry.sets} sets`, `${entry.repsText} reps`];
 
   if (typeof entry.targetWeightKg === "number") {
@@ -101,6 +108,14 @@ export default function SessionEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const {
+    draft,
+    updateSessionName: updateDraftSessionName,
+    addOrReplaceExercise,
+    updateExerciseProgramming: updateDraftExerciseProgramming,
+    moveExercise: moveDraftExercise,
+    removeExercise: removeDraftExercise,
+  } = useDraftRoutine();
 
   const [searchText, setSearchText] = useState("");
   const [selectedBodyPart, setSelectedBodyPart] = useState<BodyPartType | undefined>();
@@ -128,6 +143,8 @@ export default function SessionEditorScreen() {
   const exercises = useMemo(() => exercisesData ?? [], [exercisesData]);
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "";
   const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : "";
+  const draftSessionKey = typeof params.draftSessionKey === "string" ? params.draftSessionKey : "";
+  const isDraftMode = routineIdParam === "new";
 
   const selectedRoutine = useMemo(
     () => routines.find((routine) => String(routine._id) === routineIdParam) ?? null,
@@ -139,15 +156,19 @@ export default function SessionEditorScreen() {
       null,
     [selectedRoutine, sessionIdParam],
   );
+  const selectedDraftSession = useMemo(
+    () => draft?.sessions.find((session) => session.key === draftSessionKey) ?? null,
+    [draft?.sessions, draftSessionKey],
+  );
 
   const [sectionDraftName, setSectionDraftName] = useState("");
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
   const [customExerciseVisible, setCustomExerciseVisible] = useState(false);
   const [programmingEditorVisible, setProgrammingEditorVisible] = useState(false);
   const [replaceSessionExerciseId, setReplaceSessionExerciseId] =
-    useState<Id<"sessionExercises"> | null>(null);
+    useState<string | null>(null);
   const [editingSessionExerciseId, setEditingSessionExerciseId] =
-    useState<Id<"sessionExercises"> | null>(null);
+    useState<string | null>(null);
   const [programmingDraft, setProgrammingDraft] = useState(
     createProgrammingDraft(),
   );
@@ -163,12 +184,13 @@ export default function SessionEditorScreen() {
     useState(createProgrammingDraft());
 
   useEffect(() => {
-    if (!selectedSession) {
+    const nextSession = isDraftMode ? selectedDraftSession : selectedSession;
+    if (!nextSession) {
       return;
     }
 
-    setSectionDraftName(selectedSession.name);
-  }, [selectedSession]);
+    setSectionDraftName(nextSession.name);
+  }, [isDraftMode, selectedDraftSession, selectedSession]);
 
   useEffect(() => {
     if (!customMuscleGroups.includes(customPrimaryMuscle)) {
@@ -187,24 +209,30 @@ export default function SessionEditorScreen() {
   }
 
   function openProgrammingEditor(
-    sessionExerciseId: Id<"sessionExercises">,
-    entry?: RoutineSection["exercises"][number],
+    sessionExerciseId: string,
+    entry?: ProgrammingSource,
   ) {
     setEditingSessionExerciseId(sessionExerciseId);
     setProgrammingDraft(createProgrammingDraft(entry));
     setProgrammingEditorVisible(true);
   }
 
-  async function moveSessionExercise(
-    sessionExerciseId: Id<"sessionExercises">,
-    direction: -1 | 1,
-  ) {
+  async function moveSessionExercise(sessionExerciseId: string, direction: -1 | 1) {
+    if (isDraftMode) {
+      if (!selectedDraftSession) {
+        return;
+      }
+
+      moveDraftExercise(selectedDraftSession.key, sessionExerciseId, direction);
+      return;
+    }
+
     if (!selectedSession) {
       return;
     }
 
     const sorted = [...selectedSession.exercises].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((entry) => entry._id === sessionExerciseId);
+    const index = sorted.findIndex((entry) => String(entry._id) === sessionExerciseId);
     if (index < 0) {
       return;
     }
@@ -225,6 +253,14 @@ export default function SessionEditorScreen() {
   }
 
   function handleBackPress() {
+    if (isDraftMode) {
+      router.replace({
+        pathname: "/(workout)/routine-editor",
+        params: { routineId: "new" },
+      });
+      return;
+    }
+
     if (routineIdParam) {
       router.replace({
         pathname: "/(workout)/routine-editor",
@@ -236,23 +272,14 @@ export default function SessionEditorScreen() {
     router.replace("/(workout)/routines");
   }
 
+  const currentExercises = useMemo(
+    () => (isDraftMode ? selectedDraftSession?.exercises ?? [] : selectedSession?.exercises ?? []),
+    [isDraftMode, selectedDraftSession?.exercises, selectedSession?.exercises],
+  );
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        backButton: {
-          alignSelf: "flex-start",
-          backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          paddingHorizontal: theme.tokens.spacing.md,
-          paddingVertical: theme.tokens.spacing.sm,
-        },
-        backButtonText: {
-          color: theme.colors.text,
-          fontSize: theme.tokens.typography.fontSize.sm,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-        },
         card: {
           backgroundColor: theme.colors.surface,
           borderRadius: theme.tokens.radius.lg,
@@ -436,9 +463,13 @@ export default function SessionEditorScreen() {
     [theme],
   );
 
-  if (routinesData === undefined || exercisesData === undefined) {
+  if ((!isDraftMode && routinesData === undefined) || exercisesData === undefined) {
     return (
-      <WorkoutPage headerChip={{ icon: "create-outline", label: "Section" }}>
+      <WorkoutPage
+        headerAction={<HeaderBackButton onPress={handleBackPress} />}
+        headerChip={{ icon: "create-outline", label: "Section" }}
+        title={null}
+      >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Syncing...</Text>
         </View>
@@ -446,44 +477,53 @@ export default function SessionEditorScreen() {
     );
   }
 
-  if (!selectedRoutine || !selectedSession) {
+  if ((isDraftMode && !selectedDraftSession) || (!isDraftMode && (!selectedRoutine || !selectedSession))) {
     return (
-      <WorkoutPage headerChip={{ icon: "create-outline", label: "Section" }}>
-        <Pressable style={styles.backButton} onPress={handleBackPress}>
-          <Text style={styles.backButtonText}>← Back</Text>
-        </Pressable>
+      <WorkoutPage
+        headerAction={<HeaderBackButton onPress={handleBackPress} />}
+        headerChip={{ icon: "create-outline", label: "Section" }}
+        title={null}
+      >
         <Text style={styles.helperText}>Section not found.</Text>
       </WorkoutPage>
     );
   }
 
   return (
-    <WorkoutPage headerChip={{ icon: "create-outline", label: "Section" }}>
-      <Pressable style={styles.backButton} onPress={handleBackPress}>
-        <Text style={styles.backButtonText}>← Back</Text>
-      </Pressable>
-
+    <WorkoutPage
+      headerAction={<HeaderBackButton onPress={handleBackPress} />}
+      headerChip={{ icon: "create-outline", label: "Section" }}
+      title={null}
+    >
       <Text style={styles.fieldLabel}>Section name</Text>
       <TextInput
         style={styles.input}
         value={sectionDraftName}
-        onChangeText={setSectionDraftName}
+        onChangeText={(value) => {
+          setSectionDraftName(value);
+
+          if (isDraftMode && selectedDraftSession) {
+            updateDraftSessionName(selectedDraftSession.key, value);
+          }
+        }}
         placeholder="Section name"
         placeholderTextColor={theme.colors.textSubtle}
       />
 
-      <Pressable
-        style={styles.primaryButton}
-        onPress={async () => {
-          await upsertSession({
-            routineId: selectedRoutine._id,
-            sessionId: selectedSession._id,
-            name: sectionDraftName.trim() || selectedSession.name,
-          });
-        }}
-      >
-        <Text style={styles.primaryButtonText}>Save section name</Text>
-      </Pressable>
+      {!isDraftMode && selectedRoutine && selectedSession ? (
+        <Pressable
+          style={styles.primaryButton}
+          onPress={async () => {
+            await upsertSession({
+              routineId: selectedRoutine._id,
+              sessionId: selectedSession._id,
+              name: sectionDraftName.trim() || selectedSession.name,
+            });
+          }}
+        >
+          <Text style={styles.primaryButtonText}>Save section name</Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.subHeaderRow}>
         <Text style={styles.subHeader}>Exercises</Text>
@@ -498,71 +538,84 @@ export default function SessionEditorScreen() {
         </Pressable>
       </View>
 
-      {[...selectedSession.exercises].sort((a, b) => a.order - b.order).map((entry) => (
-        <View key={String(entry._id)} style={styles.exerciseRow}>
-          <View style={styles.exerciseRowTop}>
-            <View style={styles.flexOne}>
-              <Text style={styles.sectionName}>{entry.exercise.name}</Text>
-              <Text style={styles.sectionMeta}>{formatProgrammingSummary(entry)}</Text>
-              <Text style={styles.sectionMeta}>
-                {renderMuscleLabel(entry.exercise.bodyPart)} •{" "}
-                {renderMuscleLabel(entry.exercise.primaryMuscle)} •{" "}
-                {renderMuscleLabel(entry.exercise.equipment)}
-              </Text>
-              {entry.notes ? <Text style={styles.sectionMeta}>{entry.notes}</Text> : null}
+      {[...currentExercises].sort((a, b) => a.order - b.order).map((entry) => {
+        const exerciseKey = "key" in entry ? entry.key : String(entry._id);
+
+        return (
+          <View key={exerciseKey} style={styles.exerciseRow}>
+            <View style={styles.exerciseRowTop}>
+              <View style={styles.flexOne}>
+                <Text style={styles.sectionName}>{entry.exercise.name}</Text>
+                <Text style={styles.sectionMeta}>{formatProgrammingSummary(entry)}</Text>
+                <Text style={styles.sectionMeta}>
+                  {renderMuscleLabel(entry.exercise.bodyPart)} •{" "}
+                  {renderMuscleLabel(entry.exercise.primaryMuscle)} •{" "}
+                  {renderMuscleLabel(entry.exercise.equipment)}
+                </Text>
+                {entry.notes ? <Text style={styles.sectionMeta}>{entry.notes}</Text> : null}
+              </View>
+            </View>
+
+            <View style={styles.sessionActions}>
+              <Pressable
+                style={styles.smallBtn}
+                onPress={() => {
+                  void moveSessionExercise(exerciseKey, -1);
+                }}
+              >
+                <Text style={styles.smallBtnText}>↑</Text>
+              </Pressable>
+              <Pressable
+                style={styles.smallBtn}
+                onPress={() => {
+                  void moveSessionExercise(exerciseKey, 1);
+                }}
+              >
+                <Text style={styles.smallBtnText}>↓</Text>
+              </Pressable>
+              <Pressable
+                style={styles.smallBtn}
+                onPress={() => {
+                  openProgrammingEditor(exerciseKey, entry);
+                }}
+              >
+                <Text style={styles.smallBtnText}>Program</Text>
+              </Pressable>
+              <Pressable
+                style={styles.smallBtn}
+                onPress={() => {
+                  setReplaceSessionExerciseId(exerciseKey);
+                  setExercisePickerVisible(true);
+                }}
+              >
+                <Text style={styles.smallBtnText}>Replace</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.smallBtn, styles.smallDangerBtn]}
+                onPress={() => {
+                  if (isDraftMode && selectedDraftSession) {
+                    removeDraftExercise(selectedDraftSession.key, exerciseKey);
+                    return;
+                  }
+
+                  if (!selectedSession || "key" in entry) {
+                    return;
+                  }
+
+                  deleteSessionExercise({
+                    sessionId: selectedSession._id,
+                    sessionExerciseId: entry._id,
+                  }).catch(() => {
+                    Alert.alert("Failed", "Could not remove exercise.");
+                  });
+                }}
+              >
+                <Text style={styles.smallBtnText}>Del</Text>
+              </Pressable>
             </View>
           </View>
-
-          <View style={styles.sessionActions}>
-            <Pressable
-              style={styles.smallBtn}
-              onPress={() => {
-                void moveSessionExercise(entry._id, -1);
-              }}
-            >
-              <Text style={styles.smallBtnText}>↑</Text>
-            </Pressable>
-            <Pressable
-              style={styles.smallBtn}
-              onPress={() => {
-                void moveSessionExercise(entry._id, 1);
-              }}
-            >
-              <Text style={styles.smallBtnText}>↓</Text>
-            </Pressable>
-            <Pressable
-              style={styles.smallBtn}
-              onPress={() => {
-                openProgrammingEditor(entry._id, entry);
-              }}
-            >
-              <Text style={styles.smallBtnText}>Program</Text>
-            </Pressable>
-            <Pressable
-              style={styles.smallBtn}
-              onPress={() => {
-                setReplaceSessionExerciseId(entry._id);
-                setExercisePickerVisible(true);
-              }}
-            >
-              <Text style={styles.smallBtnText}>Replace</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.smallBtn, styles.smallDangerBtn]}
-              onPress={() => {
-                deleteSessionExercise({
-                  sessionId: selectedSession._id,
-                  sessionExerciseId: entry._id,
-                }).catch(() => {
-                  Alert.alert("Failed", "Could not remove exercise.");
-                });
-              }}
-            >
-              <Text style={styles.smallBtnText}>Del</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
+        );
+      })}
 
       <Modal
         visible={exercisePickerVisible}
@@ -738,22 +791,51 @@ export default function SessionEditorScreen() {
                   key={String(exercise._id)}
                   style={styles.libraryRow}
                   onPress={async () => {
+                    if (isDraftMode && selectedDraftSession) {
+                      const currentEntry =
+                        replaceSessionExerciseId !== null
+                          ? selectedDraftSession.exercises.find(
+                              (entry) => entry.key === replaceSessionExerciseId,
+                            )
+                          : undefined;
+
+                      const sessionExerciseId = addOrReplaceExercise(
+                        selectedDraftSession.key,
+                        exercise,
+                        undefined,
+                        replaceSessionExerciseId ?? undefined,
+                      );
+
+                      if (!sessionExerciseId) {
+                        return;
+                      }
+
+                      setReplaceSessionExerciseId(null);
+                      setExercisePickerVisible(false);
+                      openProgrammingEditor(sessionExerciseId, currentEntry);
+                      return;
+                    }
+
+                    if (!selectedSession) {
+                      return;
+                    }
+
                     const currentEntry =
                       replaceSessionExerciseId !== null
                         ? selectedSession.exercises.find(
-                            (entry) => entry._id === replaceSessionExerciseId,
+                            (entry) => String(entry._id) === replaceSessionExerciseId,
                           )
                         : undefined;
 
                     const sessionExerciseId = await upsertSessionExercise({
                       sessionId: selectedSession._id,
-                      sessionExerciseId: replaceSessionExerciseId ?? undefined,
+                      sessionExerciseId: replaceSessionExerciseId as Id<"sessionExercises"> | undefined,
                       exerciseId: exercise._id,
                     });
 
                     setReplaceSessionExerciseId(null);
                     setExercisePickerVisible(false);
-                    openProgrammingEditor(sessionExerciseId, currentEntry);
+                    openProgrammingEditor(String(sessionExerciseId), currentEntry);
                   }}
                 >
                   <Text style={styles.sectionName}>{exercise.name}</Text>
@@ -1034,20 +1116,53 @@ export default function SessionEditorScreen() {
                       description: customDescription.trim() || undefined,
                     });
 
-                    await upsertSessionExercise({
-                      sessionId: selectedSession._id,
-                      sessionExerciseId: replaceSessionExerciseId ?? undefined,
-                      exerciseId,
-                      sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
-                      repsText: customProgrammingDraft.repsText.trim() || "8-12",
-                      targetWeightKg: parseOptionalNumber(
-                        customProgrammingDraft.targetWeightKg,
-                      ),
-                      restSeconds: parseOptionalNumber(customProgrammingDraft.restSeconds),
-                      notes: customProgrammingDraft.notes,
-                      tempo: customProgrammingDraft.tempo,
-                      rir: parseOptionalNumber(customProgrammingDraft.rir),
-                    });
+                    if (isDraftMode && selectedDraftSession) {
+                      const normalized = normalizeExerciseCatalog({
+                        name: customName.trim(),
+                        bodyPart: customBodyPart,
+                        equipment: customEquipment,
+                        primaryMuscle: customPrimaryMuscle,
+                        muscleGroups,
+                        description: customDescription.trim() || undefined,
+                        isCustom: true,
+                      });
+
+                      const draftExercise: ExerciseCatalog = {
+                        _id: exerciseId,
+                        _creationTime: Date.now(),
+                        ...normalized,
+                      };
+
+                      addOrReplaceExercise(
+                        selectedDraftSession.key,
+                        draftExercise,
+                        {
+                          sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
+                          repsText: customProgrammingDraft.repsText.trim() || "8-12",
+                          targetWeightKg: parseOptionalNumber(customProgrammingDraft.targetWeightKg),
+                          restSeconds: parseOptionalNumber(customProgrammingDraft.restSeconds),
+                          notes: customProgrammingDraft.notes,
+                          tempo: customProgrammingDraft.tempo,
+                          rir: parseOptionalNumber(customProgrammingDraft.rir),
+                        },
+                        replaceSessionExerciseId ?? undefined,
+                      );
+                    } else if (selectedSession) {
+                      await upsertSessionExercise({
+                        sessionId: selectedSession._id,
+                        sessionExerciseId: replaceSessionExerciseId as Id<"sessionExercises"> | undefined,
+                        exerciseId,
+                        sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
+                        repsText: customProgrammingDraft.repsText.trim() || "8-12",
+                        targetWeightKg: parseOptionalNumber(
+                          customProgrammingDraft.targetWeightKg,
+                        ),
+                        restSeconds: parseOptionalNumber(customProgrammingDraft.restSeconds),
+                        notes: customProgrammingDraft.notes,
+                        tempo: customProgrammingDraft.tempo,
+                        rir: parseOptionalNumber(customProgrammingDraft.rir),
+                      });
+                    }
 
                     setReplaceSessionExerciseId(null);
                     setCustomExerciseVisible(false);
@@ -1171,17 +1286,29 @@ export default function SessionEditorScreen() {
                       return;
                     }
 
-                    await updateSessionExerciseProgramming({
-                      sessionId: selectedSession._id,
-                      sessionExerciseId: editingSessionExerciseId,
-                      sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
-                      repsText: programmingDraft.repsText.trim() || "8-12",
-                      targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
-                      restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
-                      notes: programmingDraft.notes,
-                      tempo: programmingDraft.tempo,
-                      rir: parseOptionalNumber(programmingDraft.rir),
-                    });
+                    if (isDraftMode && selectedDraftSession) {
+                      updateDraftExerciseProgramming(selectedDraftSession.key, editingSessionExerciseId, {
+                        sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
+                        repsText: programmingDraft.repsText.trim() || "8-12",
+                        targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
+                        restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
+                        notes: programmingDraft.notes,
+                        tempo: programmingDraft.tempo,
+                        rir: parseOptionalNumber(programmingDraft.rir),
+                      });
+                    } else if (selectedSession) {
+                      await updateSessionExerciseProgramming({
+                        sessionId: selectedSession._id,
+                        sessionExerciseId: editingSessionExerciseId as Id<"sessionExercises">,
+                        sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
+                        repsText: programmingDraft.repsText.trim() || "8-12",
+                        targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
+                        restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
+                        notes: programmingDraft.notes,
+                        tempo: programmingDraft.tempo,
+                        rir: parseOptionalNumber(programmingDraft.rir),
+                      });
+                    }
 
                     setProgrammingEditorVisible(false);
                   }}

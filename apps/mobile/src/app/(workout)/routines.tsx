@@ -62,6 +62,9 @@ export default function RoutinesScreen() {
           fontSize: theme.tokens.typography.fontSize.md,
           lineHeight: theme.tokens.typography.fontSize.md * theme.tokens.typography.lineHeight.relaxed,
         },
+        heroAction: {
+          marginTop: theme.tokens.spacing.xs,
+        },
         routineCard: {
           gap: theme.tokens.spacing.md,
         },
@@ -151,6 +154,18 @@ export default function RoutinesScreen() {
               ? `${activeRoutine.daysPerWeek} training days each week with ${activeRoutine.sessions.length} sessions ready to go.`
               : "Create multiple routines, activate the one you want, and keep your week structured without friction."}
           </Text>
+          <View style={styles.heroAction}>
+            <AppButton
+              accessibilityLabel="Create a new routine"
+              icon={<Ionicons color={theme.colors.text} name="add-circle-outline" size={18} />}
+              label="Create routine"
+              onPress={() => {
+                router.push({ pathname: "/(workout)/routine-editor", params: { routineId: "new" } });
+              }}
+              size="md"
+              variant="secondary"
+            />
+          </View>
         </GradientCard>
       </Animated.View>
 

@@ -14,16 +14,24 @@ interface WorkoutPageProps {
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
   };
+  title?: string | null;
   subtitle?: string;
   headerAction?: ReactNode;
+  headerActionPosition?: "left" | "right";
   children: ReactNode;
-  floatingAction?: ReactNode;
 }
 
-export default function WorkoutPage({ headerChip, subtitle, headerAction, children, floatingAction }: WorkoutPageProps) {
+export default function WorkoutPage({
+  headerChip,
+  title,
+  subtitle,
+  headerAction,
+  headerActionPosition = "right",
+  children,
+}: WorkoutPageProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const headerTitle = subtitle ?? headerChip.label;
+  const headerTitle = title === undefined ? (subtitle ?? headerChip.label) : title;
 
   const styles = useMemo(
     () =>
@@ -57,13 +65,19 @@ export default function WorkoutPage({ headerChip, subtitle, headerAction, childr
         },
         headerRow: {
           flexDirection: "row",
-          justifyContent: "space-between",
+          justifyContent: "flex-start",
           alignItems: "flex-start",
           gap: theme.tokens.spacing.md,
         },
         headerLead: {
           flex: 1,
           gap: theme.tokens.spacing.sm,
+        },
+        headerAction: {
+          paddingTop: theme.tokens.spacing.xxs,
+        },
+        headerActionLeft: {
+          paddingTop: theme.tokens.spacing.xs,
         },
         chip: {
           alignSelf: "flex-start",
@@ -128,23 +142,26 @@ export default function WorkoutPage({ headerChip, subtitle, headerAction, childr
       >
         <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal).springify()} style={styles.header}>
           <View style={styles.headerRow}>
+            {headerAction && headerActionPosition === "left" ? (
+              <View style={[styles.headerAction, styles.headerActionLeft]}>{headerAction}</View>
+            ) : null}
             <View style={styles.headerLead}>
               <View style={styles.titleRow}>
                 <View style={styles.chip}>
                   <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
                   <Text style={styles.chipLabel}>{headerChip.label}</Text>
                 </View>
-                <Text style={styles.title}>{headerTitle}</Text>
+                {headerTitle ? <Text style={styles.title}>{headerTitle}</Text> : null}
                 {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-                {headerAction}
               </View>
             </View>
+            {headerAction && headerActionPosition === "right" ? (
+              <View style={styles.headerAction}>{headerAction}</View>
+            ) : null}
           </View>
         </Animated.View>
         {children}
       </ScrollView>
-
-      {floatingAction}
     </View>
   );
 }
