@@ -16,6 +16,12 @@ This repository is a **Bun workspace monorepo** designed to support multiple app
 4. **App isolation**: each app owns only UI, routing, and app-local composition.
 5. **Migration safety**: for schema/data changes on existing tables, use safe migration workflows.
 
+### UI standards
+
+- Shared card interaction rules live in `docs/UI_STANDARDS.md`.
+- For card lists, use drag-and-drop for ordering (not up/down controls).
+- Use icon-only actions for intuitive actions, and icon+label for less-intuitive actions.
+
 ### New app checklist
 
 - Create `apps/<name>/package.json`

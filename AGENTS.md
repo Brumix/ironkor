@@ -87,6 +87,7 @@ Guidelines:
 - Do not duplicate Convex config or schema across apps — one deployment serves all.
 - Keep TypeScript strict; avoid `any`.
 - After non-trivial changes, run `bun run lint` and `bun run typecheck` from root.
+- Follow shared UI interaction rules in `docs/UI_STANDARDS.md` when changing card actions or list ordering behavior.
 - For workout-editor UX in the mobile app, check `apps/mobile/AGENTS.md` before changing routine creation/editing flows or planner behavior.
 - For the mobile routine editor, treat page-level edits as local until the user presses Save. Do not persist add/delete/reorder/name/planner changes for an existing routine during routine-editor interactions.
 
@@ -133,6 +134,7 @@ Guidelines:
 
 - `apps/mobile/AGENTS.md` — mobile-specific coding guidance
 - `convex/README.md` — Convex function reference
+- `docs/UI_STANDARDS.md` — shared card actions and drag-reorder standards
 
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.

@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   useCallback,
@@ -25,6 +26,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  NestableDraggableFlatList,
+  NestableScrollContainer,
+  type DragEndParams,
+  type RenderItemParams,
+} from "react-native-draggable-flatlist";
 
 import {
   BODY_PART_VALUES,
@@ -37,8 +44,10 @@ import {
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
+import AppCard from "@/components/ui/AppCard";
 import ExerciseFilterRow from "@/components/ui/ExerciseFilterRow";
 import HeaderBackButton from "@/components/ui/HeaderBackButton";
+import PressableScale from "@/components/ui/PressableScale";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingForm";
 import WorkoutPage from "@/components/workout/WorkoutPage";
@@ -98,6 +107,17 @@ function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function reorderKeysByIndex(keys: string[], from: number, to: number) {
+  if (from === to || from < 0 || to < 0 || from >= keys.length || to >= keys.length) {
+    return keys;
+  }
+
+  const reordered = [...keys];
+  const [moved] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moved);
+  return reordered;
+}
+
 
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
@@ -109,7 +129,7 @@ export default function SessionEditorScreen() {
     updateSessionName: updateDraftSessionName,
     addOrReplaceExercise,
     updateExerciseProgramming: updateDraftExerciseProgramming,
-    moveExercise: moveDraftExercise,
+    reorderExercises: reorderDraftExercises,
     removeExercise: removeDraftExercise,
   } = useDraftRoutine();
 
@@ -178,6 +198,7 @@ export default function SessionEditorScreen() {
   const [customExerciseProgrammingMountKey, setCustomExerciseProgrammingMountKey] =
     useState(0);
   const [programmingEditorVisible, setProgrammingEditorVisible] = useState(false);
+  const [exerciseOrderKeys, setExerciseOrderKeys] = useState<string[]>([]);
   const [replaceSessionExerciseId, setReplaceSessionExerciseId] =
     useState<string | null>(null);
   const [editingSessionExerciseId, setEditingSessionExerciseId] =
@@ -198,6 +219,8 @@ export default function SessionEditorScreen() {
 
   const programmingEditorScrollRef = useRef<ScrollView | null>(null);
   const customExerciseScrollRef = useRef<ScrollView | null>(null);
+  const dragStartIndexRef = useRef<number | null>(null);
+  const placeholderIndexRef = useRef<number | null>(null);
 
   const onProgrammingNotesFocus = useCallback(() => {
     scheduleScrollToEndForNotes(programmingEditorScrollRef);
@@ -232,50 +255,15 @@ export default function SessionEditorScreen() {
     setCustomProgrammingDraft(createProgrammingDraft());
   }
 
-  function openProgrammingEditor(
+  const openProgrammingEditor = useCallback((
     sessionExerciseId: string,
     entry?: ProgrammingSource,
-  ) {
+  ) => {
     setEditingSessionExerciseId(sessionExerciseId);
     setProgrammingDraft(createProgrammingDraft(entry));
     setProgrammingFormMountKey((key) => key + 1);
     setProgrammingEditorVisible(true);
-  }
-
-  async function moveSessionExercise(sessionExerciseId: string, direction: -1 | 1) {
-    if (isDraftMode) {
-      if (!selectedDraftSession) {
-        return;
-      }
-
-      moveDraftExercise(selectedDraftSession.key, sessionExerciseId, direction);
-      return;
-    }
-
-    if (!selectedSession) {
-      return;
-    }
-
-    const sorted = [...selectedSession.exercises].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((entry) => String(entry._id) === sessionExerciseId);
-    if (index < 0) {
-      return;
-    }
-
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= sorted.length) {
-      return;
-    }
-
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-
-    await reorderSessionExercises({
-      sessionId: selectedSession._id,
-      orderedSessionExerciseIds: reordered.map((entry) => entry._id),
-    });
-  }
+  }, []);
 
   function handleBackPress() {
     if (isDraftMode) {
@@ -301,6 +289,126 @@ export default function SessionEditorScreen() {
     () => (isDraftMode ? selectedDraftSession?.exercises ?? [] : selectedSession?.exercises ?? []),
     [isDraftMode, selectedDraftSession?.exercises, selectedSession?.exercises],
   );
+  const sortedCurrentExercises = useMemo(
+    () => [...currentExercises].sort((a, b) => a.order - b.order),
+    [currentExercises],
+  );
+  const resolveExerciseKey = useCallback(
+    (entry: (typeof sortedCurrentExercises)[number]) =>
+      "key" in entry ? entry.key : String(entry._id),
+    [],
+  );
+  const exerciseByKey = useMemo(
+    () =>
+      new Map(
+        sortedCurrentExercises.map((entry) => [resolveExerciseKey(entry), entry] as const),
+      ),
+    [resolveExerciseKey, sortedCurrentExercises],
+  );
+  const exerciseListData = useMemo(
+    () =>
+      exerciseOrderKeys
+        .map((key) => {
+          const entry = exerciseByKey.get(key);
+          return entry ? { key, entry } : null;
+        })
+        .filter(
+          (
+            item,
+          ): item is { key: string; entry: (typeof sortedCurrentExercises)[number] } =>
+            Boolean(item),
+        ),
+    [exerciseByKey, exerciseOrderKeys],
+  );
+
+  useEffect(() => {
+    setExerciseOrderKeys(sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)));
+  }, [resolveExerciseKey, sortedCurrentExercises]);
+
+  const applyExerciseOrder = useCallback(
+    async (orderedKeys: string[]) => {
+      if (isDraftMode) {
+        if (!selectedDraftSession) {
+          return;
+        }
+
+        reorderDraftExercises(selectedDraftSession.key, orderedKeys);
+        return;
+      }
+
+      if (!selectedSession) {
+        return;
+      }
+
+      const idByKey = new Map(
+        sortedCurrentExercises.map((entry) => [
+          resolveExerciseKey(entry),
+          "key" in entry ? null : entry._id,
+        ]),
+      );
+      const orderedSessionExerciseIds = orderedKeys
+        .map((key) => idByKey.get(key))
+        .filter((id): id is Id<"sessionExercises"> => Boolean(id));
+
+      if (orderedSessionExerciseIds.length !== sortedCurrentExercises.length) {
+        return;
+      }
+
+      await reorderSessionExercises({
+        sessionId: selectedSession._id,
+        orderedSessionExerciseIds,
+      });
+    },
+    [
+      isDraftMode,
+      reorderDraftExercises,
+      reorderSessionExercises,
+      resolveExerciseKey,
+      selectedDraftSession,
+      selectedSession,
+      sortedCurrentExercises,
+    ],
+  );
+
+  const handleExerciseDragEnd = useCallback(
+    ({ data }: DragEndParams<{ key: string; entry: (typeof sortedCurrentExercises)[number] }>) => {
+      const orderedKeys = data.map((item) => item.key);
+      setExerciseOrderKeys(orderedKeys);
+      dragStartIndexRef.current = null;
+      placeholderIndexRef.current = null;
+      applyExerciseOrder(orderedKeys).catch(() => {
+        showAlert({ title: "Failed", message: "Could not reorder exercises.", variant: "error" });
+        setExerciseOrderKeys(
+          sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)),
+        );
+      });
+    },
+    [applyExerciseOrder, resolveExerciseKey, showAlert, sortedCurrentExercises],
+  );
+
+  const handleExerciseRelease = useCallback(() => {
+    const from = dragStartIndexRef.current;
+    const to = placeholderIndexRef.current;
+
+    if (from === null || to === null || from === to) {
+      return;
+    }
+
+    const reorderedKeys = reorderKeysByIndex(exerciseOrderKeys, from, to);
+    setExerciseOrderKeys(reorderedKeys);
+    applyExerciseOrder(reorderedKeys).catch(() => {
+      showAlert({ title: "Failed", message: "Could not reorder exercises.", variant: "error" });
+      setExerciseOrderKeys(
+        sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)),
+      );
+    });
+  }, [
+    applyExerciseOrder,
+    exerciseOrderKeys,
+    resolveExerciseKey,
+    showAlert,
+    sortedCurrentExercises,
+  ]);
 
   const styles = useMemo(
     () =>
@@ -358,18 +466,43 @@ export default function SessionEditorScreen() {
           fontSize: theme.tokens.typography.fontSize.sm,
         },
         exerciseRow: {
-          backgroundColor: theme.colors.surfaceAlt,
-          borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          padding: theme.tokens.spacing.sm + 2,
           gap: theme.tokens.spacing.sm,
-          marginTop: theme.tokens.spacing.sm,
+          shadowColor: "transparent",
+          shadowOpacity: 0,
+          shadowRadius: 0,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 0,
+        },
+        exerciseCell: {
+          paddingBottom: theme.tokens.spacing.md,
+        },
+        exerciseRowActive: {
+          borderColor: theme.colors.borderAccent,
+          backgroundColor: theme.colors.accentSoft,
         },
         exerciseRowTop: {
           flexDirection: "row",
           alignItems: "flex-start",
           gap: theme.tokens.spacing.sm,
+        },
+        exerciseTitleBlock: {
+          flex: 1,
+          gap: theme.tokens.spacing.xxs,
+        },
+        dragHandle: {
+          width: 36,
+          height: 36,
+          borderRadius: theme.tokens.radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.accentSoft,
+          borderWidth: 1,
+          borderColor: theme.colors.borderAccent,
+          flexShrink: 0,
+        },
+        dragHandleActive: {
+          backgroundColor: theme.colors.accent,
+          borderColor: theme.colors.accent,
         },
         sessionActions: {
           flexDirection: "row",
@@ -396,13 +529,6 @@ export default function SessionEditorScreen() {
         },
         smallBtnTextActive: {
           color: theme.colors.onPrimary,
-        },
-        smallDangerBtn: {
-          backgroundColor: theme.colors.errorSoft,
-          borderColor: theme.colors.error,
-        },
-        flexOne: {
-          flex: 1,
         },
         primaryButton: {
           backgroundColor: theme.colors.primary,
@@ -509,6 +635,120 @@ export default function SessionEditorScreen() {
     [theme],
   );
 
+  const renderExerciseItem = useCallback(
+    ({
+      item,
+      drag,
+      isActive,
+    }: RenderItemParams<{ key: string; entry: (typeof sortedCurrentExercises)[number] }>) => {
+      const { entry, key: exerciseKey } = item;
+
+      return (
+        <View
+          renderToHardwareTextureAndroid={isActive}
+          shouldRasterizeIOS={isActive}
+          style={styles.exerciseCell}
+        >
+          <AppCard
+            style={[styles.exerciseRow, isActive && styles.exerciseRowActive]}
+            variant="default"
+          >
+            <View style={styles.exerciseRowTop}>
+              <View style={styles.exerciseTitleBlock}>
+                <Text style={styles.sectionName}>{entry.exercise.name}</Text>
+                <Text style={styles.sectionMeta}>{formatProgrammingSummary(entry)}</Text>
+                <Text style={styles.sectionMeta}>
+                  {renderMuscleLabel(entry.exercise.bodyPart)} •{" "}
+                  {renderMuscleLabel(entry.exercise.primaryMuscle)} •{" "}
+                  {renderMuscleLabel(entry.exercise.equipment)}
+                </Text>
+                {entry.notes ? <Text style={styles.sectionMeta}>{entry.notes}</Text> : null}
+              </View>
+              <PressableScale
+                accessibilityHint="Long press and drag to reorder this exercise"
+                accessibilityLabel={`Reorder ${entry.exercise.name}`}
+                hitSlop={12}
+                onPressIn={() => {
+                  drag();
+                }}
+                pressedOpacity={1}
+                pressedScale={0.97}
+                style={[styles.dragHandle, isActive && styles.dragHandleActive]}
+              >
+                <Ionicons
+                  color={isActive ? theme.colors.onPrimary : theme.colors.accent}
+                  name="reorder-four-outline"
+                  size={18}
+                />
+              </PressableScale>
+            </View>
+
+            <View style={styles.sessionActions}>
+              <AppButton
+                accessibilityLabel={`Program ${entry.exercise.name}`}
+                icon={<Ionicons color={theme.colors.text} name="options-outline" size={16} />}
+                label="Program"
+                onPress={() => {
+                  openProgrammingEditor(exerciseKey, entry);
+                }}
+                size="sm"
+                variant="secondary"
+              />
+              <AppButton
+                accessibilityLabel={`Replace ${entry.exercise.name}`}
+                icon={<Ionicons color={theme.colors.text} name="swap-horizontal-outline" size={16} />}
+                label="Replace"
+                onPress={() => {
+                  setReplaceSessionExerciseId(exerciseKey);
+                  setExercisePickerVisible(true);
+                }}
+                size="sm"
+                variant="secondary"
+              />
+              <AppButton
+                accessibilityLabel={`Delete ${entry.exercise.name}`}
+                icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
+                onPress={() => {
+                  if (isDraftMode && selectedDraftSession) {
+                    removeDraftExercise(selectedDraftSession.key, exerciseKey);
+                    return;
+                  }
+
+                  if (!selectedSession || "key" in entry) {
+                    return;
+                  }
+
+                  deleteSessionExercise({
+                    sessionId: selectedSession._id,
+                    sessionExerciseId: entry._id,
+                  }).catch(() => {
+                    showAlert({ title: "Failed", message: "Could not remove exercise.", variant: "error" });
+                  });
+                }}
+                size="sm"
+                variant="danger"
+              />
+            </View>
+          </AppCard>
+        </View>
+      );
+    },
+    [
+      deleteSessionExercise,
+      isDraftMode,
+      openProgrammingEditor,
+      removeDraftExercise,
+      selectedDraftSession,
+      selectedSession,
+      showAlert,
+      styles,
+      theme.colors.accent,
+      theme.colors.error,
+      theme.colors.onPrimary,
+      theme.colors.text,
+    ],
+  );
+
   if (!isDraftMode && routinesData === undefined) {
     return (
       <WorkoutPage
@@ -542,6 +782,7 @@ export default function SessionEditorScreen() {
       headerAction={<HeaderBackButton onPress={handleBackPress} />}
       headerActionPosition="left"
       headerChip={{ icon: "create-outline", label: "Section" }}
+      scrollComponent={NestableScrollContainer}
       title={null}
     >
       <Text style={styles.fieldLabel}>Section name</Text>
@@ -605,84 +846,28 @@ export default function SessionEditorScreen() {
         </Pressable>
       </View>
 
-      {[...currentExercises].sort((a, b) => a.order - b.order).map((entry) => {
-        const exerciseKey = "key" in entry ? entry.key : String(entry._id);
-
-        return (
-          <View key={exerciseKey} style={styles.exerciseRow}>
-            <View style={styles.exerciseRowTop}>
-              <View style={styles.flexOne}>
-                <Text style={styles.sectionName}>{entry.exercise.name}</Text>
-                <Text style={styles.sectionMeta}>{formatProgrammingSummary(entry)}</Text>
-                <Text style={styles.sectionMeta}>
-                  {renderMuscleLabel(entry.exercise.bodyPart)} •{" "}
-                  {renderMuscleLabel(entry.exercise.primaryMuscle)} •{" "}
-                  {renderMuscleLabel(entry.exercise.equipment)}
-                </Text>
-                {entry.notes ? <Text style={styles.sectionMeta}>{entry.notes}</Text> : null}
-              </View>
-            </View>
-
-            <View style={styles.sessionActions}>
-              <Pressable
-                style={styles.smallBtn}
-                onPress={() => {
-                  void moveSessionExercise(exerciseKey, -1);
-                }}
-              >
-                <Text style={styles.smallBtnText}>↑</Text>
-              </Pressable>
-              <Pressable
-                style={styles.smallBtn}
-                onPress={() => {
-                  void moveSessionExercise(exerciseKey, 1);
-                }}
-              >
-                <Text style={styles.smallBtnText}>↓</Text>
-              </Pressable>
-              <Pressable
-                style={styles.smallBtn}
-                onPress={() => {
-                  openProgrammingEditor(exerciseKey, entry);
-                }}
-              >
-                <Text style={styles.smallBtnText}>Program</Text>
-              </Pressable>
-              <Pressable
-                style={styles.smallBtn}
-                onPress={() => {
-                  setReplaceSessionExerciseId(exerciseKey);
-                  setExercisePickerVisible(true);
-                }}
-              >
-                <Text style={styles.smallBtnText}>Replace</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.smallBtn, styles.smallDangerBtn]}
-                onPress={() => {
-                  if (isDraftMode && selectedDraftSession) {
-                    removeDraftExercise(selectedDraftSession.key, exerciseKey);
-                    return;
-                  }
-
-                  if (!selectedSession || "key" in entry) {
-                    return;
-                  }
-
-                  deleteSessionExercise({
-                    sessionId: selectedSession._id,
-                    sessionExerciseId: entry._id,
-                  }).catch(() => {
-                    showAlert({ title: "Failed", message: "Could not remove exercise.", variant: "error" });
-                  });
-                }}
-              >
-                <Text style={styles.smallBtnText}>Del</Text>
-              </Pressable>
-            </View>
-          </View>
-        );
-      })}
+      {exerciseListData.length > 0 ? (
+        <NestableDraggableFlatList
+          activateAfterLongPress={220}
+          containerStyle={{ flexGrow: 0 }}
+          data={exerciseListData}
+          keyExtractor={(item) => item.key}
+          onDragBegin={(index) => {
+            dragStartIndexRef.current = index;
+            placeholderIndexRef.current = index;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+          }}
+          onDragEnd={handleExerciseDragEnd}
+          onPlaceholderIndexChange={(index) => {
+            placeholderIndexRef.current = index;
+          }}
+          onRelease={handleExerciseRelease}
+          renderItem={renderExerciseItem}
+          scrollEnabled={false}
+        />
+      ) : (
+        <Text style={styles.helperText}>No exercises yet. Add one to start this section.</Text>
+      )}
 
       <Modal
         visible={exercisePickerVisible}

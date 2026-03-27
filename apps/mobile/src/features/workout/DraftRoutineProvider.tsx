@@ -79,6 +79,7 @@ interface DraftRoutineContextValue {
     updates: Partial<ExerciseProgrammingFields>,
   ) => void;
   moveExercise: (sessionKey: string, exerciseKey: string, direction: -1 | 1) => void;
+  reorderExercises: (sessionKey: string, orderedExerciseKeys: string[]) => void;
   removeExercise: (sessionKey: string, exerciseKey: string) => void;
 }
 
@@ -326,6 +327,40 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     }));
   }, [updateDraft]);
 
+  const reorderExercises = useCallback((sessionKey: string, orderedExerciseKeys: string[]) => {
+    updateDraft((current) => ({
+      ...current,
+      sessions: current.sessions.map((session) => {
+        if (session.key !== sessionKey) {
+          return session;
+        }
+
+        if (orderedExerciseKeys.length !== session.exercises.length) {
+          return session;
+        }
+
+        const exerciseMap = new Map(session.exercises.map((exercise) => [exercise.key, exercise] as const));
+        const reordered = orderedExerciseKeys
+          .map((exerciseKey) => exerciseMap.get(exerciseKey))
+          .filter((exercise): exercise is DraftRoutine["sessions"][number]["exercises"][number] =>
+            Boolean(exercise),
+          );
+
+        if (reordered.length !== session.exercises.length) {
+          return session;
+        }
+
+        return {
+          ...session,
+          exercises: reordered.map((exercise, index) => ({
+            ...exercise,
+            order: index,
+          })),
+        };
+      }),
+    }));
+  }, [updateDraft]);
+
   const removeExercise = useCallback((sessionKey: string, exerciseKey: string) => {
     updateDraft((current) => ({
       ...current,
@@ -360,6 +395,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     addOrReplaceExercise,
     updateExerciseProgramming,
     moveExercise,
+    reorderExercises,
     removeExercise,
   }), [
     addOrReplaceExercise,
@@ -370,6 +406,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     hasChanges,
     moveExercise,
     moveSession,
+    reorderExercises,
     reorderSessions,
     removeExercise,
     removeSession,
