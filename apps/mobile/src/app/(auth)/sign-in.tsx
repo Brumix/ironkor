@@ -148,11 +148,7 @@ export default function SignInScreen() {
         </View>
       }
     >
-      <AuthSocialButtons
-        onAuthenticated={() => {
-          router.replace("/(workout)/home");
-        }}
-      />
+      <AuthSocialButtons />
 
       <View style={fieldStyles.dividerRow}>
         <View style={fieldStyles.dividerLine} />

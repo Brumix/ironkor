@@ -108,8 +108,8 @@ export async function deleteRoutineHandler(
       .query("routines")
       .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", viewer._id))
       .order("desc")
-      .collect();
-    if (remaining.length > 0) {
+      .take(1);
+    if (remaining[0]) {
       await setRoutineActiveState(ctx, viewer._id, remaining[0]._id, true);
     }
   }

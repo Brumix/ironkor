@@ -13,6 +13,7 @@ type Identity = NonNullable<
 >;
 
 type ReaderCtx = QueryCtx | MutationCtx;
+type DeletionStatus = Doc<"users">["deletionStatus"];
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -44,6 +45,7 @@ export async function requireViewer(ctx: ReaderCtx) {
   const identity = await requireIdentity(ctx);
   const viewer = await getViewerByTokenIdentifier(ctx, identity.tokenIdentifier);
   invariant(viewer, "Viewer profile not found.");
+  invariant(!isDeletionBlocked(viewer.deletionStatus), getDeletionBlockedMessage(viewer.deletionStatus));
   return { identity, viewer };
 }
 
@@ -106,19 +108,14 @@ export function getIdentitySnapshot(identity: Identity) {
   };
 }
 
-export async function listViewerRoutines(
-  ctx: { db: DatabaseReader },
-  userId: Doc<"users">["_id"],
-  limit?: number,
-) {
-  const query = ctx.db
-    .query("routines")
-    .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", userId))
-    .order("desc");
+export function isDeletionBlocked(status: DeletionStatus) {
+  return status !== undefined && status !== "complete";
+}
 
-  if (typeof limit === "number") {
-    return query.take(limit);
+export function getDeletionBlockedMessage(status: DeletionStatus) {
+  if (status === "failed") {
+    return "Account deletion is being retried. Please wait a moment and try again later.";
   }
 
-  return query.collect();
+  return "Account deletion is in progress.";
 }

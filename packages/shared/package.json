@@ -10,6 +10,7 @@
     "./enums": "./enums.ts",
     "./dates": "./dates.ts",
     "./ui": "./ui.ts",
-    "./strings": "./strings.ts"
+    "./strings": "./strings.ts",
+    "./routines": "./routines.ts"
   }
 }

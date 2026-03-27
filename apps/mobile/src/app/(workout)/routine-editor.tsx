@@ -13,6 +13,7 @@ import {
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
 
+import { MAX_SESSIONS_PER_ROUTINE } from "@ironkor/shared/routines";
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
@@ -25,7 +26,7 @@ import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
-import type { DraftWeeklyPlanEntry } from "@/features/workout/types";
+import type { DraftRoutine, DraftWeeklyPlanEntry, RoutineDetailed } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
 import type { Id } from "@convex/_generated/dataModel";
@@ -182,6 +183,7 @@ function reorderSessionOptionsByIndex(
   return reordered;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function RoutineEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -267,24 +269,24 @@ export default function RoutineEditorScreen() {
     }, [ensureDraft, isNew, resetNewRoutineUi]),
   );
 
-  const sourceSessionOptions = useMemo<SessionOption[]>(
-    () =>
-      isNew
-        ? sortByOrder(draft?.sessions ?? []).map((session) => ({
-            key: session.key,
-            name: session.name,
-            order: session.order,
-            exerciseCount: session.exercises.length,
-          }))
-        : sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
-            key: String(session._id),
-            name: session.name,
-            order: session.order,
-            exerciseCount: session.exercises.length,
-            persistedId: session._id,
-          })),
-    [draft?.sessions, isNew, selectedRoutine?.sessions],
-  );
+  const sourceSessionOptions = useMemo<SessionOption[]>(() => {
+    if (isNew) {
+      return sortByOrder(draft?.sessions ?? []).map((session: DraftRoutine["sessions"][number]) => ({
+        key: session.key,
+        name: session.name,
+        order: session.order,
+        exerciseCount: session.exercises.length,
+      }));
+    }
+
+    return sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
+      key: String(session._id),
+      name: session.name,
+      order: session.order,
+      exerciseCount: session.exercises.length,
+      persistedId: session._id,
+    }));
+  }, [draft?.sessions, isNew, selectedRoutine?.sessions]);
 
   useEffect(() => {
     if (routineSummariesData === undefined || (!isNew && selectedRoutine === undefined)) {
@@ -303,7 +305,7 @@ export default function RoutineEditorScreen() {
     setRoutineName(selectedRoutine.name);
     setPlannerDraft(
       sortPlanner(
-        selectedRoutine.weeklyPlan.map((entry) => ({
+        selectedRoutine.weeklyPlan.map((entry: RoutineDetailed["weeklyPlan"][number]) => ({
           day: entry.day,
           type: entry.type,
         })),
@@ -328,6 +330,7 @@ export default function RoutineEditorScreen() {
   const routineNameValue = isNew ? draft?.name ?? "" : routineName;
   const plannerEntries = isNew ? sortPlanner(draft?.weeklyPlan ?? []) : sortPlanner(plannerDraft);
   const canAddSession = newSessionName.trim().length > 0;
+  const isAtSessionLimit = sessionListData.length >= MAX_SESSIONS_PER_ROUTINE;
 
   function navigateToRoutines() {
     router.replace("/(workout)/routines");
@@ -371,6 +374,7 @@ export default function RoutineEditorScreen() {
     }));
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async function handleSaveRoutine() {
     if (isSaving) {
       return;
@@ -380,7 +384,7 @@ export default function RoutineEditorScreen() {
     const trainingDays = plannerEntries.filter((entry) => entry.type === "train").length;
     const normalizedRoutineName = normalizeDisplayNameKey(name);
 
-    const duplicateRoutine = routines.some((routine) => {
+    const duplicateRoutine = routines.some((routine: (typeof routines)[number]) => {
       if (routine._id === selectedRoutine?._id) {
         return false;
       }
@@ -393,6 +397,15 @@ export default function RoutineEditorScreen() {
 
     if (hasDuplicateDisplayNames(sessionListData.map((session) => session.name))) {
       showAlert({ title: "Duplicate section name", message: "This routine already has a section with this name.", variant: "warning" });
+      return;
+    }
+
+    if (sessionListData.length > MAX_SESSIONS_PER_ROUTINE) {
+      showAlert({
+        title: "Too many sections",
+        message: `Routines can have at most ${MAX_SESSIONS_PER_ROUTINE} sections.`,
+        variant: "warning",
+      });
       return;
     }
 
@@ -508,6 +521,15 @@ export default function RoutineEditorScreen() {
   function handleAddSession() {
     const name = newSessionName.trim();
     if (!name) {
+      return;
+    }
+
+    if (isAtSessionLimit) {
+      showAlert({
+        title: "Section limit reached",
+        message: `Routines can have at most ${MAX_SESSIONS_PER_ROUTINE} sections.`,
+        variant: "info",
+      });
       return;
     }
 
@@ -911,7 +933,7 @@ export default function RoutineEditorScreen() {
         />
         <AppButton
           accessibilityLabel="Add section"
-          disabled={!canAddSession}
+          disabled={!canAddSession || isAtSessionLimit}
           icon={<Ionicons color={theme.colors.onPrimary} name="add-outline" size={16} />}
           label="Add"
           onPress={() => {
@@ -920,6 +942,12 @@ export default function RoutineEditorScreen() {
           size="sm"
         />
       </View>
+
+      {isAtSessionLimit ? (
+        <Text style={styles.emptyState}>
+          {`Section limit reached. Each routine supports up to ${MAX_SESSIONS_PER_ROUTINE} sections.`}
+        </Text>
+      ) : null}
 
       {sessionListData.length > 0 ? (
         <NestableDraggableFlatList

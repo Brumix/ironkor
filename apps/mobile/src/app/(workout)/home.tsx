@@ -16,6 +16,7 @@ import QuickActionTile from "@/components/ui/QuickActionTile";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+import type { RoutineDetailed, RoutineSection } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
 
@@ -33,16 +34,22 @@ function resolveGreeting() {
   return "Good evening";
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function HomeScreen() {
   const { theme } = useTheme();
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
-  const activeRoutine = activeRoutineData ?? null;
+  const activeRoutine: RoutineDetailed | null = activeRoutineData ?? null;
   const weeklyPlan = activeRoutine ? buildWeeklyPlan(activeRoutine) : null;
   const todayPlan = weeklyPlan ? getTodayPlan(weeklyPlan) : null;
   const todaySession = activeRoutine ? getSessionById(activeRoutine, todayPlan?.sessionId) : null;
 
-  const trainingDays = activeRoutine?.weeklyPlan.filter((entry) => entry.type === "train").length ?? 0;
-  const totalExercises = activeRoutine?.sessions.reduce((sum, session) => sum + session.exercises.length, 0) ?? 0;
+  const trainingDays =
+    activeRoutine?.weeklyPlan.filter((entry) => entry.type === "train").length ?? 0;
+  const totalExercises =
+    activeRoutine?.sessions.reduce(
+      (sum: number, session: RoutineSection) => sum + session.exercises.length,
+      0,
+    ) ?? 0;
   const averageExercisesPerSession =
     activeRoutine && activeRoutine.sessions.length > 0
       ? Math.round(totalExercises / activeRoutine.sessions.length)
@@ -374,7 +381,7 @@ export default function HomeScreen() {
         subtitle="Sessions are organized as thumb-friendly cards for faster planning"
       />
 
-      {activeRoutine.sessions.map((session, index) => (
+      {activeRoutine.sessions.map((session: RoutineSection, index: number) => (
         <Animated.View
           entering={FadeInUp.delay(150 + index * 35).springify().damping(20)}
           key={String(session._id)}

@@ -11,7 +11,6 @@ import {
 import {
   getActiveDetailedHandler,
   getDetailedByIdHandler,
-  listDetailedHandler,
   listSummariesHandler,
 } from "./routines/queries";
 import {
@@ -40,11 +39,6 @@ export const getDetailedById = query({
     routineId: v.id("routines"),
   },
   handler: getDetailedByIdHandler,
-});
-
-export const listDetailed = query({
-  args: {},
-  handler: listDetailedHandler,
 });
 
 export const getActiveDetailed = query({

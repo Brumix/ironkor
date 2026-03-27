@@ -1,0 +1,2 @@
+export const MAX_SESSIONS_PER_ROUTINE = 12;
+export const MAX_EXERCISES_PER_SESSION = 40;

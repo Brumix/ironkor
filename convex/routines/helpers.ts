@@ -1,8 +1,11 @@
 import { ConvexError } from "convex/values";
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
+import {
+  MAX_EXERCISES_PER_SESSION as SHARED_MAX_EXERCISES_PER_SESSION,
+  MAX_SESSIONS_PER_ROUTINE as SHARED_MAX_SESSIONS_PER_ROUTINE,
+} from "@ironkor/shared/routines";
 
 import { normalizeExerciseCatalog } from "../exerciseCatalog";
-import { listViewerRoutines } from "../authHelpers";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import type { DatabaseReader, MutationCtx, QueryCtx } from "../_generated/server";
@@ -16,6 +19,8 @@ import type {
 export const DAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
 export const MAX_ROUTINE_NAME_LENGTH = 80;
 export const MAX_SECTION_NAME_LENGTH = 80;
+export const MAX_SESSIONS_PER_ROUTINE = SHARED_MAX_SESSIONS_PER_ROUTINE;
+export const MAX_EXERCISES_PER_SESSION = SHARED_MAX_EXERCISES_PER_SESSION;
 export const TRAINING_DAY_MAP: Record<number, number[]> = {
   1: [0],
   2: [0, 3],
@@ -210,7 +215,7 @@ export async function getSessionsByRoutine(
 ) {
   return ctx.db
     .query("routineSessions")
-    .withIndex("by_userId_and_routine", (q) =>
+    .withIndex("by_userId_and_routine_order", (q) =>
       q.eq("userId", userId).eq("routineId", routineId),
     )
     .collect();
@@ -223,7 +228,7 @@ export async function getSessionExercisesBySession(
 ) {
   return ctx.db
     .query("sessionExercises")
-    .withIndex("by_userId_and_session", (q) =>
+    .withIndex("by_userId_and_session_order", (q) =>
       q.eq("userId", userId).eq("sessionId", sessionId),
     )
     .collect();
@@ -241,7 +246,7 @@ export async function ensureUniqueRoutineName(
     .withIndex("by_userId_and_nameKey", (q) =>
       q.eq("userId", userId).eq("nameKey", normalizedKey),
     )
-    .collect();
+    .take(2);
 
   const indexedDuplicate = indexedMatches.find((routine) => {
     if (options?.excludeRoutineId && routine._id === options.excludeRoutineId) {
@@ -253,17 +258,6 @@ export async function ensureUniqueRoutineName(
     assert(false, "A routine with this name already exists.");
   }
 
-  // Backward-compatible fallback for legacy documents missing nameKey.
-  const routines = await listViewerRoutines(ctx, userId);
-
-  const duplicateRoutine = routines.find((routine) => {
-    if (options?.excludeRoutineId && routine._id === options.excludeRoutineId) {
-      return false;
-    }
-    return normalizeDisplayNameKey(routine.name) === normalizedKey;
-  });
-
-  assert(!duplicateRoutine, "A routine with this name already exists.");
 }
 
 export async function ensureUniqueSessionName(
@@ -281,7 +275,7 @@ export async function ensureUniqueSessionName(
         .eq("routineId", routineId)
         .eq("nameKey", normalizedKey),
     )
-    .collect();
+    .take(2);
 
   const indexedDuplicate = indexedMatches.find((session) => {
     if (options?.excludeSessionId && session._id === options.excludeSessionId) {
@@ -293,16 +287,6 @@ export async function ensureUniqueSessionName(
     assert(false, "This routine already has a section with this name.");
   }
 
-  const sessions = await getSessionsByRoutine(ctx, routineId, userId);
-
-  const duplicateSession = sessions.find((session) => {
-    if (options?.excludeSessionId && session._id === options.excludeSessionId) {
-      return false;
-    }
-    return normalizeDisplayNameKey(session.name) === normalizedKey;
-  });
-
-  assert(!duplicateSession, "This routine already has a section with this name.");
 }
 
 export async function validateWeeklyPlan(
@@ -371,7 +355,7 @@ export async function setRoutineActiveState(
       .withIndex("by_userId_and_isActive", (q) =>
         q.eq("userId", userId).eq("isActive", true),
       )
-      .collect();
+      .take(MAX_SESSIONS_PER_ROUTINE + 1);
     for (const routine of activeRoutines) {
       if (routine._id !== routineId) {
         await ctx.db.patch(routine._id, {

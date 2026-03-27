@@ -14,6 +14,7 @@ import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import type { ExerciseCatalog } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
 import type { Id } from "@convex/_generated/dataModel";
@@ -33,7 +34,7 @@ export default function MyExercisesScreen() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: Id<"exercises">; name: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const exercises = useMemo(() => exercisesData ?? [], [exercisesData]);
+  const exercises = useMemo<ExerciseCatalog[]>(() => exercisesData ?? [], [exercisesData]);
 
   const styles = useMemo(
     () =>
@@ -164,7 +165,7 @@ export default function MyExercisesScreen() {
           />
         </AppCard>
       ) : (
-        exercises.map((exercise, index) => (
+        exercises.map((exercise: ExerciseCatalog, index: number) => (
           <Animated.View
             entering={FadeInUp.delay(60 + index * 30).springify().damping(20)}
             key={String(exercise._id)}
@@ -186,7 +187,7 @@ export default function MyExercisesScreen() {
 
               {exercise.muscleGroups.length > 1 ? (
                 <Text style={styles.exerciseMeta}>
-                  Also: {exercise.muscleGroups.filter((m) => m !== exercise.primaryMuscle).map(renderLabel).join(", ")}
+                  Also: {exercise.muscleGroups.filter((muscle) => muscle !== exercise.primaryMuscle).map(renderLabel).join(", ")}
                 </Text>
               ) : null}
 

@@ -15,6 +15,8 @@
     "mobile:dev": "bun run --cwd apps/mobile dev:expo",
     "mobile:start": "bun run --cwd apps/mobile start",
     "lint": "bun run --cwd apps/mobile lint",
+    "lint:strict": "bun run --cwd apps/mobile lint:strict",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit -p apps/mobile/tsconfig.json && tsc --noEmit -p convex/tsconfig.json",
     "lockfile:check": "node ./scripts/check-bun-lockfiles.mjs"
   },
@@ -22,8 +24,12 @@
     "@ironkor/shared": "workspace:*"
   },
   "devDependencies": {
+    "@convex-dev/migrations": "^0.3.3",
+    "@edge-runtime/vm": "^5.0.0",
     "concurrently": "^9.2.1",
-    "convex": "^1.32.0"
+    "convex": "^1.32.0",
+    "convex-test": "^0.0.44",
+    "vitest": "^4.1.2"
   },
   "patchedDependencies": {
     "react-native-draggable-flatlist@4.0.3": "patches/react-native-draggable-flatlist@4.0.3.patch"

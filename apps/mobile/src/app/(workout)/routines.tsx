@@ -16,6 +16,8 @@ import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
 
+import type { RoutineSummaryRecord } from "@convex/types";
+
 
 export default function RoutinesScreen() {
   const { theme } = useTheme();
@@ -28,8 +30,11 @@ export default function RoutinesScreen() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
 
-  const routines = useMemo(() => routinesData ?? [], [routinesData]);
-  const activeRoutine = useMemo(() => routines.find((routine) => routine.isActive) ?? null, [routines]);
+  const routines = useMemo<RoutineSummaryRecord[]>(() => routinesData ?? [], [routinesData]);
+  const activeRoutine = useMemo(
+    () => routines.find((routine: RoutineSummaryRecord) => routine.isActive) ?? null,
+    [routines],
+  );
 
   const styles = useMemo(
     () =>
@@ -177,7 +182,7 @@ export default function RoutinesScreen() {
           </Text>
         </AppCard>
       ) : (
-        routines.map((routine, index) => (
+        routines.map((routine: RoutineSummaryRecord, index: number) => (
           <Animated.View
             entering={FadeInUp.delay(90 + index * 35).springify().damping(20)}
             key={String(routine._id)}

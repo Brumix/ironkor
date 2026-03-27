@@ -8,7 +8,6 @@ import { requireRoutineOwner, requireViewer } from "../authHelpers";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import type {
-  RoutineDetailedRecord,
   RoutineSectionSummaryRecord,
   RoutineSummaryRecord,
 } from "../types";
@@ -62,24 +61,6 @@ export async function getDetailedByIdHandler(
 ) {
   const { routine } = await requireRoutineOwner(ctx, args.routineId);
   return getDetailedRoutine(ctx, routine);
-}
-
-export async function listDetailedHandler(
-  ctx: QueryCtx,
-): Promise<RoutineDetailedRecord[]> {
-  const { viewer } = await requireViewer(ctx);
-  const routines = await ctx.db
-    .query("routines")
-    .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", viewer._id))
-    .order("desc")
-    .collect();
-
-  const detailed: RoutineDetailedRecord[] = [];
-  for (const routine of routines) {
-    detailed.push(await getDetailedRoutine(ctx, routine));
-  }
-
-  return detailed;
 }
 
 export async function getActiveDetailedHandler(ctx: QueryCtx) {

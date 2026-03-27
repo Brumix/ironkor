@@ -37,6 +37,7 @@ import {
   type EquipmentType,
   type MuscleType,
 } from "@ironkor/shared/constants";
+import { MAX_EXERCISES_PER_SESSION } from "@ironkor/shared/routines";
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
@@ -54,6 +55,7 @@ import {
   parseOptionalNumber,
   type ProgrammingSource,
 } from "@/features/workout/programmingDraft";
+import type { DraftRoutine, RoutineSection } from "@/features/workout/types";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { tokens, useTheme } from "@/theme";
 
@@ -105,6 +107,7 @@ function renderMuscleLabel(value: string) {
 type ExerciseSourceFilter = "all" | "preset" | "custom";
 
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -171,12 +174,17 @@ export default function SessionEditorScreen() {
 
   const selectedSession = useMemo(
     () =>
-      selectedRoutine?.sessions.find((session) => String(session._id) === sessionIdParam) ??
+      selectedRoutine?.sessions.find(
+        (session: RoutineSection) => String(session._id) === sessionIdParam,
+      ) ??
       null,
     [selectedRoutine, sessionIdParam],
   );
   const selectedDraftSession = useMemo(
-    () => draft?.sessions.find((session) => session.key === draftSessionKey) ?? null,
+    () =>
+      draft?.sessions.find(
+        (session: DraftRoutine["sessions"][number]) => session.key === draftSessionKey,
+      ) ?? null,
     [draft?.sessions, draftSessionKey],
   );
 
@@ -241,6 +249,7 @@ export default function SessionEditorScreen() {
     () => (isDraftMode ? selectedDraftSession?.exercises ?? [] : selectedSession?.exercises ?? []),
     [isDraftMode, selectedDraftSession?.exercises, selectedSession?.exercises],
   );
+  const isAtExerciseLimit = currentExercises.length >= MAX_EXERCISES_PER_SESSION;
   const sortedCurrentExercises = useMemo(
     () => [...currentExercises].sort((a, b) => a.order - b.order),
     [currentExercises],
@@ -732,7 +741,7 @@ export default function SessionEditorScreen() {
           onPress={async () => {
             const nextSectionName = sectionDraftName.trim() || selectedSession.name;
             const normalizedSectionName = normalizeDisplayNameKey(nextSectionName);
-            const duplicateSection = selectedRoutine.sessions.some((session) => {
+            const duplicateSection = selectedRoutine.sessions.some((session: RoutineSection) => {
               if (session._id === selectedSession._id) {
                 return false;
               }
@@ -764,6 +773,14 @@ export default function SessionEditorScreen() {
         <Pressable
           style={styles.primaryButton}
           onPress={() => {
+            if (isAtExerciseLimit) {
+              showAlert({
+                title: "Exercise limit reached",
+                message: `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+                variant: "info",
+              });
+              return;
+            }
             setReplaceSessionExerciseId(null);
             setExercisePickerVisible(true);
           }}
@@ -771,6 +788,12 @@ export default function SessionEditorScreen() {
           <Text style={styles.primaryButtonText}>Add exercise</Text>
         </Pressable>
       </View>
+
+      {isAtExerciseLimit ? (
+        <Text style={styles.helperText}>
+          {`Exercise limit reached. Each section supports up to ${MAX_EXERCISES_PER_SESSION} exercises.`}
+        </Text>
+      ) : null}
 
       {exerciseListData.length > 0 ? (
         <NestableDraggableFlatList
@@ -881,6 +904,15 @@ export default function SessionEditorScreen() {
                   <Pressable
                     style={styles.libraryRow}
                     onPress={async () => {
+                      if (replaceSessionExerciseId === null && isAtExerciseLimit) {
+                        showAlert({
+                          title: "Exercise limit reached",
+                          message: `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+                          variant: "info",
+                        });
+                        return;
+                      }
+
                       if (isDraftMode && selectedDraftSession) {
                         const currentEntry =
                           replaceSessionExerciseId !== null
@@ -913,7 +945,8 @@ export default function SessionEditorScreen() {
                       const currentEntry =
                         replaceSessionExerciseId !== null
                           ? selectedSession.exercises.find(
-                              (entry) => String(entry._id) === replaceSessionExerciseId,
+                              (entry: RoutineSection["exercises"][number]) =>
+                                String(entry._id) === replaceSessionExerciseId,
                             )
                           : undefined;
 

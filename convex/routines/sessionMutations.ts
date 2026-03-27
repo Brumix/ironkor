@@ -1,6 +1,7 @@
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import {
+  MAX_SESSIONS_PER_ROUTINE,
   MAX_SECTION_NAME_LENGTH,
   WeeklyPlanEntry,
   assert,
@@ -47,6 +48,10 @@ export async function upsertSessionHandler(
   await ensureUniqueSessionName(ctx, viewer._id, args.routineId, name);
 
   const sessions = await getSessionsByRoutine(ctx, args.routineId, viewer._id);
+  assert(
+    sessions.length < MAX_SESSIONS_PER_ROUTINE,
+    `Routines can have at most ${MAX_SESSIONS_PER_ROUTINE} sections.`,
+  );
   const nextOrder = sessions.length;
 
   const sessionId = await ctx.db.insert("routineSessions", {

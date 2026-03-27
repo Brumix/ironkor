@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
@@ -8,13 +9,10 @@ import { getClerkSSORuntimeError, useSSO } from "@/features/auth/clerkCompat";
 import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
-export default function AuthSocialButtons({
-  onAuthenticated,
-}: {
-  onAuthenticated: () => void;
-}) {
+export default function AuthSocialButtons() {
   const { theme } = useTheme();
   const buttonStyles = styles(theme);
+  const router = useRouter();
   const { startSSOFlow } = useSSO();
   const ssoRuntimeError = getClerkSSORuntimeError();
 
@@ -44,11 +42,7 @@ export default function AuthSocialButtons({
         strategy: "oauth_google",
       });
       if (createdSessionId && setActive) {
-        await activateAuthSession(setActive, createdSessionId, {
-          replace: () => {
-            onAuthenticated();
-          },
-        });
+        await activateAuthSession(setActive, createdSessionId, router);
       }
     } catch (error: unknown) {
       const message = resolveAuthErrorMessage(
@@ -79,11 +73,7 @@ export default function AuthSocialButtons({
         strategy: "oauth_apple",
       });
       if (createdSessionId && setActive) {
-        await activateAuthSession(setActive, createdSessionId, {
-          replace: () => {
-            onAuthenticated();
-          },
-        });
+        await activateAuthSession(setActive, createdSessionId, router);
       }
     } catch (error: unknown) {
       const message = resolveAuthErrorMessage(

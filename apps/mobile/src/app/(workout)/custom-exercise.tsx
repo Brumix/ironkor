@@ -70,6 +70,7 @@ function normalizeCreatePayload(args: {
   };
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function CustomExerciseScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -105,7 +106,7 @@ export default function CustomExerciseScreen() {
     if (!exerciseIdParam || !existingExerciseDoc) {
       return null;
     }
-    return existingExerciseDoc.find((e) => e._id === exerciseIdParam) ?? null;
+    return existingExerciseDoc.find((exercise) => exercise._id === exerciseIdParam) ?? null;
   }, [exerciseIdParam, existingExerciseDoc]);
 
   useEffect(() => {
@@ -223,6 +224,7 @@ export default function CustomExerciseScreen() {
     [theme],
   );
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async function handleSave() {
     if (isSubmitting) {
       return;

@@ -7,6 +7,8 @@ import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
 
 const convexSessionErrorMessage =
   "We signed you in, but couldn't establish your app session. Please try again.";
+const accountDeletionErrorMessage =
+  "Your account deletion is in progress. Please wait for it to finish before signing in again.";
 
 export function useViewerBootstrap() {
   const { isLoaded: isClerkLoaded, isSignedIn } = useClerkAuth();
@@ -22,6 +24,11 @@ export function useViewerBootstrap() {
       return;
     }
 
+    if (viewer?.deletionStatus) {
+      setErrorMessage(accountDeletionErrorMessage);
+      return;
+    }
+
     if (isLoading || isAuthenticated) {
       setErrorMessage((currentError) =>
         currentError === convexSessionErrorMessage ? null : currentError,
@@ -32,7 +39,7 @@ export function useViewerBootstrap() {
     setErrorMessage((currentError) =>
       currentError ?? convexSessionErrorMessage,
     );
-  }, [isAuthenticated, isClerkLoaded, isLoading, isSignedIn]);
+  }, [isAuthenticated, isClerkLoaded, isLoading, isSignedIn, viewer?.deletionStatus]);
 
   useEffect(() => {
     if (!isAuthenticated || viewer !== null || isEnsuringViewer) {
@@ -74,6 +81,7 @@ export function useViewerBootstrap() {
     !isEnsuringViewer &&
     viewer !== undefined &&
     viewer !== null &&
+    !viewer.deletionStatus &&
     !errorMessage;
 
   return {

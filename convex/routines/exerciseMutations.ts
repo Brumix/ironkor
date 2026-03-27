@@ -1,4 +1,5 @@
 import {
+  MAX_EXERCISES_PER_SESSION,
   assert,
   buildProgrammingPatch,
   buildProgrammingRecord,
@@ -57,6 +58,10 @@ export async function upsertSessionExerciseHandler(
   }
 
   const current = await getSessionExercisesBySession(ctx, args.sessionId, viewer._id);
+  assert(
+    current.length < MAX_EXERCISES_PER_SESSION,
+    `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+  );
   const nextProgramming = buildProgrammingRecord(args);
   return ctx.db.insert("sessionExercises", {
     userId: viewer._id,

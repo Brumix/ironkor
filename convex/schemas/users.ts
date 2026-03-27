@@ -1,12 +1,17 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
+import { accountDeletionStatus } from "./accountDeletionJobs";
+
 export const users = defineTable({
   tokenIdentifier: v.string(),
   clerkUserId: v.string(),
   primaryEmail: v.optional(v.string()),
   displayName: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
+  deletionStatus: v.optional(accountDeletionStatus),
+  deletionRequestedAt: v.optional(v.number()),
+  deletionJobId: v.optional(v.id("accountDeletionJobs")),
   createdAt: v.number(),
   updatedAt: v.number(),
 })

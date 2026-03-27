@@ -14,6 +14,7 @@ import {
 } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export default function ForgotPasswordScreen() {
   const { theme } = useTheme();
   const router = useRouter();
