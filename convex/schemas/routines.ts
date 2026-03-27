@@ -12,12 +12,13 @@ export const weeklyPlanEntry = v.object({
 
 export const routines = defineTable({
     name: v.string(),
+    nameKey: v.optional(v.string()),
     daysPerWeek: v.number(),
     isActive: v.boolean(),
     sessionOrder: v.array(v.id("routineSessions")),
     weeklyPlan: v.array(weeklyPlanEntry),
-    createdAt: v.number(),
     updatedAt: v.number(),
 })
     .index("by_isActive", ["isActive"])
+    .index("by_nameKey", ["nameKey"])
     .index("by_updatedAt", ["updatedAt"]);

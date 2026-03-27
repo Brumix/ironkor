@@ -2,83 +2,144 @@
 
 Project guidance for AI/code agents working in this repository.
 
-## Project Snapshot
-- Mobile gym logbook built with Expo + React Native.
-- Core UX goal: fast, low-friction workout tracking while in the gym.
-- Main app area lives in `src/app/(workout)`.
-- Backend uses Convex; root app requires `EXPO_PUBLIC_CONVEX_URL`.
+## Monorepo Overview
 
-## Stack and Commands
-- Stack: Expo SDK 55, React 19, React Native 0.83, Expo Router, Convex, TypeScript, ESLint flat config.
-- Preferred package manager for dependency changes: Bun.
-- Install dependencies: `bun install`
-- Run app + Convex: `bun run start`
-- Run Expo only: `bun run dev:expo`
-- Run Convex only: `bun run dev:convex`
-- Lint: `bun run lint`
-- Lint (auto-fix): `bun run lint:fix`
-- Typecheck: `npx tsc --noEmit`
-- After non-trivial changes, always run `bun run lint` and `npx tsc --noEmit`.
+This is the **Ironkor** platform — a Bun workspace monorepo with one shared Convex backend and multiple client apps.
 
-## Routing and Navigation
-- Expo Router source is `src/app`.
-- Keep tab navigation in `src/app/(workout)/_layout.tsx`.
-- Keep hidden/editor flows registered in workout layout using `href: null`.
-- When changing navigation, verify together:
-  - `src/app/_layout.tsx`
-  - `src/app/index.tsx`
-  - `src/app/(workout)/_layout.tsx`
-  - `src/components/workout/WorkoutBottomNav.tsx`
-- Ensure custom tab bar route names match `Tabs.Screen` names.
-- If route groups/pages are renamed, update redirects and typed routes, then recheck `.expo/types/router.d.ts`.
-- If routes behave unexpectedly, clear Expo cache with `npx expo start -c`.
+```
+ironkor/                      # repo root — Git root, workspace root
+├── convex/                   # Shared Convex backend (schema, functions, generated types)
+├── packages/
+│   └── shared/               # @ironkor/shared — pure TS constants, enums, validators
+└── apps/
+    └── mobile/               # Expo + React Native app (Ironkor Mobile)
+```
 
-## UI and Theming
-- Prefer semantic theme tokens over hardcoded colors.
-- Theme entrypoint: `@/theme`.
-- Read before styling changes:
-  - `src/theme/README.md`
-  - `src/theme/tokens.ts`
-  - `src/theme/ThemeProvider.tsx`
-- Reuse UI primitives before creating new ones:
-  - `AppButton`, `AppCard`, `AppChip`, `AppTextField`
-  - `FloatingActionButton`, `MetricCard`, `QuickActionTile`
-  - `SectionHeader`, `PressableScale`, `WorkoutPage`
-- Preserve visual language: premium fitness UI, strong contrast, warm gradients, rounded cards, thumb-friendly actions.
+### Architecture intent
 
-## Workout Feature Organization
-- Shared workout domain code belongs in `src/features/workout`.
-- Split feature logic by concern:
-  - `types.ts` for domain types
-  - `mockData.ts` for sample local data
-  - `selectors.ts` for derived/planning logic
-  - `mappers.ts` for transformation helpers
-- Keep route files focused on composition, not heavy business logic.
-- Placement defaults:
-  - workout screens: `src/app/(workout)`
-  - workout-specific reusable components: `src/components/workout`
-  - generic reusable UI: `src/components/ui`
-  - workout domain helpers: `src/features/workout`
+- Keep **one Convex backend** for all first-party apps (`mobile`, `web`, future vertical apps).
+- Keep **platform/domain logic** in Convex and `packages/shared`, and keep app folders focused on UI and app-specific flows.
+- Scale by adding new app packages under `apps/` and new backend domains under `convex/<domain>/` rather than forking backends.
 
-## Data and State Rules
-- If change is UI-only, avoid adding backend complexity.
-- If persistence is needed, inspect Convex before introducing local storage patterns.
-- Do not replace Convex-backed behavior with mock/local-only state unless explicitly requested.
-- Preserve existing environment requirements, including `EXPO_PUBLIC_CONVEX_URL`.
+## Stack
+
+- **Backend:** Convex (^1.32.0) — schema at `convex/schema.ts`, functions in `convex/*.ts`
+- **Shared package:** `@ironkor/shared` — enums, constants, date helpers safe for server + client
+- **Mobile app:** Expo SDK 55, React 19, React Native 0.83, Expo Router
+- **Language:** TypeScript (strict throughout)
+- **Package manager:** Bun (workspaces)
+
+## Key Commands (run from repo root)
+
+| Command | Description |
+|---------|-------------|
+| `bun install` | Install all workspace dependencies |
+| `bun run start` | Codegen once + run Convex dev + Expo concurrently |
+| `bun run dev` | Run Convex dev + Expo concurrently (skip initial codegen) |
+| `bun run convex:dev` | Run Convex dev server only |
+| `bun run convex:deploy` | Deploy Convex to production |
+| `bun run mobile:dev` | Run Expo dev server only |
+| `bun run lint` | Lint the mobile app |
+| `bun run typecheck` | Typecheck mobile + convex |
+
+## Environment Variables
+
+| Variable | Location | Purpose |
+|----------|----------|---------|
+| `EXPO_PUBLIC_CONVEX_URL` | `apps/mobile/.env.local` | Convex HTTP URL for the Expo client |
+| `CONVEX_URL` | root `.env.local` or shell | Convex URL used by seed scripts |
+
+## Adding a New App
+
+1. Create `apps/<name>/` with its own `package.json` (add `"@ironkor/shared": "workspace:*"` and `"convex"` as dependencies).
+2. Point its Convex client at `NEXT_PUBLIC_CONVEX_URL` (or equivalent).
+3. Run `bun install` from the repo root to wire up workspace links.
+
+## Extending Convex (new vertical)
+
+- Add schema tables in `convex/schemas/` and register them in `convex/schema.ts`.
+- Add function modules under `convex/<domain>/` (e.g. `convex/nutrition/`).
+- Add shared types/constants to `packages/shared/` if needed by both Convex and clients.
+
+### Recommended domain structure
+
+When adding a new vertical (e.g. nutrition), use this pattern:
+
+```
+convex/
+├── schemas/
+│   ├── car*.ts
+│   ├── workout*.ts
+│   └── nutrition*.ts
+├── car/
+├── workout/
+└── nutrition/
+```
+
+Guidelines:
+- Keep domain boundaries explicit (do not mix unrelated domain logic in one large file).
+- Keep shared cross-domain primitives in `packages/shared`, not duplicated in apps.
+- Prefer additive schema evolution and safe migrations for existing data.
 
 ## Editing and Quality Rules
-- Prefer small, surgical changes over broad rewrites.
-- Preserve file and route names unless rename is required.
-- Do not create parallel design systems or duplicate UI primitives.
-- Avoid new dependencies unless there is clear payoff.
-- Keep TypeScript strict and avoid `any`.
-- Reuse established import and typing patterns.
-- Prefer readable selectors/helpers over large inline screen calculations.
-- For forms/editors, optimize for in-gym speed: minimal taps, clear hierarchy, large touch targets, obvious primary action.
-- Keep product copy in English unless explicitly requested otherwise.
 
-## Before Finishing
-- Run `bun run lint`.
-- Run `npx tsc --noEmit`.
-- If routes changed, note whether Expo cache clear may be needed.
-- State assumptions clearly in the handoff.
+- Always make changes from the correct workspace: root for Convex and shared, `apps/mobile` for the mobile app.
+- Do not duplicate Convex config or schema across apps — one deployment serves all.
+- Keep TypeScript strict; avoid `any`.
+- After non-trivial changes, run `bun run lint` and `bun run typecheck` from root.
+- Follow shared UI interaction rules in `docs/UI_STANDARDS.md` when changing card actions or list ordering behavior.
+- For workout-editor UX in the mobile app, check `apps/mobile/AGENTS.md` before changing routine creation/editing flows or planner behavior.
+- For the mobile routine editor, treat page-level edits as local until the user presses Save. Do not persist add/delete/reorder/name/planner changes for an existing routine during routine-editor interactions.
+
+## Exercise Catalog Performance Guardrails
+
+- Treat `convex/schemas/exercises.ts` as a high-read catalog table.
+- Keep catalog fields denormalized in `exercises` for read speed. Do not split `equipment`, `bodyPart`, or `primaryMuscle` into separate tables unless there is a non-performance product need.
+- Avoid unbounded `.collect()` in user-facing exercise queries. Prefer:
+  - `withIndex(...).take(n)` for bounded reads
+  - `.paginate(...)` for browsing lists
+  - `withSearchIndex(...)` for text search.
+- For search endpoints, move as much filtering as possible into `withSearchIndex(...).eq(...)` filter fields.
+- Maintain indexes around real query shapes from mobile picker/browse flows. Remove unused/redundant indexes because extra indexes increase write costs.
+- Use staged indexes for large backfills on production-scale `exercises` data.
+- Keep seed/import paths idempotent (match on normalized `nameText`) and normalize server-side before inserts.
+- For mobile search UX, debounce user input to reduce query churn under concurrent usage.
+
+## Scaling Playbook
+
+### Add a new app (web/admin/nutrition)
+
+1. Create `apps/<name>/` with its own `package.json`.
+2. Add dependencies:
+   - `"convex"` for client hooks and generated API usage
+   - `"@ironkor/shared": "workspace:*"` for shared contracts/utilities
+3. Add app-specific env var (for example `NEXT_PUBLIC_CONVEX_URL`) pointing to the same Convex deployment.
+4. Keep app-level UI and routing in that app folder; do not copy backend logic into app code.
+
+### Add a new backend vertical
+
+1. Add domain tables under `convex/schemas/`.
+2. Register tables in `convex/schema.ts`.
+3. Add queries/mutations/actions under `convex/<domain>/`.
+4. Expose only the minimum app-facing API needed by clients.
+5. If breaking changes are required, use a migration strategy before narrowing schema types.
+
+### What not to do
+
+- Do not create multiple Convex deployments for the same product surface unless strict isolation is required.
+- Do not place reusable domain types inside app-local folders.
+- Do not duplicate constants/enums across apps and Convex.
+
+## See Also
+
+- `apps/mobile/AGENTS.md` — mobile-specific coding guidance
+- `convex/README.md` — Convex function reference
+- `docs/UI_STANDARDS.md` — shared card actions and drag-reorder standards
+
+<!-- convex-ai-start -->
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+<!-- convex-ai-end -->

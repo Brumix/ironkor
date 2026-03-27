@@ -1,0 +1,15 @@
+{
+  "name": "@ironkor/shared",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./constants.ts",
+  "types": "./constants.ts",
+  "exports": {
+    ".": "./constants.ts",
+    "./constants": "./constants.ts",
+    "./enums": "./enums.ts",
+    "./dates": "./dates.ts",
+    "./ui": "./ui.ts",
+    "./strings": "./strings.ts"
+  }
+}

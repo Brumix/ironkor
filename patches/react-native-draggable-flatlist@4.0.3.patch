@@ -1,0 +1,167 @@
+diff --git a/src/components/DraggableFlatList.tsx b/src/components/DraggableFlatList.tsx
+index 7c88afc54e5d7db3dd8b15819d5833681757f039..bc5531d24deb4866425699128fb603cf70128067 100644
+--- a/src/components/DraggableFlatList.tsx
++++ b/src/components/DraggableFlatList.tsx
+@@ -10,7 +10,6 @@ import {
+   ListRenderItem,
+   FlatListProps,
+   LayoutChangeEvent,
+-  InteractionManager,
+ } from "react-native";
+ import {
+   FlatList,
+@@ -95,6 +94,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+ 
+   const {
++    activateAfterLongPress,
+     dragHitSlop = DEFAULT_PROPS.dragHitSlop,
+     scrollEnabled = DEFAULT_PROPS.scrollEnabled,
+     activationDistance: activationDistanceProp = DEFAULT_PROPS.activationDistance,
+@@ -119,7 +118,7 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+   if (dataHasChanged) {
+     // When data changes make sure `activeKey` is nulled out in the same render pass
+     activeKey = null;
+-    InteractionManager.runAfterInteractions(() => {
++    requestAnimationFrame(() => {
+       reset();
+     });
+   }
+@@ -140,18 +140,20 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+     });
+   }, [props.data, keyExtractor, keyToIndexRef]);
+ 
++  const onDragBegin = useStableCallback((index: number) => {
++    props.onDragBegin?.(index);
++  });
++
+   const drag = useStableCallback((activeKey: string) => {
+     if (disabled.value) return;
+     const index = keyToIndexRef.current.get(activeKey);
+     const cellData = cellDataRef.current.get(activeKey);
+     if (cellData) {
+       activeCellOffset.value = cellData.measurements.offset;
+       activeCellSize.value = cellData.measurements.size;
+     }
+ 
+-    const { onDragBegin } = propsRef.current;
+     if (index !== undefined) {
+       spacerIndexAnim.value = index;
+       activeIndexAnim.value = index;
+       setActiveKey(activeKey);
+-      onDragBegin?.(index);
+     }
+   });
+@@ -277,6 +279,11 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+   const panGesture = Gesture.Pan()
+     .onBegin((evt) => {
+       gestureDisabled.value = disabled.value;
+       if (gestureDisabled.value) return;
+       panGestureState.value = evt.state;
++    })
++    .onStart(() => {
++      if (gestureDisabled.value) return;
++      if (activeIndexAnim.value >= 0) {
++        runOnJS(onDragBegin)(activeIndexAnim.value);
++      }
+     })
+     .onUpdate((evt) => {
+@@ -323,6 +323,9 @@ function DraggableFlatListInner<T>(props: DraggableFlatListProps<T>) {
+      runOnJS(onContainerTouchEnd)();
+    });
+ 
++  if (typeof activateAfterLongPress === "number" && activateAfterLongPress > 0) {
++    panGesture.activateAfterLongPress(activateAfterLongPress);
++  }
+   if (dragHitSlop) panGesture.hitSlop(dragHitSlop);
+   if (activationDistanceProp) {
+     const activeOffset = [-activationDistanceProp, activationDistanceProp];
+diff --git a/src/components/NestableDraggableFlatList.tsx b/src/components/NestableDraggableFlatList.tsx
+index 155935276d83e232adba7486c3803998c1b90c7b..e60fc6d53894ecc13fe07303330c79484ddf8cf0 100644
+--- a/src/components/NestableDraggableFlatList.tsx
++++ b/src/components/NestableDraggableFlatList.tsx
+@@ -1,5 +1,5 @@
+ import React, { useRef, useState } from "react";
+-import { findNodeHandle, LogBox } from "react-native";
++import { findNodeHandle, LogBox, UIManager } from "react-native";
+ import Animated, {
+   useDerivedValue,
+   useSharedValue,
+@@ -48,7 +48,8 @@ function NestableDraggableFlatListInner<T>(
+   });
+ 
+   const onListContainerLayout = useStableCallback(async ({ containerRef }) => {
+-    const nodeHandle = findNodeHandle(scrollableRef.current);
++    const containerNode = findNodeHandle(containerRef.current);
++    const scrollNode = findNodeHandle(scrollableRef.current);
+ 
+     const onSuccess = (_x: number, y: number) => {
+       listVerticalOffset.value = y;
+@@ -56,8 +57,13 @@ function NestableDraggableFlatListInner<T>(
+     const onFail = () => {
+       console.log("## nested draggable list measure fail");
+     };
+-    //@ts-ignore
+-    containerRef.current.measureLayout(nodeHandle, onSuccess, onFail);
++
++    if (containerNode == null || scrollNode == null) {
++      onFail();
++      return;
++    }
++
++    UIManager.measureLayout(containerNode, scrollNode, onFail, onSuccess);
+   });
+ 
+  const onDragBegin: DraggableFlatListProps<T>["onDragBegin"] = useStableCallback(
+diff --git a/src/types.ts b/src/types.ts
+index 0222ce08e6562425ddda34fef91aa139d2dd13da..3aebae3335afd7d9a0c54c3096529fdcc5a0e062 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -25,6 +25,7 @@ export type DraggableFlatListProps<T> = Modify<
+   FlatListProps<T>,
+   {
++    activateAfterLongPress?: number;
+     data: T[];
+     activationDistance?: number;
+     animationConfig?: Partial<WithSpringConfig>;
+diff --git a/lib/typescript/types.d.ts b/lib/typescript/types.d.ts
+index 0659dfe926569cf9600a58ff76fc9a8ddf89937d..8d9d128d1049d63d725dff0e6b9c4f3b58d3dc39 100644
+--- a/lib/typescript/types.d.ts
++++ b/lib/typescript/types.d.ts
+@@ -11,6 +11,7 @@ export declare type DragEndParams<T> = {
+ };
+ declare type Modify<T, R> = Omit<T, keyof R> & R;
+ declare type DefaultProps = Readonly<typeof DEFAULT_PROPS>;
+ export declare type DraggableFlatListProps<T> = Modify<FlatListProps<T>, {
++    activateAfterLongPress?: number;
+     data: T[];
+     activationDistance?: number;
+     animationConfig?: Partial<WithSpringConfig>;
+diff --git a/lib/typescript/components/DraggableFlatList.d.ts b/lib/typescript/components/DraggableFlatList.d.ts
+index 09ec0235a5f3e6ffb0dbcb2c0c8d0a3992d50f75..3ad63c32c0347331ab24d6e1940c7bbe17d1329c 100644
+--- a/lib/typescript/components/DraggableFlatList.d.ts
++++ b/lib/typescript/components/DraggableFlatList.d.ts
+@@ -4,8 +4,9 @@ import { FlatList } from "react-native-gesture-handler";
+ import { DraggableFlatListProps } from "../types";
+ declare function DraggableFlatList<T>(props: DraggableFlatListProps<T>, ref?: React.ForwardedRef<FlatList<T>> | null): JSX.Element;
+-declare const _default: <T>(props: Omit<FlatListProps<T>, "keyExtractor" | "data" | "renderItem" | "debug" | "scrollEnabled" | "autoscrollThreshold" | "autoscrollSpeed" | "animationConfig" | "dragHitSlop" | "activationDistance" | "dragItemOverflow" | "containerStyle" | "onDragBegin" | "onDragEnd" | "onPlaceholderIndexChange" | "onRelease" | "onScrollOffsetChange" | "renderPlaceholder" | "simultaneousHandlers" | "outerScrollOffset" | "onAnimValInit" | "itemEnteringAnimation" | "itemExitingAnimation" | "itemLayoutAnimation" | "enableLayoutAnimationExperimental" | "onContainerLayout"> & {
++declare const _default: <T>(props: Omit<FlatListProps<T>, "keyExtractor" | "data" | "renderItem" | "debug" | "scrollEnabled" | "autoscrollThreshold" | "autoscrollSpeed" | "animationConfig" | "dragHitSlop" | "activationDistance" | "activateAfterLongPress" | "dragItemOverflow" | "containerStyle" | "onDragBegin" | "onDragEnd" | "onPlaceholderIndexChange" | "onRelease" | "onScrollOffsetChange" | "renderPlaceholder" | "simultaneousHandlers" | "outerScrollOffset" | "onAnimValInit" | "itemEnteringAnimation" | "itemExitingAnimation" | "itemLayoutAnimation" | "enableLayoutAnimationExperimental" | "onContainerLayout"> & {
+     data: T[];
++    activateAfterLongPress?: number | undefined;
+     activationDistance?: number | undefined;
+     animationConfig?: Partial<import("react-native-reanimated").WithSpringConfig> | undefined;
+     autoscrollSpeed?: number | undefined;
+diff --git a/lib/typescript/components/NestableDraggableFlatList.d.ts b/lib/typescript/components/NestableDraggableFlatList.d.ts
+index 7c0867c2616b038d2aeec8b07e5d2611ec8d2745..e8b8968bdfd63e7c2e6675ff02def263e9ecbce3 100644
+--- a/lib/typescript/components/NestableDraggableFlatList.d.ts
++++ b/lib/typescript/components/NestableDraggableFlatList.d.ts
+@@ -3,8 +3,9 @@ import Animated from "react-native-reanimated";
+ import { DraggableFlatListProps } from "../types";
+ import { FlatList } from "react-native-gesture-handler";
+ declare function NestableDraggableFlatListInner<T>(props: DraggableFlatListProps<T>, ref?: React.ForwardedRef<FlatList<T>>): JSX.Element;
+-export declare const NestableDraggableFlatList: <T>(props: Omit<import("react-native").FlatListProps<T>, "keyExtractor" | "data" | "renderItem" | "debug" | "scrollEnabled" | "autoscrollThreshold" | "autoscrollSpeed" | "animationConfig" | "dragHitSlop" | "activationDistance" | "dragItemOverflow" | "containerStyle" | "onDragBegin" | "onDragEnd" | "onPlaceholderIndexChange" | "onRelease" | "onScrollOffsetChange" | "renderPlaceholder" | "simultaneousHandlers" | "outerScrollOffset" | "onAnimValInit" | "itemEnteringAnimation" | "itemExitingAnimation" | "itemLayoutAnimation" | "enableLayoutAnimationExperimental" | "onContainerLayout"> & {
++export declare const NestableDraggableFlatList: <T>(props: Omit<import("react-native").FlatListProps<T>, "keyExtractor" | "data" | "renderItem" | "debug" | "scrollEnabled" | "autoscrollThreshold" | "autoscrollSpeed" | "animationConfig" | "dragHitSlop" | "activationDistance" | "activateAfterLongPress" | "dragItemOverflow" | "containerStyle" | "onDragBegin" | "onDragEnd" | "onPlaceholderIndexChange" | "onRelease" | "onScrollOffsetChange" | "renderPlaceholder" | "simultaneousHandlers" | "outerScrollOffset" | "onAnimValInit" | "itemEnteringAnimation" | "itemExitingAnimation" | "itemLayoutAnimation" | "enableLayoutAnimationExperimental" | "onContainerLayout"> & {
+     data: T[];
++    activateAfterLongPress?: number | undefined;
+     activationDistance?: number | undefined;
+     animationConfig?: Partial<import("react-native-reanimated").WithSpringConfig> | undefined;
+     autoscrollSpeed?: number | undefined;
