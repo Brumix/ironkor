@@ -107,17 +107,6 @@ function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function reorderKeysByIndex(keys: string[], from: number, to: number) {
-  if (from === to || from < 0 || to < 0 || from >= keys.length || to >= keys.length) {
-    return keys;
-  }
-
-  const reordered = [...keys];
-  const [moved] = reordered.splice(from, 1);
-  reordered.splice(to, 0, moved);
-  return reordered;
-}
-
 
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
@@ -141,7 +130,6 @@ export default function SessionEditorScreen() {
 
   const debouncedSearch = useDebouncedValue(searchText, tokens.motion.searchDebounce);
 
-  const routinesData = useQuery(api.routines.listDetailed);
   const exercisesData = useQuery(
     api.exercises.listPreview,
     exercisePickerVisible
@@ -164,7 +152,6 @@ export default function SessionEditorScreen() {
   const reorderSessionExercises = useMutation(api.routines.reorderSessionExercises);
   const createCustomExercise = useMutation(api.exercises.createCustom);
 
-  const routines = useMemo(() => routinesData ?? [], [routinesData]);
   const staleExercisesRef = useRef<typeof exercisesData>([]);
   if (exercisesData !== undefined) {
     staleExercisesRef.current = exercisesData;
@@ -176,11 +163,13 @@ export default function SessionEditorScreen() {
   const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : "";
   const draftSessionKey = typeof params.draftSessionKey === "string" ? params.draftSessionKey : "";
   const isDraftMode = routineIdParam === "new";
-
-  const selectedRoutine = useMemo(
-    () => routines.find((routine) => String(routine._id) === routineIdParam) ?? null,
-    [routineIdParam, routines],
+  const selectedRoutine = useQuery(
+    api.routines.getDetailedById,
+    !isDraftMode && routineIdParam
+      ? { routineId: routineIdParam as Id<"routines"> }
+      : "skip",
   );
+
   const selectedSession = useMemo(
     () =>
       selectedRoutine?.sessions.find((session) => String(session._id) === sessionIdParam) ??
@@ -219,8 +208,6 @@ export default function SessionEditorScreen() {
 
   const programmingEditorScrollRef = useRef<ScrollView | null>(null);
   const customExerciseScrollRef = useRef<ScrollView | null>(null);
-  const dragStartIndexRef = useRef<number | null>(null);
-  const placeholderIndexRef = useRef<number | null>(null);
 
   const onProgrammingNotesFocus = useCallback(() => {
     scheduleScrollToEndForNotes(programmingEditorScrollRef);
@@ -374,8 +361,6 @@ export default function SessionEditorScreen() {
     ({ data }: DragEndParams<{ key: string; entry: (typeof sortedCurrentExercises)[number] }>) => {
       const orderedKeys = data.map((item) => item.key);
       setExerciseOrderKeys(orderedKeys);
-      dragStartIndexRef.current = null;
-      placeholderIndexRef.current = null;
       applyExerciseOrder(orderedKeys).catch(() => {
         showAlert({ title: "Failed", message: "Could not reorder exercises.", variant: "error" });
         setExerciseOrderKeys(
@@ -385,30 +370,6 @@ export default function SessionEditorScreen() {
     },
     [applyExerciseOrder, resolveExerciseKey, showAlert, sortedCurrentExercises],
   );
-
-  const handleExerciseRelease = useCallback(() => {
-    const from = dragStartIndexRef.current;
-    const to = placeholderIndexRef.current;
-
-    if (from === null || to === null || from === to) {
-      return;
-    }
-
-    const reorderedKeys = reorderKeysByIndex(exerciseOrderKeys, from, to);
-    setExerciseOrderKeys(reorderedKeys);
-    applyExerciseOrder(reorderedKeys).catch(() => {
-      showAlert({ title: "Failed", message: "Could not reorder exercises.", variant: "error" });
-      setExerciseOrderKeys(
-        sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)),
-      );
-    });
-  }, [
-    applyExerciseOrder,
-    exerciseOrderKeys,
-    resolveExerciseKey,
-    showAlert,
-    sortedCurrentExercises,
-  ]);
 
   const styles = useMemo(
     () =>
@@ -749,7 +710,7 @@ export default function SessionEditorScreen() {
     ],
   );
 
-  if (!isDraftMode && routinesData === undefined) {
+  if (!isDraftMode && selectedRoutine === undefined) {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
@@ -764,7 +725,10 @@ export default function SessionEditorScreen() {
     );
   }
 
-  if ((isDraftMode && !selectedDraftSession) || (!isDraftMode && (!selectedRoutine || !selectedSession))) {
+  if (
+    (isDraftMode && !selectedDraftSession) ||
+    (!isDraftMode && (!selectedRoutine || !selectedSession))
+  ) {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
@@ -852,16 +816,10 @@ export default function SessionEditorScreen() {
           containerStyle={{ flexGrow: 0 }}
           data={exerciseListData}
           keyExtractor={(item) => item.key}
-          onDragBegin={(index) => {
-            dragStartIndexRef.current = index;
-            placeholderIndexRef.current = index;
+          onDragBegin={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
           }}
           onDragEnd={handleExerciseDragEnd}
-          onPlaceholderIndexChange={(index) => {
-            placeholderIndexRef.current = index;
-          }}
-          onRelease={handleExerciseRelease}
           renderItem={renderExerciseItem}
           scrollEnabled={false}
         />

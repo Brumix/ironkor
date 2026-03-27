@@ -16,9 +16,13 @@ import type {
   RoutineDetailedRecord,
   RoutineSectionExerciseRecord,
   RoutineSectionRecord,
+  RoutineSectionSummaryRecord,
+  RoutineSummaryRecord,
 } from "./types";
 
 const DAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
+const MAX_ROUTINE_NAME_LENGTH = 80;
+const MAX_SECTION_NAME_LENGTH = 80;
 const TRAINING_DAY_MAP: Record<number, number[]> = {
   1: [0],
   2: [0, 3],
@@ -36,37 +40,24 @@ interface WeeklyPlanEntry {
   manualSessionId?: Id<"routineSessions">;
 }
 
-interface LegacyExerciseProgramming {
-  sets?: number;
-  repsText?: string;
-  restSeconds?: number;
-}
-
-interface LegacyRoutineShape extends Doc<"routines"> {
-  createdAt?: number;
-}
-
-interface LegacyRoutineSessionShape extends Doc<"routineSessions"> {
-  createdAt?: number;
-}
-
-interface LegacyExerciseShape extends Doc<"exercises"> {
-  variant?: string;
-  setsTarget?: number;
-  repsTarget?: string;
-  restSeconds?: number;
-  primaryMuscles?: string[];
-  secondaryMuscles?: string[];
-}
-
-interface LegacySessionExerciseShape extends Doc<"sessionExercises"> {
-  createdAt?: number;
-}
-
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new ConvexError(message);
   }
+}
+
+function requireName(
+  value: string,
+  fieldLabel: string,
+  maxLength: number,
+): string {
+  const trimmed = value.trim();
+  assert(trimmed.length > 0, `${fieldLabel} is required.`);
+  assert(
+    trimmed.length <= maxLength,
+    `${fieldLabel} must be ${maxLength} characters or fewer.`,
+  );
+  return trimmed;
 }
 
 function normalizeDaysPerWeek(daysPerWeek: number) {
@@ -193,18 +184,6 @@ function toExerciseCatalogRecord(doc: Doc<"exercises">): ExerciseCatalogRecord {
   };
 }
 
-function getLegacyProgramming(exercise: LegacyExerciseShape | null): LegacyExerciseProgramming {
-  if (!exercise) {
-    return {};
-  }
-
-  return {
-    sets: exercise.setsTarget,
-    repsText: exercise.repsTarget,
-    restSeconds: exercise.restSeconds,
-  };
-}
-
 function toSectionExerciseRecord(
   entry: Doc<"sessionExercises">,
   exercise: Doc<"exercises">,
@@ -252,6 +231,22 @@ async function ensureUniqueRoutineName(
   options?: { excludeRoutineId?: Id<"routines"> },
 ) {
   const normalizedKey = normalizeDisplayNameKey(name);
+  const indexedMatches = await ctx.db
+    .query("routines")
+    .withIndex("by_nameKey", (q) => q.eq("nameKey", normalizedKey))
+    .collect();
+
+  const indexedDuplicate = indexedMatches.find((routine) => {
+    if (options?.excludeRoutineId && routine._id === options.excludeRoutineId) {
+      return false;
+    }
+    return true;
+  });
+  if (indexedDuplicate) {
+    assert(false, "A routine with this name already exists.");
+  }
+
+  // Backward-compatible fallback for legacy documents missing nameKey.
   const routines = await ctx.db
     .query("routines")
     .withIndex("by_updatedAt")
@@ -274,6 +269,23 @@ async function ensureUniqueSessionName(
   options?: { excludeSessionId?: Id<"routineSessions"> },
 ) {
   const normalizedKey = normalizeDisplayNameKey(name);
+  const indexedMatches = await ctx.db
+    .query("routineSessions")
+    .withIndex("by_routine_and_nameKey", (q) =>
+      q.eq("routineId", routineId).eq("nameKey", normalizedKey),
+    )
+    .collect();
+
+  const indexedDuplicate = indexedMatches.find((session) => {
+    if (options?.excludeSessionId && session._id === options.excludeSessionId) {
+      return false;
+    }
+    return true;
+  });
+  if (indexedDuplicate) {
+    assert(false, "This routine already has a section with this name.");
+  }
+
   const sessions = await getSessionsByRoutine(ctx, routineId);
 
   const duplicateSession = sessions.find((session) => {
@@ -404,6 +416,62 @@ async function getDetailedRoutine(
   };
 }
 
+export const listSummaries = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<RoutineSummaryRecord[]> => {
+    const limit = Math.min(Math.max(1, Math.floor(args.limit ?? 30)), 100);
+    const routines = await ctx.db
+      .query("routines")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(limit);
+
+    const summaries: RoutineSummaryRecord[] = [];
+    for (const routine of routines) {
+      const sessions = sortByOrder(await getSessionsByRoutine(ctx, routine._id));
+      const sessionSummaries: RoutineSectionSummaryRecord[] = [];
+      for (const session of sessions) {
+        let exerciseCount = 0;
+        const sessionExerciseQuery = ctx.db
+          .query("sessionExercises")
+          .withIndex("by_session", (q) => q.eq("sessionId", session._id));
+        for await (const _entry of sessionExerciseQuery) {
+          exerciseCount += 1;
+        }
+        sessionSummaries.push({
+          _id: session._id,
+          name: session.name,
+          order: session.order,
+          exerciseCount,
+        });
+      }
+
+      summaries.push({
+        ...routine,
+        sessions: sessionSummaries,
+      });
+    }
+
+    return summaries;
+  },
+});
+
+export const getDetailedById = query({
+  args: {
+    routineId: v.id("routines"),
+  },
+  handler: async (ctx, args) => {
+    const routine = await ctx.db.get(args.routineId);
+    if (!routine) {
+      return null;
+    }
+
+    return getDetailedRoutine(ctx, routine);
+  },
+});
+
 export const listDetailed = query({
   args: {},
   handler: async (ctx) => {
@@ -446,12 +514,14 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const daysPerWeek = normalizeDaysPerWeek(args.daysPerWeek);
-    const name = args.name.trim();
+    const name = requireName(args.name, "Routine name", MAX_ROUTINE_NAME_LENGTH);
+    const nameKey = normalizeDisplayNameKey(name);
 
     await ensureUniqueRoutineName(ctx, name);
 
     const routineId = await ctx.db.insert("routines", {
       name,
+      nameKey,
       daysPerWeek,
       isActive: false,
       sessionOrder: [],
@@ -482,9 +552,10 @@ export const update = mutation({
     };
 
     if (typeof args.name === "string") {
-      const name = args.name.trim();
+      const name = requireName(args.name, "Routine name", MAX_ROUTINE_NAME_LENGTH);
       await ensureUniqueRoutineName(ctx, name, { excludeRoutineId: args.routineId });
       patch.name = name;
+      patch.nameKey = normalizeDisplayNameKey(name);
     }
 
     if (typeof args.daysPerWeek === "number") {
@@ -560,7 +631,8 @@ export const upsertSession = mutation({
   handler: async (ctx, args) => {
     const routine = await ctx.db.get(args.routineId);
     assert(routine, "Routine not found.");
-    const name = args.name.trim();
+    const name = requireName(args.name, "Section name", MAX_SECTION_NAME_LENGTH);
+    const nameKey = normalizeDisplayNameKey(name);
 
     if (args.sessionId) {
       const session = await ctx.db.get(args.sessionId);
@@ -574,6 +646,7 @@ export const upsertSession = mutation({
       });
       await ctx.db.patch(args.sessionId, {
         name,
+        nameKey,
         updatedAt: Date.now(),
       });
       return args.sessionId;
@@ -587,6 +660,7 @@ export const upsertSession = mutation({
     const sessionId = await ctx.db.insert("routineSessions", {
       routineId: args.routineId,
       name,
+      nameKey,
       order: nextOrder,
       updatedAt: Date.now(),
     });
@@ -850,85 +924,6 @@ export const updateWeeklyPlan = mutation({
   },
 });
 
-export const migrateLegacyData = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const routines = (await ctx.db.query("routines").collect()) as LegacyRoutineShape[];
-    const sessions =
-      (await ctx.db.query("routineSessions").collect()) as LegacyRoutineSessionShape[];
-    const exercises = (await ctx.db.query("exercises").collect()) as LegacyExerciseShape[];
-    const sessionExercises =
-      (await ctx.db.query("sessionExercises").collect()) as LegacySessionExerciseShape[];
-    const now = Date.now();
-
-    const exerciseProgramming = new Map<
-      Id<"exercises">,
-      LegacyExerciseProgramming
-    >();
-
-    for (const exercise of exercises) {
-      exerciseProgramming.set(exercise._id, getLegacyProgramming(exercise));
-    }
-
-    for (const routine of routines) {
-      await ctx.db.replace(routine._id, {
-        name: routine.name,
-        daysPerWeek: routine.daysPerWeek,
-        isActive: routine.isActive,
-        sessionOrder: routine.sessionOrder,
-        weeklyPlan: sortWeeklyPlan(routine.weeklyPlan as WeeklyPlanEntry[]),
-        updatedAt: routine.updatedAt ?? routine.createdAt ?? now,
-      });
-    }
-
-    for (const session of sessions) {
-      await ctx.db.replace(session._id, {
-        routineId: session.routineId,
-        name: session.name,
-        order: session.order,
-        updatedAt: session.updatedAt ?? session.createdAt ?? now,
-      });
-    }
-
-    for (const exercise of exercises) {
-      await ctx.db.replace(
-        exercise._id,
-        normalizeExerciseCatalog({
-          ...exercise,
-          isCustom: exercise.isCustom,
-        }),
-      );
-    }
-
-    for (const entry of sessionExercises) {
-      const legacyProgramming = exerciseProgramming.get(entry.exerciseId);
-      await ctx.db.replace(entry._id, {
-        sessionId: entry.sessionId,
-        exerciseId: entry.exerciseId,
-        order: entry.order,
-        ...buildProgrammingRecord({
-          sets: entry.sets ?? legacyProgramming?.sets,
-          repsText: entry.repsText ?? legacyProgramming?.repsText,
-          targetWeightKg: entry.targetWeightKg,
-          restSeconds: entry.restSeconds ?? legacyProgramming?.restSeconds,
-          notes: entry.notes,
-          tempo: entry.tempo,
-          rir: entry.rir,
-        }),
-        updatedAt: entry.updatedAt ?? entry.createdAt ?? now,
-      });
-    }
-
-    return {
-      migrated: true,
-      routines: routines.length,
-      sections: sessions.length,
-      exercises: exercises.length,
-      sectionExercises: sessionExercises.length,
-    };
-  },
-});
-
 export const seedDefaultsIfEmpty = mutation({
   args: {},
   handler: async (ctx) => {
@@ -992,6 +987,7 @@ export const seedDefaultsIfEmpty = mutation({
 
     const routineId = await ctx.db.insert("routines", {
       name: "Push / Pull / Legs",
+      nameKey: normalizeDisplayNameKey("Push / Pull / Legs"),
       daysPerWeek: 4,
       isActive: true,
       sessionOrder: [],
@@ -1007,6 +1003,7 @@ export const seedDefaultsIfEmpty = mutation({
         await ctx.db.insert("routineSessions", {
           routineId,
           name: sessionNames[index],
+          nameKey: normalizeDisplayNameKey(sessionNames[index]),
           order: index,
           updatedAt: now,
         }),

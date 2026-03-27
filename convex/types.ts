@@ -42,8 +42,19 @@ export interface RoutineSectionRecord {
   exercises: RoutineSectionExerciseRecord[];
 }
 
+export interface RoutineSectionSummaryRecord {
+  _id: Id<"routineSessions">;
+  name: string;
+  order: number;
+  exerciseCount: number;
+}
+
 export type WeeklyPlanEntryRecord = Doc<"routines">["weeklyPlan"][number];
 
 export interface RoutineDetailedRecord extends Doc<"routines"> {
   sessions: RoutineSectionRecord[];
+}
+
+export interface RoutineSummaryRecord extends Doc<"routines"> {
+  sessions: RoutineSectionSummaryRecord[];
 }

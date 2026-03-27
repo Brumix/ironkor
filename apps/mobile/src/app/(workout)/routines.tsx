@@ -20,7 +20,7 @@ import { useTheme } from "@/theme";
 export default function RoutinesScreen() {
   const { theme } = useTheme();
   const { showAlert, AlertModal } = useAppAlert();
-  const routinesData = useQuery(api.routines.listDetailed);
+  const routinesData = useQuery(api.routines.listSummaries, { limit: 50 });
   const exercisesReady = useQuery(api.exercises.hasAny);
 
   const seedDefaults = useMutation(api.routines.seedDefaultsIfEmpty);

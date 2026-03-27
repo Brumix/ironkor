@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { normalizeExerciseCatalog, normalizeNameText } from "./exerciseCatalog";
@@ -10,6 +10,12 @@ import {
 
 import type { Doc } from "./_generated/dataModel";
 import type { ExerciseCatalogRecord } from "./types";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new ConvexError(message);
+  }
+}
 
 function toExerciseCatalogRecord(doc: Doc<"exercises">): ExerciseCatalogRecord {
   const normalized = normalizeExerciseCatalog(doc);
@@ -57,32 +63,59 @@ export const listPreview = query({
       return results.map(toExerciseCatalogRecord);
     }
 
-    const overFetchLimit = args.equipment !== undefined ? limit * 3 : limit;
-
     let docs;
-    if (args.bodyPart !== undefined) {
+    if (args.bodyPart !== undefined && args.equipment !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_bodyPart_and_equipment", (q) =>
+          q.eq("bodyPart", args.bodyPart!).eq("equipment", args.equipment!),
+        )
+        .take(limit);
+    } else if (args.primaryMuscle !== undefined && args.equipment !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_primaryMuscle_and_equipment", (q) =>
+          q.eq("primaryMuscle", args.primaryMuscle!).eq("equipment", args.equipment!),
+        )
+        .take(limit);
+    } else if (args.bodyPart !== undefined) {
       docs = await ctx.db
         .query("exercises")
         .withIndex("by_bodyPart", (q) => q.eq("bodyPart", args.bodyPart!))
-        .take(overFetchLimit);
+        .take(limit);
     } else if (args.primaryMuscle !== undefined) {
       docs = await ctx.db
         .query("exercises")
         .withIndex("by_primaryMuscle", (q) => q.eq("primaryMuscle", args.primaryMuscle!))
-        .take(overFetchLimit);
+        .take(limit);
+    } else if (args.equipment !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_equipment", (q) => q.eq("equipment", args.equipment!))
+        .take(limit);
     } else {
       docs = await ctx.db
         .query("exercises")
         .withIndex("by_nameText")
-        .take(overFetchLimit);
+        .take(limit);
     }
 
     let results = docs.map(toExerciseCatalogRecord);
+    if (args.bodyPart !== undefined) {
+      results = results.filter((exercise) => exercise.bodyPart === args.bodyPart);
+    }
     if (args.equipment !== undefined) {
-      results = results.filter((e) => e.equipment === args.equipment);
+      results = results.filter((exercise) => exercise.equipment === args.equipment);
+    }
+    if (args.primaryMuscle !== undefined) {
+      results = results.filter(
+        (exercise) => exercise.primaryMuscle === args.primaryMuscle,
+      );
     }
 
-    return results.slice(0, limit).sort((a, b) => a.name.localeCompare(b.name));
+    return results
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, limit);
   },
 });
 
@@ -96,8 +129,21 @@ export const createCustom = mutation({
     description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const name = args.name.trim();
+    const description = args.description?.trim();
+    const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
+    assert(name.length > 0, "Exercise name is required.");
+    assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
+    assert(
+      uniqueMuscleGroups.includes(args.primaryMuscle),
+      "Primary muscle must be included in muscle groups.",
+    );
+
     const normalized = normalizeExerciseCatalog({
       ...args,
+      name,
+      muscleGroups: uniqueMuscleGroups,
+      description: description && description.length > 0 ? description : undefined,
       isCustom: true,
     });
 

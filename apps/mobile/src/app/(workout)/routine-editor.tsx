@@ -199,7 +199,7 @@ export default function RoutineEditorScreen() {
     removeSession: removeDraftSession,
   } = useDraftRoutine();
 
-  const routinesData = useQuery(api.routines.listDetailed);
+  const routineSummariesData = useQuery(api.routines.listSummaries, { limit: 100 });
 
   const createRoutine = useMutation(api.routines.create);
   const updateRoutine = useMutation(api.routines.update);
@@ -209,15 +209,13 @@ export default function RoutineEditorScreen() {
   const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
   const updateWeeklyPlan = useMutation(api.routines.updateWeeklyPlan);
 
-  const routines = useMemo(() => routinesData ?? [], [routinesData]);
-
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "new";
   const isNew = routineIdParam === "new";
-
-  const selectedRoutine = useMemo(
-    () => routines.find((routine) => String(routine._id) === routineIdParam) ?? null,
-    [routineIdParam, routines],
+  const selectedRoutine = useQuery(
+    api.routines.getDetailedById,
+    !isNew ? { routineId: routineIdParam as Id<"routines"> } : "skip",
   );
+  const routines = useMemo(() => routineSummariesData ?? [], [routineSummariesData]);
 
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
   const [routineName, setRoutineName] = useState("");
@@ -289,7 +287,11 @@ export default function RoutineEditorScreen() {
   );
 
   useEffect(() => {
-    if (routinesData === undefined || isNew || !selectedRoutine) {
+    if (routineSummariesData === undefined || (!isNew && selectedRoutine === undefined)) {
+      return;
+    }
+
+    if (isNew || !selectedRoutine) {
       return;
     }
 
@@ -309,7 +311,13 @@ export default function RoutineEditorScreen() {
     );
     setSessionListData(sourceSessionOptions);
     setHydratedFor(currentId);
-  }, [hydratedFor, isNew, routinesData, selectedRoutine, sourceSessionOptions]);
+  }, [
+    hydratedFor,
+    isNew,
+    routineSummariesData,
+    selectedRoutine,
+    sourceSessionOptions,
+  ]);
 
   useEffect(() => {
     if (isNew) {
@@ -817,7 +825,11 @@ export default function RoutineEditorScreen() {
     theme.colors.text,
   ]);
 
-  if (routinesData === undefined || (isNew && !draft)) {
+  if (
+    routineSummariesData === undefined ||
+    (!isNew && selectedRoutine === undefined) ||
+    (isNew && !draft)
+  ) {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
