@@ -14,7 +14,8 @@
     "mobile:dev": "bun run --cwd apps/mobile dev:expo",
     "mobile:start": "bun run --cwd apps/mobile start",
     "lint": "bun run --cwd apps/mobile lint",
-    "typecheck": "tsc --noEmit -p apps/mobile/tsconfig.json && tsc --noEmit -p convex/tsconfig.json"
+    "typecheck": "tsc --noEmit -p apps/mobile/tsconfig.json && tsc --noEmit -p convex/tsconfig.json",
+    "lockfile:check": "node ./scripts/check-bun-lockfiles.mjs"
   },
   "dependencies": {
     "@ironkor/shared": "workspace:*"

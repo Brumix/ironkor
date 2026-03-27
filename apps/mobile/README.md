@@ -103,6 +103,8 @@ Run from `apps/mobile/` for app-only tasks:
 | `bun run ios` / `bun run android` / `bun run web` | Platform runners |
 | `bun run lint` / `bun run lint:fix` / `bun run lint:strict` | ESLint |
 
+Install note: use `bun install` from the monorepo root only. Do not install dependencies inside `apps/mobile`.
+
 ---
 
 ## Local development (typical flow)

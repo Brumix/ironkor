@@ -41,6 +41,15 @@ ironkor/                      # repo root — Git root, workspace root
 | `bun run mobile:dev` | Run Expo dev server only |
 | `bun run lint` | Lint the mobile app |
 | `bun run typecheck` | Typecheck mobile + convex |
+| `bun run lockfile:check` | Fail if nested `bun.lock` files exist |
+
+## Dependency Policy
+
+- Install dependencies only at repo root with `bun install`.
+- Root `bun.lock` is the only lockfile source of truth.
+- Never run `bun install` inside workspace folders like `apps/mobile`.
+- Do not commit nested Bun lockfiles under `apps/*` or `packages/*`.
+- Run `bun run lockfile:check` before opening PRs to enforce this policy.
 
 ## Environment Variables
 

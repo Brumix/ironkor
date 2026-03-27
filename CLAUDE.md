@@ -29,6 +29,14 @@ This repository is a **Bun workspace monorepo** designed to support multiple app
 - Configure app env var to the same Convex URL
 - Run workspace install and typecheck from root
 
+### Dependency policy
+
+- Run `bun install` only from the repository root.
+- Root `bun.lock` is the single lockfile source of truth.
+- Do not run `bun install` inside `apps/*` or `packages/*`.
+- Do not add nested `bun.lock` files in workspace folders.
+- Run `bun run lockfile:check` before opening PRs to enforce this policy.
+
 ### Current mobile workout constraints
 
 - The mobile workout routine-creation flow is draft-first: users build the full routine, sections, and exercises before the final save.

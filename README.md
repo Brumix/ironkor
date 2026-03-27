@@ -81,6 +81,16 @@ bun run start
 | `bun run mobile:dev` | Expo dev server only |
 | `bun run lint` | Lint the mobile app |
 | `bun run typecheck` | Typecheck mobile + convex |
+| `bun run lockfile:check` | Fail if nested `bun.lock` files exist |
+
+---
+
+## Dependency policy
+
+- Run `bun install` only from the repository root.
+- Treat root `bun.lock` as the single lockfile source of truth.
+- Do not run `bun install` inside `apps/mobile` or other workspace folders.
+- Do not add nested `bun.lock` files under `apps/*` or `packages/*`.
 
 ---
 
