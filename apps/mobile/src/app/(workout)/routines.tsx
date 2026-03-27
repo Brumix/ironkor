@@ -3,7 +3,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 
@@ -13,14 +13,16 @@ import AppChip from "@/components/ui/AppChip";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import GradientCard from "@/components/ui/GradientCard";
 import SectionHeader from "@/components/ui/SectionHeader";
+import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useTheme } from "@/theme";
 
 
 export default function RoutinesScreen() {
   const { theme } = useTheme();
+  const { showAlert, AlertModal } = useAppAlert();
   const routinesData = useQuery(api.routines.listDetailed);
-  const exercisesData = useQuery(api.exercises.list, {});
+  const exercisesReady = useQuery(api.exercises.hasAny);
 
   const seedDefaults = useMutation(api.routines.seedDefaultsIfEmpty);
   const deleteRoutine = useMutation(api.routines.deleteRoutine);
@@ -33,14 +35,14 @@ export default function RoutinesScreen() {
   const activeRoutine = useMemo(() => routines.find((routine) => routine.isActive) ?? null, [routines]);
 
   useEffect(() => {
-    if (routinesData === undefined || exercisesData === undefined) {
+    if (routinesData === undefined || exercisesReady === undefined) {
       return;
     }
 
-    if (routinesData.length === 0) {
+    if (routinesData.length === 0 && exercisesReady) {
       seedDefaults().catch(() => undefined);
     }
-  }, [exercisesData, routinesData, seedDefaults]);
+  }, [exercisesReady, routinesData, seedDefaults]);
 
   const styles = useMemo(
     () =>
@@ -127,13 +129,13 @@ export default function RoutinesScreen() {
       await deleteRoutine({ routineId: deleteTarget.id as never });
       setDeleteTarget(null);
     } catch {
-      Alert.alert("Failed", "Could not delete routine.");
+      showAlert({ title: "Failed", message: "Could not delete routine.", variant: "error" });
     } finally {
       setIsDeletingRoutine(false);
     }
   }
 
-  if (routinesData === undefined || exercisesData === undefined) {
+  if (routinesData === undefined || exercisesReady === undefined) {
     return (
       <WorkoutPage headerChip={{ icon: "barbell-outline", label: "Routines" }}>
         <AppCard variant="muted">
@@ -236,7 +238,7 @@ export default function RoutinesScreen() {
                     label="Deactivate"
                     onPress={() => {
                       toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
-                        Alert.alert("Failed", "Could not deactivate routine.");
+                        showAlert({ title: "Failed", message: "Could not deactivate routine.", variant: "error" });
                       });
                     }}
                     size="sm"
@@ -249,7 +251,7 @@ export default function RoutinesScreen() {
                     label="Activate"
                     onPress={() => {
                       setActive({ routineId: routine._id }).catch(() => {
-                        Alert.alert("Failed", "Could not activate routine.");
+                        showAlert({ title: "Failed", message: "Could not activate routine.", variant: "error" });
                       });
                     }}
                     size="sm"
@@ -284,6 +286,8 @@ export default function RoutinesScreen() {
         onConfirm={confirmDeleteRoutine}
         onCancel={closeDeleteRoutineModal}
       />
+
+      {AlertModal}
     </WorkoutPage>
   );
 }

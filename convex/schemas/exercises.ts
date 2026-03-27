@@ -19,6 +19,9 @@ export const exercises = defineTable({
   musclesText: v.string(),
 })
   .index("by_nameText", ["nameText"])
-  .index("by_musclesText", ["musclesText"])
   .index("by_bodyPart", ["bodyPart"])
-  .index("by_primaryMuscle", ["primaryMuscle"]);
+  .index("by_primaryMuscle", ["primaryMuscle"])
+  .searchIndex("search_nameText", {
+    searchField: "nameText",
+    filterFields: ["bodyPart", "equipment", "primaryMuscle"],
+  });

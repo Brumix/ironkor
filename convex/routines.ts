@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import { mutation, query } from "./_generated/server";
 import { normalizeExerciseCatalog } from "./exerciseCatalog";
@@ -245,6 +246,46 @@ async function getSessionExercisesBySession(
     .collect();
 }
 
+async function ensureUniqueRoutineName(
+  ctx: { db: DatabaseReader },
+  name: string,
+  options?: { excludeRoutineId?: Id<"routines"> },
+) {
+  const normalizedKey = normalizeDisplayNameKey(name);
+  const routines = await ctx.db
+    .query("routines")
+    .withIndex("by_updatedAt")
+    .collect();
+
+  const duplicateRoutine = routines.find((routine) => {
+    if (options?.excludeRoutineId && routine._id === options.excludeRoutineId) {
+      return false;
+    }
+    return normalizeDisplayNameKey(routine.name) === normalizedKey;
+  });
+
+  assert(!duplicateRoutine, "A routine with this name already exists.");
+}
+
+async function ensureUniqueSessionName(
+  ctx: { db: DatabaseReader },
+  routineId: Id<"routines">,
+  name: string,
+  options?: { excludeSessionId?: Id<"routineSessions"> },
+) {
+  const normalizedKey = normalizeDisplayNameKey(name);
+  const sessions = await getSessionsByRoutine(ctx, routineId);
+
+  const duplicateSession = sessions.find((session) => {
+    if (options?.excludeSessionId && session._id === options.excludeSessionId) {
+      return false;
+    }
+    return normalizeDisplayNameKey(session.name) === normalizedKey;
+  });
+
+  assert(!duplicateSession, "This routine already has a section with this name.");
+}
+
 async function validateWeeklyPlan(
   ctx: { db: DatabaseReader },
   routineId: Id<"routines">,
@@ -405,9 +446,12 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const daysPerWeek = normalizeDaysPerWeek(args.daysPerWeek);
+    const name = args.name.trim();
+
+    await ensureUniqueRoutineName(ctx, name);
 
     const routineId = await ctx.db.insert("routines", {
-      name: args.name.trim(),
+      name,
       daysPerWeek,
       isActive: false,
       sessionOrder: [],
@@ -438,7 +482,9 @@ export const update = mutation({
     };
 
     if (typeof args.name === "string") {
-      patch.name = args.name.trim();
+      const name = args.name.trim();
+      await ensureUniqueRoutineName(ctx, name, { excludeRoutineId: args.routineId });
+      patch.name = name;
     }
 
     if (typeof args.daysPerWeek === "number") {
@@ -514,6 +560,7 @@ export const upsertSession = mutation({
   handler: async (ctx, args) => {
     const routine = await ctx.db.get(args.routineId);
     assert(routine, "Routine not found.");
+    const name = args.name.trim();
 
     if (args.sessionId) {
       const session = await ctx.db.get(args.sessionId);
@@ -522,19 +569,24 @@ export const upsertSession = mutation({
         session?.routineId === args.routineId,
         "Section does not belong to routine.",
       );
+      await ensureUniqueSessionName(ctx, args.routineId, name, {
+        excludeSessionId: args.sessionId,
+      });
       await ctx.db.patch(args.sessionId, {
-        name: args.name.trim(),
+        name,
         updatedAt: Date.now(),
       });
       return args.sessionId;
     }
+
+    await ensureUniqueSessionName(ctx, args.routineId, name);
 
     const sessions = await getSessionsByRoutine(ctx, args.routineId);
     const nextOrder = sessions.length;
 
     const sessionId = await ctx.db.insert("routineSessions", {
       routineId: args.routineId,
-      name: args.name.trim(),
+      name,
       order: nextOrder,
       updatedAt: Date.now(),
     });

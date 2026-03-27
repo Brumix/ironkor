@@ -1,10 +1,20 @@
 import { api } from "@convex/_generated/api";
 import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,90 +34,76 @@ import {
   type EquipmentType,
   type MuscleType,
 } from "@ironkor/shared/constants";
+import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
+import AppButton from "@/components/ui/AppButton";
+import ExerciseFilterRow from "@/components/ui/ExerciseFilterRow";
 import HeaderBackButton from "@/components/ui/HeaderBackButton";
+import { useAppAlert } from "@/components/ui/useAppAlert";
+import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingForm";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
-import type {
-  DraftSessionExercise,
-  ExerciseCatalog,
-  SessionExercise,
-} from "@/features/workout/types";
-import { useTheme } from "@/theme";
+import {
+  createProgrammingDraft,
+  formatProgrammingSummary,
+  parseOptionalNumber,
+  type ProgrammingSource,
+} from "@/features/workout/programmingDraft";
+import type { ExerciseCatalog } from "@/features/workout/types";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { tokens, useTheme } from "@/theme";
 
 import type { Id } from "@convex/_generated/dataModel";
 
-interface ProgrammingDraft {
-  sets: string;
-  repsText: string;
-  targetWeightKg: string;
-  restSeconds: string;
-  notes: string;
-  tempo: string;
-  rir: string;
-}
-
-type ProgrammingSource = Pick<
-  SessionExercise | DraftSessionExercise,
-  "sets" | "repsText" | "targetWeightKg" | "restSeconds" | "notes" | "tempo" | "rir"
->;
-
-function createProgrammingDraft(
-  entry?: ProgrammingSource,
-): ProgrammingDraft {
-  return {
-    sets: `${entry?.sets ?? 3}`,
-    repsText: entry?.repsText ?? "8-12",
-    targetWeightKg:
-      typeof entry?.targetWeightKg === "number" ? `${entry.targetWeightKg}` : "",
-    restSeconds:
-      typeof entry?.restSeconds === "number" ? `${entry.restSeconds}` : "",
-    notes: entry?.notes ?? "",
-    tempo: entry?.tempo ?? "",
-    rir: typeof entry?.rir === "number" ? `${entry.rir}` : "",
+function scheduleScrollToEndForNotes(scrollRef: RefObject<ScrollView | null>) {
+  const scroll = () => {
+    scrollRef.current?.scrollToEnd({ animated: true });
   };
+
+  scroll();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(scroll);
+  });
+  setTimeout(scroll, tokens.motion.quick);
+  setTimeout(scroll, tokens.motion.keyboardScrollRetry);
+  setTimeout(scroll, tokens.motion.keyboardScrollRetryLong);
+
+  const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+  const sub = Keyboard.addListener(showEvent, () => {
+    scroll();
+    sub.remove();
+  });
+
+  if (Platform.OS === "ios") {
+    const subDid = Keyboard.addListener("keyboardDidShow", () => {
+      scroll();
+      subDid.remove();
+    });
+  }
 }
 
-function parseOptionalNumber(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
+function resolveErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
   }
 
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  return fallback;
 }
 
 function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatProgrammingSummary(entry: ProgrammingSource) {
-  const pieces = [`${entry.sets} sets`, `${entry.repsText} reps`];
-
-  if (typeof entry.targetWeightKg === "number") {
-    pieces.push(`${entry.targetWeightKg}kg`);
-  }
-
-  if (typeof entry.restSeconds === "number") {
-    pieces.push(`${entry.restSeconds}s rest`);
-  }
-
-  if (entry.tempo) {
-    pieces.push(`Tempo ${entry.tempo}`);
-  }
-
-  if (typeof entry.rir === "number") {
-    pieces.push(`${entry.rir} RIR`);
-  }
-
-  return pieces.join(" • ");
-}
 
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { showAlert, AlertModal } = useAppAlert();
   const {
     draft,
     updateSessionName: updateDraftSessionName,
@@ -121,14 +117,23 @@ export default function SessionEditorScreen() {
   const [selectedBodyPart, setSelectedBodyPart] = useState<BodyPartType | undefined>();
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentType | undefined>();
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState<MuscleType | undefined>();
+  const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
+
+  const debouncedSearch = useDebouncedValue(searchText, tokens.motion.searchDebounce);
 
   const routinesData = useQuery(api.routines.listDetailed);
-  const exercisesData = useQuery(api.exercises.list, {
-    searchText: searchText.trim() || undefined,
-    bodyPart: selectedBodyPart,
-    equipment: selectedEquipment,
-    primaryMuscle: selectedPrimaryMuscle,
-  });
+  const exercisesData = useQuery(
+    api.exercises.listPreview,
+    exercisePickerVisible
+      ? {
+          searchText: debouncedSearch.trim() || undefined,
+          bodyPart: selectedBodyPart,
+          equipment: selectedEquipment,
+          primaryMuscle: selectedPrimaryMuscle,
+          limit: 50,
+        }
+      : "skip",
+  );
 
   const upsertSession = useMutation(api.routines.upsertSession);
   const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
@@ -140,7 +145,13 @@ export default function SessionEditorScreen() {
   const createCustomExercise = useMutation(api.exercises.createCustom);
 
   const routines = useMemo(() => routinesData ?? [], [routinesData]);
-  const exercises = useMemo(() => exercisesData ?? [], [exercisesData]);
+  const staleExercisesRef = useRef<typeof exercisesData>([]);
+  if (exercisesData !== undefined) {
+    staleExercisesRef.current = exercisesData;
+  }
+  const exercises = exercisesData ?? staleExercisesRef.current ?? [];
+  const isExercisesFirstLoad =
+    exercisePickerVisible && exercisesData === undefined && staleExercisesRef.current?.length === 0;
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "";
   const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : "";
   const draftSessionKey = typeof params.draftSessionKey === "string" ? params.draftSessionKey : "";
@@ -162,8 +173,10 @@ export default function SessionEditorScreen() {
   );
 
   const [sectionDraftName, setSectionDraftName] = useState("");
-  const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
   const [customExerciseVisible, setCustomExerciseVisible] = useState(false);
+  const [programmingFormMountKey, setProgrammingFormMountKey] = useState(0);
+  const [customExerciseProgrammingMountKey, setCustomExerciseProgrammingMountKey] =
+    useState(0);
   const [programmingEditorVisible, setProgrammingEditorVisible] = useState(false);
   const [replaceSessionExerciseId, setReplaceSessionExerciseId] =
     useState<string | null>(null);
@@ -182,6 +195,17 @@ export default function SessionEditorScreen() {
   const [customDescription, setCustomDescription] = useState("");
   const [customProgrammingDraft, setCustomProgrammingDraft] =
     useState(createProgrammingDraft());
+
+  const programmingEditorScrollRef = useRef<ScrollView | null>(null);
+  const customExerciseScrollRef = useRef<ScrollView | null>(null);
+
+  const onProgrammingNotesFocus = useCallback(() => {
+    scheduleScrollToEndForNotes(programmingEditorScrollRef);
+  }, []);
+
+  const onCustomExerciseNotesFocus = useCallback(() => {
+    scheduleScrollToEndForNotes(customExerciseScrollRef);
+  }, []);
 
   useEffect(() => {
     const nextSession = isDraftMode ? selectedDraftSession : selectedSession;
@@ -214,6 +238,7 @@ export default function SessionEditorScreen() {
   ) {
     setEditingSessionExerciseId(sessionExerciseId);
     setProgrammingDraft(createProgrammingDraft(entry));
+    setProgrammingFormMountKey((key) => key + 1);
     setProgrammingEditorVisible(true);
   }
 
@@ -451,6 +476,27 @@ export default function SessionEditorScreen() {
           padding: theme.tokens.spacing.sm + 2,
           gap: theme.tokens.spacing.xxs + 1,
         },
+        pickerSearchArea: {
+          gap: theme.tokens.spacing.sm,
+          marginBottom: theme.tokens.spacing.sm,
+        },
+        pickerLoading: {
+          paddingVertical: theme.tokens.spacing["2xl"],
+          alignItems: "center",
+        },
+        pickerEmptyText: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.md,
+          textAlign: "center",
+          paddingVertical: theme.tokens.spacing.lg,
+        },
+        pickerStickyFooter: {
+          flexDirection: "column",
+          gap: theme.tokens.spacing.xs,
+          paddingTop: theme.tokens.spacing.sm,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.borderSoft,
+        },
         filterSection: {
           gap: theme.tokens.spacing.xs,
         },
@@ -463,7 +509,7 @@ export default function SessionEditorScreen() {
     [theme],
   );
 
-  if ((!isDraftMode && routinesData === undefined) || exercisesData === undefined) {
+  if (!isDraftMode && routinesData === undefined) {
     return (
       <WorkoutPage
         headerAction={<HeaderBackButton onPress={handleBackPress} />}
@@ -517,11 +563,29 @@ export default function SessionEditorScreen() {
         <Pressable
           style={styles.primaryButton}
           onPress={async () => {
-            await upsertSession({
-              routineId: selectedRoutine._id,
-              sessionId: selectedSession._id,
-              name: sectionDraftName.trim() || selectedSession.name,
+            const nextSectionName = sectionDraftName.trim() || selectedSession.name;
+            const normalizedSectionName = normalizeDisplayNameKey(nextSectionName);
+            const duplicateSection = selectedRoutine.sessions.some((session) => {
+              if (session._id === selectedSession._id) {
+                return false;
+              }
+              return normalizeDisplayNameKey(session.name) === normalizedSectionName;
             });
+
+            if (duplicateSection) {
+              showAlert({ title: "Duplicate section name", message: "This routine already has a section with this name.", variant: "warning" });
+              return;
+            }
+
+            try {
+              await upsertSession({
+                routineId: selectedRoutine._id,
+                sessionId: selectedSession._id,
+                name: nextSectionName,
+              });
+            } catch (error) {
+              showAlert({ title: "Failed", message: resolveErrorMessage(error, "Could not save section name."), variant: "error" });
+            }
           }}
         >
           <Text style={styles.primaryButtonText}>Save section name</Text>
@@ -609,7 +673,7 @@ export default function SessionEditorScreen() {
                     sessionId: selectedSession._id,
                     sessionExerciseId: entry._id,
                   }).catch(() => {
-                    Alert.alert("Failed", "Could not remove exercise.");
+                    showAlert({ title: "Failed", message: "Could not remove exercise.", variant: "error" });
                   });
                 }}
               >
@@ -645,214 +709,118 @@ export default function SessionEditorScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.sheetContent}>
+            <View style={styles.pickerSearchArea}>
               <TextInput
                 style={styles.input}
                 value={searchText}
                 onChangeText={setSearchText}
-                placeholder="Search by name or muscles"
+                placeholder="Search exercises by name..."
                 placeholderTextColor={theme.colors.textSubtle}
               />
 
-              <View style={styles.filterSection}>
-                <Text style={styles.fieldLabel}>Body part</Text>
-                <View style={styles.filterChipRow}>
-                  <Pressable
-                    style={[styles.smallBtn, !selectedBodyPart && styles.smallBtnActive]}
-                    onPress={() => {
-                      setSelectedBodyPart(undefined);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.smallBtnText,
-                        !selectedBodyPart && styles.smallBtnTextActive,
-                      ]}
-                    >
-                      Any
-                    </Text>
-                  </Pressable>
-                  {BODY_PART_VALUES.map((value) => (
-                    <Pressable
-                      key={`body-part-${value}`}
-                      style={[
-                        styles.smallBtn,
-                        selectedBodyPart === value && styles.smallBtnActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedBodyPart(value);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.smallBtnText,
-                          selectedBodyPart === value && styles.smallBtnTextActive,
-                        ]}
-                      >
-                        {renderMuscleLabel(value)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+              <ExerciseFilterRow
+                bodyPart={selectedBodyPart}
+                equipment={selectedEquipment}
+                primaryMuscle={selectedPrimaryMuscle}
+                onBodyPartChange={setSelectedBodyPart}
+                onEquipmentChange={setSelectedEquipment}
+                onPrimaryMuscleChange={setSelectedPrimaryMuscle}
+              />
+            </View>
+
+            {isExercisesFirstLoad ? (
+              <View style={styles.pickerLoading}>
+                <ActivityIndicator color={theme.colors.textMuted} />
               </View>
-
-              <View style={styles.filterSection}>
-                <Text style={styles.fieldLabel}>Primary muscle</Text>
-                <View style={styles.filterChipRow}>
+            ) : (
+              <FlatList
+                data={exercises}
+                keyExtractor={(item) => String(item._id)}
+                contentContainerStyle={styles.sheetContent}
+                ListEmptyComponent={
+                  <Text style={styles.pickerEmptyText}>No exercises match your search.</Text>
+                }
+                renderItem={({ item: exercise }) => (
                   <Pressable
-                    style={[styles.smallBtn, !selectedPrimaryMuscle && styles.smallBtnActive]}
-                    onPress={() => {
-                      setSelectedPrimaryMuscle(undefined);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.smallBtnText,
-                        !selectedPrimaryMuscle && styles.smallBtnTextActive,
-                      ]}
-                    >
-                      Any
-                    </Text>
-                  </Pressable>
-                  {MUSCLE_VALUES.map((value) => (
-                    <Pressable
-                      key={`muscle-${value}`}
-                      style={[
-                        styles.smallBtn,
-                        selectedPrimaryMuscle === value && styles.smallBtnActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedPrimaryMuscle(value);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.smallBtnText,
-                          selectedPrimaryMuscle === value && styles.smallBtnTextActive,
-                        ]}
-                      >
-                        {renderMuscleLabel(value)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
+                    style={styles.libraryRow}
+                    onPress={async () => {
+                      if (isDraftMode && selectedDraftSession) {
+                        const currentEntry =
+                          replaceSessionExerciseId !== null
+                            ? selectedDraftSession.exercises.find(
+                                (entry) => entry.key === replaceSessionExerciseId,
+                              )
+                            : undefined;
 
-              <View style={styles.filterSection}>
-                <Text style={styles.fieldLabel}>Equipment</Text>
-                <View style={styles.filterChipRow}>
-                  <Pressable
-                    style={[styles.smallBtn, !selectedEquipment && styles.smallBtnActive]}
-                    onPress={() => {
-                      setSelectedEquipment(undefined);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.smallBtnText,
-                        !selectedEquipment && styles.smallBtnTextActive,
-                      ]}
-                    >
-                      Any
-                    </Text>
-                  </Pressable>
-                  {EQUIPMENT_VALUES.map((value) => (
-                    <Pressable
-                      key={`equipment-${value}`}
-                      style={[
-                        styles.smallBtn,
-                        selectedEquipment === value && styles.smallBtnActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedEquipment(value);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.smallBtnText,
-                          selectedEquipment === value && styles.smallBtnTextActive,
-                        ]}
-                      >
-                        {renderMuscleLabel(value)}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
+                        const sessionExerciseId = addOrReplaceExercise(
+                          selectedDraftSession.key,
+                          exercise,
+                          undefined,
+                          replaceSessionExerciseId ?? undefined,
+                        );
 
-              <Pressable
-                style={styles.primaryButton}
-                onPress={() => {
-                  setCustomExerciseVisible(true);
-                }}
-              >
-                <Text style={styles.primaryButtonText}>Create custom exercise</Text>
-              </Pressable>
+                        if (!sessionExerciseId) {
+                          return;
+                        }
 
-              {exercises.map((exercise) => (
-                <Pressable
-                  key={String(exercise._id)}
-                  style={styles.libraryRow}
-                  onPress={async () => {
-                    if (isDraftMode && selectedDraftSession) {
-                      const currentEntry =
-                        replaceSessionExerciseId !== null
-                          ? selectedDraftSession.exercises.find(
-                              (entry) => entry.key === replaceSessionExerciseId,
-                            )
-                          : undefined;
-
-                      const sessionExerciseId = addOrReplaceExercise(
-                        selectedDraftSession.key,
-                        exercise,
-                        undefined,
-                        replaceSessionExerciseId ?? undefined,
-                      );
-
-                      if (!sessionExerciseId) {
+                        setReplaceSessionExerciseId(null);
+                        setExercisePickerVisible(false);
+                        openProgrammingEditor(sessionExerciseId, currentEntry);
                         return;
                       }
 
+                      if (!selectedSession) {
+                        return;
+                      }
+
+                      const currentEntry =
+                        replaceSessionExerciseId !== null
+                          ? selectedSession.exercises.find(
+                              (entry) => String(entry._id) === replaceSessionExerciseId,
+                            )
+                          : undefined;
+
+                      const sessionExerciseId = await upsertSessionExercise({
+                        sessionId: selectedSession._id,
+                        sessionExerciseId:
+                          replaceSessionExerciseId !== null
+                            ? (replaceSessionExerciseId as Id<"sessionExercises">)
+                            : undefined,
+                        exerciseId: exercise._id,
+                      });
+
                       setReplaceSessionExerciseId(null);
                       setExercisePickerVisible(false);
-                      openProgrammingEditor(sessionExerciseId, currentEntry);
-                      return;
-                    }
+                      openProgrammingEditor(String(sessionExerciseId), currentEntry);
+                    }}
+                  >
+                    <Text style={styles.sectionName}>{exercise.name}</Text>
+                    <Text style={styles.sectionMeta}>
+                      {renderMuscleLabel(exercise.bodyPart)} •{" "}
+                      {renderMuscleLabel(exercise.primaryMuscle)} •{" "}
+                      {renderMuscleLabel(exercise.equipment)}
+                    </Text>
+                    <Text style={styles.sectionMeta}>
+                      {exercise.isCustom ? "Custom catalog entry" : "Library exercise"}
+                    </Text>
+                  </Pressable>
+                )}
+              />
+            )}
 
-                    if (!selectedSession) {
-                      return;
-                    }
-
-                    const currentEntry =
-                      replaceSessionExerciseId !== null
-                        ? selectedSession.exercises.find(
-                            (entry) => String(entry._id) === replaceSessionExerciseId,
-                          )
-                        : undefined;
-
-                    const sessionExerciseId = await upsertSessionExercise({
-                      sessionId: selectedSession._id,
-                      sessionExerciseId: replaceSessionExerciseId as Id<"sessionExercises"> | undefined,
-                      exerciseId: exercise._id,
-                    });
-
-                    setReplaceSessionExerciseId(null);
-                    setExercisePickerVisible(false);
-                    openProgrammingEditor(String(sessionExerciseId), currentEntry);
-                  }}
-                >
-                  <Text style={styles.sectionName}>{exercise.name}</Text>
-                  <Text style={styles.sectionMeta}>
-                    {renderMuscleLabel(exercise.bodyPart)} •{" "}
-                    {renderMuscleLabel(exercise.primaryMuscle)} •{" "}
-                    {renderMuscleLabel(exercise.equipment)}
-                  </Text>
-                  <Text style={styles.sectionMeta}>
-                    {exercise.isCustom ? "Custom catalog entry" : "Library exercise"}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <View style={styles.pickerStickyFooter}>
+              <AppButton
+                fullWidth
+                label="Create custom exercise"
+                icon={<Ionicons name="add-circle-outline" size={16} color={theme.colors.text} />}
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  setCustomExerciseProgrammingMountKey((key) => key + 1);
+                  setCustomExerciseVisible(true);
+                }}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -885,7 +853,11 @@ export default function SessionEditorScreen() {
                 </Pressable>
               </View>
 
-              <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                ref={customExerciseScrollRef}
+                contentContainerStyle={styles.sheetContent}
+                keyboardShouldPersistTaps="handled"
+              >
                 <Text style={styles.fieldLabel}>Catalog</Text>
                 <TextInput
                   style={styles.input}
@@ -1023,86 +995,18 @@ export default function SessionEditorScreen() {
                 </View>
 
                 <Text style={styles.fieldLabel}>Programming</Text>
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.sets}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({ ...current, sets: value }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="Sets"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.repsText}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({ ...current, repsText: value }));
-                  }}
-                  placeholder="Reps"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.targetWeightKg}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({
-                      ...current,
-                      targetWeightKg: value,
-                    }));
-                  }}
-                  keyboardType="decimal-pad"
-                  placeholder="Target weight (kg)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.restSeconds}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({
-                      ...current,
-                      restSeconds: value,
-                    }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="Rest seconds"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.tempo}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({ ...current, tempo: value }));
-                  }}
-                  placeholder="Tempo (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.rir}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({ ...current, rir: value }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="RIR (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customProgrammingDraft.notes}
-                  onChangeText={(value) => {
-                    setCustomProgrammingDraft((current) => ({ ...current, notes: value }));
-                  }}
-                  placeholder="Notes (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                  multiline
+                <ExerciseProgrammingForm
+                  key={customExerciseProgrammingMountKey}
+                  draft={customProgrammingDraft}
+                  onChange={setCustomProgrammingDraft}
+                  onNotesFocus={onCustomExerciseNotesFocus}
                 />
 
                 <Pressable
                   style={styles.primaryButton}
                   onPress={async () => {
                     if (!customName.trim()) {
-                      Alert.alert("Missing name", "Add a name for the custom exercise.");
+                      showAlert({ title: "Missing name", message: "Add a name for the custom exercise.", variant: "warning" });
                       return;
                     }
 
@@ -1153,7 +1057,10 @@ export default function SessionEditorScreen() {
                     } else if (selectedSession) {
                       await upsertSessionExercise({
                         sessionId: selectedSession._id,
-                        sessionExerciseId: replaceSessionExerciseId as Id<"sessionExercises"> | undefined,
+                        sessionExerciseId:
+                          replaceSessionExerciseId !== null
+                            ? (replaceSessionExerciseId as Id<"sessionExercises">)
+                            : undefined,
                         exerciseId,
                         sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
                         repsText: customProgrammingDraft.repsText.trim() || "8-12",
@@ -1209,77 +1116,16 @@ export default function SessionEditorScreen() {
                 </Pressable>
               </View>
 
-              <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.sets}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, sets: value }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="Sets"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.repsText}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, repsText: value }));
-                  }}
-                  placeholder="Reps"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.targetWeightKg}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({
-                      ...current,
-                      targetWeightKg: value,
-                    }));
-                  }}
-                  keyboardType="decimal-pad"
-                  placeholder="Target weight (kg)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.restSeconds}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, restSeconds: value }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="Rest seconds"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.tempo}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, tempo: value }));
-                  }}
-                  placeholder="Tempo (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.rir}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, rir: value }));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="RIR (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={programmingDraft.notes}
-                  onChangeText={(value) => {
-                    setProgrammingDraft((current) => ({ ...current, notes: value }));
-                  }}
-                  placeholder="Notes (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                  multiline
+              <ScrollView
+                ref={programmingEditorScrollRef}
+                contentContainerStyle={styles.sheetContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <ExerciseProgrammingForm
+                  key={programmingFormMountKey}
+                  draft={programmingDraft}
+                  onChange={setProgrammingDraft}
+                  onNotesFocus={onProgrammingNotesFocus}
                 />
 
                 <Pressable
@@ -1323,6 +1169,8 @@ export default function SessionEditorScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {AlertModal}
     </WorkoutPage>
   );
 }

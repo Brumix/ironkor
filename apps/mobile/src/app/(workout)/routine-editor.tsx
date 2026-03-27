@@ -5,13 +5,15 @@ import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   NestableDraggableFlatList,
   NestableScrollContainer,
   type DragEndParams,
   type RenderItemParams,
 } from "react-native-draggable-flatlist";
+
+import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
@@ -20,6 +22,7 @@ import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import InfoPopoverButton from "@/components/ui/InfoPopoverButton";
 import PressableScale from "@/components/ui/PressableScale";
 import SectionHeader from "@/components/ui/SectionHeader";
+import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import type { DraftWeeklyPlanEntry } from "@/features/workout/types";
@@ -145,6 +148,25 @@ function sortByOrder<T extends { order: number }>(items: T[]) {
   return [...items].sort((a, b) => a.order - b.order);
 }
 
+function hasDuplicateDisplayNames(names: string[]) {
+  const normalizedNames = names
+    .map((name) => normalizeDisplayNameKey(name))
+    .filter((name) => name.length > 0);
+  return new Set(normalizedNames).size !== normalizedNames.length;
+}
+
+function resolveErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  return fallback;
+}
+
 function reorderSessionOptionsByIndex(
   sessions: SessionOption[],
   from: number,
@@ -164,6 +186,7 @@ export default function RoutineEditorScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { showAlert, AlertModal } = useAppAlert();
   const {
     draft,
     hasChanges,
@@ -204,6 +227,7 @@ export default function RoutineEditorScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [draggingSessionKey, setDraggingSessionKey] = useState<string | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [sessionPendingDelete, setSessionPendingDelete] = useState<SessionOption | null>(null);
   const draftRef = useRef(draft);
   const dragStartIndexRef = useRef<number | null>(null);
   const placeholderIndexRef = useRef<number | null>(null);
@@ -346,6 +370,23 @@ export default function RoutineEditorScreen() {
 
     const name = routineNameValue.trim() || "Untitled routine";
     const trainingDays = plannerEntries.filter((entry) => entry.type === "train").length;
+    const normalizedRoutineName = normalizeDisplayNameKey(name);
+
+    const duplicateRoutine = routines.some((routine) => {
+      if (routine._id === selectedRoutine?._id) {
+        return false;
+      }
+      return normalizeDisplayNameKey(routine.name) === normalizedRoutineName;
+    });
+    if (duplicateRoutine) {
+      showAlert({ title: "Duplicate routine name", message: "A routine with this name already exists.", variant: "warning" });
+      return;
+    }
+
+    if (hasDuplicateDisplayNames(sessionListData.map((session) => session.name))) {
+      showAlert({ title: "Duplicate section name", message: "This routine already has a section with this name.", variant: "warning" });
+      return;
+    }
 
     setIsSaving(true);
 
@@ -442,8 +483,15 @@ export default function RoutineEditorScreen() {
       }
 
       navigateToRoutines();
-    } catch {
-      Alert.alert("Failed", selectedRoutine ? "Could not save routine changes." : "Could not create routine.");
+    } catch (error) {
+      showAlert({
+        title: "Failed",
+        message: resolveErrorMessage(
+          error,
+          selectedRoutine ? "Could not save routine changes." : "Could not create routine.",
+        ),
+        variant: "error",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -452,6 +500,15 @@ export default function RoutineEditorScreen() {
   function handleAddSession() {
     const name = newSessionName.trim();
     if (!name) {
+      return;
+    }
+
+    const normalizedSessionName = normalizeDisplayNameKey(name);
+    const duplicateSession = sessionListData.some(
+      (session) => normalizeDisplayNameKey(session.name) === normalizedSessionName,
+    );
+    if (duplicateSession) {
+      showAlert({ title: "Duplicate section name", message: "This routine already has a section with this name.", variant: "warning" });
       return;
     }
 
@@ -506,14 +563,27 @@ export default function RoutineEditorScreen() {
     }
   }
 
-  const handleDeleteSession = useCallback((session: SessionOption) => {
+  const requestDeleteSession = useCallback((session: SessionOption) => {
+    setSessionPendingDelete(session);
+  }, []);
+
+  const confirmDeleteSession = useCallback(() => {
+    if (!sessionPendingDelete) {
+      return;
+    }
+    const session = sessionPendingDelete;
+    setSessionPendingDelete(null);
     if (isNew) {
       removeDraftSession(session.key);
       return;
     }
 
     setSessionListData((current) => current.filter((entry) => entry.key !== session.key));
-  }, [isNew, removeDraftSession]);
+  }, [isNew, removeDraftSession, sessionPendingDelete]);
+
+  const closeDeleteSessionModal = useCallback(() => {
+    setSessionPendingDelete(null);
+  }, []);
 
   const openSessionEditor = useCallback((session: SessionOption) => {
     if (session.persistedId && selectedRoutine) {
@@ -528,7 +598,7 @@ export default function RoutineEditorScreen() {
     }
 
     if (!isNew) {
-      Alert.alert("Save first", "Save the routine before editing exercises for a new section.");
+      showAlert({ title: "Save first", message: "Save the routine before editing exercises for a new section.", variant: "info" });
       return;
     }
 
@@ -539,7 +609,7 @@ export default function RoutineEditorScreen() {
         draftSessionKey: session.key,
       },
     });
-  }, [isNew, router, selectedRoutine]);
+  }, [isNew, router, selectedRoutine, showAlert]);
 
   function cycleDayType(day: number) {
     updatePlannerEntries((current) =>
@@ -730,7 +800,7 @@ export default function RoutineEditorScreen() {
       errorColor={theme.colors.error}
       isDragging={draggingSessionKey === item.key}
       item={item}
-      onDeleteSession={handleDeleteSession}
+      onDeleteSession={requestDeleteSession}
       onOpenSession={openSessionEditor}
       onPrimaryColor={theme.colors.onPrimary}
       styles={styles}
@@ -738,7 +808,7 @@ export default function RoutineEditorScreen() {
     />
   ), [
     draggingSessionKey,
-    handleDeleteSession,
+    requestDeleteSession,
     openSessionEditor,
     styles,
     theme.colors.accent,
@@ -917,6 +987,23 @@ export default function RoutineEditorScreen() {
           setShowDiscardModal(false);
         }}
       />
+
+      <ConfirmActionModal
+        visible={Boolean(sessionPendingDelete)}
+        title="Delete section"
+        message={
+          sessionPendingDelete
+            ? `Remove "${sessionPendingDelete.name}" from this routine? You can undo by leaving without saving.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDeleteSession}
+        onCancel={closeDeleteSessionModal}
+      />
+
+      {AlertModal}
     </WorkoutPage>
   );
 }

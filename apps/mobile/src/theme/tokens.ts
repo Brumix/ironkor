@@ -59,7 +59,26 @@ export const tokens = {
       normal: 0,
       wide: 0.4,
       wider: 0.8,
+      /** Uppercase field labels (e.g. programming form). */
+      caps: 0.7,
     },
+  },
+  layout: {
+    /** Minimum tap target (e.g. stepper controls). */
+    minTouchTarget: 44,
+    chipMinWidth: 46,
+    inlineInputMinHeight: 38,
+    helpTriggerCompact: 22,
+    helpTriggerDefault: 32,
+  },
+  icon: {
+    sm: 15,
+    md: 18,
+    lg: 22,
+  },
+  hitSlop: {
+    compactHelpVertical: 10,
+    compactHelpHorizontal: 6,
   },
   elevation: {
     none: 0,
@@ -72,6 +91,12 @@ export const tokens = {
     quick: 120,
     normal: 220,
     slow: 320,
+    /** Follow-up scroll after keyboard (ms). */
+    keyboardScrollRetry: 300,
+    /** Longer retry for slow keyboard animations (ms). */
+    keyboardScrollRetryLong: 520,
+    /** Exercise search / filter debounce (ms). */
+    searchDebounce: 300,
     spring: {
       responsive: { damping: 26, stiffness: 300, mass: 0.8 },
       bouncy: { damping: 14, stiffness: 240, mass: 0.9 },

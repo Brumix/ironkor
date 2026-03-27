@@ -21,46 +21,68 @@ function toExerciseCatalogRecord(doc: Doc<"exercises">): ExerciseCatalogRecord {
   };
 }
 
-export const list = query({
+export const hasAny = query({
+  args: {},
+  handler: async (ctx) => {
+    const first = await ctx.db.query("exercises").first();
+    return first !== null;
+  },
+});
+
+export const listPreview = query({
   args: {
     searchText: v.optional(v.string()),
     bodyPart: v.optional(bodyPartSet),
     equipment: v.optional(equipmentSet),
     primaryMuscle: v.optional(muscleSet),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 50, 200);
     const searchText = normalizeNameText(args.searchText ?? "");
-    const bodyPart = args.bodyPart;
-    const equipment = args.equipment;
-    const primaryMuscle = args.primaryMuscle;
 
-    let docs;
-    if (bodyPart !== undefined) {
-      docs = await ctx.db
+    if (searchText) {
+      const results = await ctx.db
         .query("exercises")
-        .withIndex("by_bodyPart", (q) => q.eq("bodyPart", bodyPart))
-        .collect();
-    } else if (primaryMuscle !== undefined) {
-      docs = await ctx.db
-        .query("exercises")
-        .withIndex("by_primaryMuscle", (q) =>
-          q.eq("primaryMuscle", primaryMuscle),
-        )
-        .collect();
-    } else {
-      docs = await ctx.db.query("exercises").withIndex("by_nameText").collect();
+        .withSearchIndex("search_nameText", (q) => {
+          let builder = q.search("nameText", searchText);
+          if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
+          if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
+          if (args.primaryMuscle !== undefined)
+            builder = builder.eq("primaryMuscle", args.primaryMuscle);
+          return builder;
+        })
+        .take(limit);
+
+      return results.map(toExerciseCatalogRecord);
     }
 
-    return docs
-      .map(toExerciseCatalogRecord)
-      .filter((exercise) => (equipment !== undefined ? exercise.equipment === equipment : true))
-      .filter((exercise) =>
-        searchText
-          ? exercise.nameText.includes(searchText) ||
-            exercise.musclesText.includes(searchText)
-          : true,
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const overFetchLimit = args.equipment !== undefined ? limit * 3 : limit;
+
+    let docs;
+    if (args.bodyPart !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_bodyPart", (q) => q.eq("bodyPart", args.bodyPart!))
+        .take(overFetchLimit);
+    } else if (args.primaryMuscle !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_primaryMuscle", (q) => q.eq("primaryMuscle", args.primaryMuscle!))
+        .take(overFetchLimit);
+    } else {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_nameText")
+        .take(overFetchLimit);
+    }
+
+    let results = docs.map(toExerciseCatalogRecord);
+    if (args.equipment !== undefined) {
+      results = results.filter((e) => e.equipment === args.equipment);
+    }
+
+    return results.slice(0, limit).sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 

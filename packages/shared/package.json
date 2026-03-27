@@ -9,6 +9,7 @@
     "./constants": "./constants.ts",
     "./enums": "./enums.ts",
     "./dates": "./dates.ts",
-    "./ui": "./ui.ts"
+    "./ui": "./ui.ts",
+    "./strings": "./strings.ts"
   }
 }

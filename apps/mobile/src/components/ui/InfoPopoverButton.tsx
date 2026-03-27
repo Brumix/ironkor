@@ -9,9 +9,16 @@ interface InfoPopoverButtonProps {
   title: string;
   message: string;
   accessibilityLabel: string;
+  /** Smaller, borderless control for inline use next to field labels. */
+  compact?: boolean;
 }
 
-function InfoPopoverButton({ title, message, accessibilityLabel }: InfoPopoverButtonProps) {
+function InfoPopoverButton({
+  title,
+  message,
+  accessibilityLabel,
+  compact = false,
+}: InfoPopoverButtonProps) {
   const { theme } = useTheme();
   const [visible, setVisible] = useState(false);
 
@@ -19,13 +26,17 @@ function InfoPopoverButton({ title, message, accessibilityLabel }: InfoPopoverBu
     () =>
       StyleSheet.create({
         trigger: {
-          width: 32,
-          height: 32,
+          width: compact
+            ? theme.tokens.layout.helpTriggerCompact
+            : theme.tokens.layout.helpTriggerDefault,
+          height: compact
+            ? theme.tokens.layout.helpTriggerCompact
+            : theme.tokens.layout.helpTriggerDefault,
           borderRadius: theme.tokens.radius.pill,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: theme.colors.surfaceAlt,
-          borderWidth: 1,
+          backgroundColor: compact ? "transparent" : theme.colors.surfaceAlt,
+          borderWidth: compact ? theme.tokens.spacing.none : theme.tokens.spacing.hairline,
           borderColor: theme.colors.borderSoft,
         },
         overlay: {
@@ -54,7 +65,7 @@ function InfoPopoverButton({ title, message, accessibilityLabel }: InfoPopoverBu
           paddingVertical: theme.tokens.spacing.sm,
           backgroundColor: theme.colors.secondarySoft,
           borderRadius: theme.tokens.radius.sm,
-          borderWidth: 1,
+          borderWidth: theme.tokens.spacing.hairline,
           borderColor: theme.colors.border,
         },
         dismissText: {
@@ -63,7 +74,7 @@ function InfoPopoverButton({ title, message, accessibilityLabel }: InfoPopoverBu
           fontWeight: theme.tokens.typography.fontWeight.bold,
         },
       }),
-    [theme],
+    [compact, theme],
   );
 
   return (
@@ -71,12 +82,26 @@ function InfoPopoverButton({ title, message, accessibilityLabel }: InfoPopoverBu
       <Pressable
         accessibilityLabel={accessibilityLabel}
         accessibilityRole="button"
+        hitSlop={
+          compact
+            ? {
+                top: theme.tokens.hitSlop.compactHelpVertical,
+                bottom: theme.tokens.hitSlop.compactHelpVertical,
+                left: theme.tokens.hitSlop.compactHelpHorizontal,
+                right: theme.tokens.hitSlop.compactHelpHorizontal,
+              }
+            : undefined
+        }
         onPress={() => {
           setVisible(true);
         }}
         style={styles.trigger}
       >
-        <Ionicons color={theme.colors.textMuted} name="help-circle-outline" size={18} />
+        <Ionicons
+          color={compact ? theme.colors.textSubtle : theme.colors.textMuted}
+          name="help-circle-outline"
+          size={compact ? theme.tokens.icon.sm : theme.tokens.icon.md}
+        />
       </Pressable>
 
       <Modal
