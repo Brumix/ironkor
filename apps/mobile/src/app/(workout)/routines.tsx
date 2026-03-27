@@ -4,7 +4,6 @@ import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 
 import AppButton from "@/components/ui/AppButton";
@@ -101,11 +100,6 @@ export default function RoutinesScreen() {
           flexWrap: "wrap",
           gap: theme.tokens.spacing.xs,
         },
-        swipeActions: {
-          justifyContent: "center",
-          alignItems: "center",
-          marginLeft: theme.tokens.spacing.xs,
-        },
       }),
     [theme],
   );
@@ -173,7 +167,7 @@ export default function RoutinesScreen() {
 
       <SectionHeader
         title="All routines"
-        subtitle="Swipe left to delete, or tap actions to edit and activate"
+        subtitle="Tap actions to edit, activate, or delete"
       />
 
       {routines.map((routine, index) => (
@@ -182,95 +176,79 @@ export default function RoutinesScreen() {
           key={String(routine._id)}
           layout={LinearTransition.springify().damping(20)}
         >
-          <ReanimatedSwipeable
-            renderRightActions={() => (
-              <View style={styles.swipeActions}>
-                <AppButton
-                  accessibilityLabel={`Delete ${routine.name}`}
-                  icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
-                  onPress={() => {
-                    openDeleteRoutineModal(String(routine._id), routine.name);
-                  }}
-                  size="sm"
-                  variant="danger"
-                />
-              </View>
-            )}
-          >
-            <AppCard style={styles.routineCard} variant={routine.isActive ? "highlight" : "default"}>
-              <View style={styles.routineHeader}>
-                <View style={{ flex: 1, gap: theme.tokens.spacing.xs }}>
-                  <View style={styles.routineMetaRow}>
-                    <AppChip label={routine.isActive ? "Active" : "Inactive"} variant={routine.isActive ? "accent" : "neutral"} />
-                    <AppChip label={`${routine.daysPerWeek} days/week`} variant="neutral" />
-                  </View>
-                  <Text style={styles.routineTitle}>{routine.name}</Text>
-                  <Text style={styles.routineMeta}>{routine.sessions.length} sections ready for training</Text>
+          <AppCard style={styles.routineCard} variant={routine.isActive ? "highlight" : "default"}>
+            <View style={styles.routineHeader}>
+              <View style={{ flex: 1, gap: theme.tokens.spacing.xs }}>
+                <View style={styles.routineMetaRow}>
+                  <AppChip label={routine.isActive ? "Active" : "Inactive"} variant={routine.isActive ? "accent" : "neutral"} />
+                  <AppChip label={`${routine.daysPerWeek} days/week`} variant="neutral" />
                 </View>
-                <Ionicons color={routine.isActive ? theme.colors.accent : theme.colors.textSubtle} name="sparkles-outline" size={18} />
+                <Text style={styles.routineTitle}>{routine.name}</Text>
+                <Text style={styles.routineMeta}>{routine.sessions.length} sections ready for training</Text>
               </View>
+              <Ionicons color={routine.isActive ? theme.colors.accent : theme.colors.textSubtle} name="sparkles-outline" size={18} />
+            </View>
 
-              <View style={styles.sessionPillRow}>
-                {routine.sessions.slice(0, 3).map((session) => (
-                  <AppChip key={String(session._id)} label={session.name} variant={routine.isActive ? "accent" : "neutral"} />
-                ))}
-                {routine.sessions.length > 3 ? (
-                  <AppChip label={`+${routine.sessions.length - 3} more`} variant="neutral" />
-                ) : null}
-              </View>
+            <View style={styles.sessionPillRow}>
+              {routine.sessions.slice(0, 3).map((session) => (
+                <AppChip key={String(session._id)} label={session.name} variant={routine.isActive ? "accent" : "neutral"} />
+              ))}
+              {routine.sessions.length > 3 ? (
+                <AppChip label={`+${routine.sessions.length - 3} more`} variant="neutral" />
+              ) : null}
+            </View>
 
-              <View style={styles.actionRow}>
+            <View style={styles.actionRow}>
+              <AppButton
+                accessibilityLabel={`Edit ${routine.name}`}
+                icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
+                label="Edit"
+                onPress={() => {
+                  router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
+                }}
+                size="sm"
+                variant="secondary"
+              />
+
+              {routine.isActive ? (
                 <AppButton
-                  accessibilityLabel={`Edit ${routine.name}`}
-                  icon={<Ionicons color={theme.colors.text} name="create-outline" size={16} />}
-                  label="Edit"
+                  accessibilityLabel={`Deactivate ${routine.name}`}
+                  icon={<Ionicons color={theme.colors.text} name="pause-circle-outline" size={16} />}
+                  label="Deactivate"
                   onPress={() => {
-                    router.push({ pathname: "/(workout)/routine-editor", params: { routineId: String(routine._id) } });
+                    toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
+                      showAlert({ title: "Failed", message: "Could not deactivate routine.", variant: "error" });
+                    });
                   }}
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
                 />
-
-                {routine.isActive ? (
-                  <AppButton
-                    accessibilityLabel={`Deactivate ${routine.name}`}
-                    icon={<Ionicons color={theme.colors.text} name="pause-circle-outline" size={16} />}
-                    label="Deactivate"
-                    onPress={() => {
-                      toggleActive({ routineId: routine._id, isActive: false }).catch(() => {
-                        showAlert({ title: "Failed", message: "Could not deactivate routine.", variant: "error" });
-                      });
-                    }}
-                    size="sm"
-                    variant="ghost"
-                  />
-                ) : (
-                  <AppButton
-                    accessibilityLabel={`Activate ${routine.name}`}
-                    icon={<Ionicons color={theme.colors.onAccent} name="checkmark-circle-outline" size={16} />}
-                    label="Activate"
-                    onPress={() => {
-                      setActive({ routineId: routine._id }).catch(() => {
-                        showAlert({ title: "Failed", message: "Could not activate routine.", variant: "error" });
-                      });
-                    }}
-                    size="sm"
-                    variant="accent"
-                  />
-                )}
-
+              ) : (
                 <AppButton
-                  accessibilityLabel={`Delete ${routine.name}`}
-                  icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
+                  accessibilityLabel={`Activate ${routine.name}`}
+                  icon={<Ionicons color={theme.colors.onAccent} name="checkmark-circle-outline" size={16} />}
+                  label="Activate"
                   onPress={() => {
-                    openDeleteRoutineModal(String(routine._id), routine.name);
+                    setActive({ routineId: routine._id }).catch(() => {
+                      showAlert({ title: "Failed", message: "Could not activate routine.", variant: "error" });
+                    });
                   }}
                   size="sm"
-                  variant="danger"
+                  variant="accent"
                 />
-              </View>
-            </AppCard>
-          </ReanimatedSwipeable>
+              )}
+
+              <AppButton
+                accessibilityLabel={`Delete ${routine.name}`}
+                icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
+                onPress={() => {
+                  openDeleteRoutineModal(String(routine._id), routine.name);
+                }}
+                size="sm"
+                variant="danger"
+              />
+            </View>
+          </AppCard>
         </Animated.View>
       ))}
 
