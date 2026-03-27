@@ -11,6 +11,13 @@
 import type * as exerciseCatalog from "../exerciseCatalog.js";
 import type * as exercises from "../exercises.js";
 import type * as routines from "../routines.js";
+import type * as routines_exerciseMutations from "../routines/exerciseMutations.js";
+import type * as routines_helpers from "../routines/helpers.js";
+import type * as routines_queries from "../routines/queries.js";
+import type * as routines_routineMutations from "../routines/routineMutations.js";
+import type * as routines_seed from "../routines/seed.js";
+import type * as routines_sessionMutations from "../routines/sessionMutations.js";
+import type * as routines_weeklyPlanMutations from "../routines/weeklyPlanMutations.js";
 import type * as schemas_exercises from "../schemas/exercises.js";
 import type * as schemas_routineSessions from "../schemas/routineSessions.js";
 import type * as schemas_routines from "../schemas/routines.js";
@@ -28,6 +35,13 @@ declare const fullApi: ApiFromModules<{
   exerciseCatalog: typeof exerciseCatalog;
   exercises: typeof exercises;
   routines: typeof routines;
+  "routines/exerciseMutations": typeof routines_exerciseMutations;
+  "routines/helpers": typeof routines_helpers;
+  "routines/queries": typeof routines_queries;
+  "routines/routineMutations": typeof routines_routineMutations;
+  "routines/seed": typeof routines_seed;
+  "routines/sessionMutations": typeof routines_sessionMutations;
+  "routines/weeklyPlanMutations": typeof routines_weeklyPlanMutations;
   "schemas/exercises": typeof schemas_exercises;
   "schemas/routineSessions": typeof schemas_routineSessions;
   "schemas/routines": typeof schemas_routines;
