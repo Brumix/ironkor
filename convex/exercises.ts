@@ -1,6 +1,10 @@
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import {
+  requireCustomExerciseOwner,
+  requireViewer,
+} from "./authHelpers";
 import { normalizeExerciseCatalog, normalizeNameText } from "./exerciseCatalog";
 import {
   bodyPartSet,
@@ -27,10 +31,51 @@ function toExerciseCatalogRecord(doc: Doc<"exercises">): ExerciseCatalogRecord {
   };
 }
 
+function filterExerciseRecord(
+  exercise: ExerciseCatalogRecord,
+  args: {
+    bodyPart?: string;
+    equipment?: string;
+    primaryMuscle?: string;
+    isCustom?: boolean;
+  },
+) {
+  if (args.bodyPart !== undefined && exercise.bodyPart !== args.bodyPart) {
+    return false;
+  }
+  if (args.equipment !== undefined && exercise.equipment !== args.equipment) {
+    return false;
+  }
+  if (
+    args.primaryMuscle !== undefined &&
+    exercise.primaryMuscle !== args.primaryMuscle
+  ) {
+    return false;
+  }
+  if (args.isCustom !== undefined && exercise.isCustom !== args.isCustom) {
+    return false;
+  }
+
+  return true;
+}
+
+function sortAndLimitExercises(
+  records: ExerciseCatalogRecord[],
+  limit: number,
+) {
+  return records
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
 export const hasAny = query({
   args: {},
   handler: async (ctx) => {
-    const first = await ctx.db.query("exercises").first();
+    await requireViewer(ctx);
+    const first = await ctx.db
+      .query("exercises")
+      .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", false))
+      .first();
     return first !== null;
   },
 });
@@ -45,24 +90,44 @@ export const listPreview = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { viewer } = await requireViewer(ctx);
     const limit = Math.min(args.limit ?? 50, 200);
     const searchText = normalizeNameText(args.searchText ?? "");
 
     if (searchText) {
-      const results = await ctx.db
+      const builtInResults = await ctx.db
         .query("exercises")
         .withSearchIndex("search_nameText", (q) => {
-          let builder = q.search("nameText", searchText);
+          let builder = q.search("nameText", searchText).eq("isCustom", false);
           if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
           if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
           if (args.primaryMuscle !== undefined)
             builder = builder.eq("primaryMuscle", args.primaryMuscle);
-          if (args.isCustom !== undefined) builder = builder.eq("isCustom", args.isCustom);
           return builder;
         })
         .take(limit);
 
-      return results.map(toExerciseCatalogRecord);
+      const customResults = await ctx.db
+        .query("exercises")
+        .withSearchIndex("search_nameText", (q) => {
+          let builder = q
+            .search("nameText", searchText)
+            .eq("isCustom", true)
+            .eq("ownerId", viewer._id);
+          if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
+          if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
+          if (args.primaryMuscle !== undefined)
+            builder = builder.eq("primaryMuscle", args.primaryMuscle);
+          return builder;
+        })
+        .take(limit);
+
+      return sortAndLimitExercises(
+        [...builtInResults, ...customResults]
+          .map(toExerciseCatalogRecord)
+          .filter((exercise) => filterExerciseRecord(exercise, args)),
+        limit,
+      );
     }
 
     let docs;
@@ -107,25 +172,22 @@ export const listPreview = query({
         .take(limit);
     }
 
-    let results = docs.map(toExerciseCatalogRecord);
-    if (args.bodyPart !== undefined) {
-      results = results.filter((exercise) => exercise.bodyPart === args.bodyPart);
-    }
-    if (args.equipment !== undefined) {
-      results = results.filter((exercise) => exercise.equipment === args.equipment);
-    }
-    if (args.primaryMuscle !== undefined) {
-      results = results.filter(
-        (exercise) => exercise.primaryMuscle === args.primaryMuscle,
-      );
-    }
-    if (args.isCustom !== undefined) {
-      results = results.filter((exercise) => exercise.isCustom === args.isCustom);
-    }
+    const builtInResults = docs
+      .map(toExerciseCatalogRecord)
+      .filter((exercise) => !exercise.isCustom)
+      .filter((exercise) => filterExerciseRecord(exercise, args));
 
-    return results
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, limit);
+    const customResults = (await ctx.db
+      .query("exercises")
+      .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id))
+      .take(limit))
+      .map(toExerciseCatalogRecord)
+      .filter((exercise) => filterExerciseRecord(exercise, args));
+
+    return sortAndLimitExercises(
+      [...builtInResults, ...customResults],
+      limit,
+    );
   },
 });
 
@@ -135,6 +197,7 @@ export const listCustom = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { viewer } = await requireViewer(ctx);
     const limit = Math.min(args.limit ?? 100, 200);
     const searchText = normalizeNameText(args.searchText ?? "");
 
@@ -142,7 +205,10 @@ export const listCustom = query({
       const results = await ctx.db
         .query("exercises")
         .withSearchIndex("search_nameText", (q) =>
-          q.search("nameText", searchText).eq("isCustom", true),
+          q
+            .search("nameText", searchText)
+            .eq("isCustom", true)
+            .eq("ownerId", viewer._id),
         )
         .take(limit);
       return results.map(toExerciseCatalogRecord);
@@ -150,7 +216,7 @@ export const listCustom = query({
 
     const docs = await ctx.db
       .query("exercises")
-      .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", true))
+      .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id))
       .take(limit);
 
     return docs.map(toExerciseCatalogRecord).sort((a, b) => a.name.localeCompare(b.name));
@@ -167,6 +233,7 @@ export const createCustom = mutation({
     description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { viewer } = await requireViewer(ctx);
     const name = args.name.trim();
     const description = args.description?.trim();
     const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
@@ -183,6 +250,7 @@ export const createCustom = mutation({
       muscleGroups: uniqueMuscleGroups,
       description: description && description.length > 0 ? description : undefined,
       isCustom: true,
+      ownerId: viewer._id,
     });
 
     return ctx.db.insert("exercises", normalized);
@@ -200,9 +268,7 @@ export const updateCustom = mutation({
     description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db.get(args.exerciseId);
-    assert(existing !== null, "Exercise not found.");
-    assert(existing.isCustom, "Only custom exercises can be edited.");
+    const { exercise: existing } = await requireCustomExerciseOwner(ctx, args.exerciseId);
 
     const name = args.name.trim();
     const description = args.description?.trim();
@@ -220,6 +286,7 @@ export const updateCustom = mutation({
       muscleGroups: uniqueMuscleGroups,
       description: description && description.length > 0 ? description : undefined,
       isCustom: true,
+      ownerId: existing.ownerId,
     });
 
     await ctx.db.patch(args.exerciseId, normalized);
@@ -231,9 +298,7 @@ export const deleteCustom = mutation({
     exerciseId: v.id("exercises"),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db.get(args.exerciseId);
-    assert(existing !== null, "Exercise not found.");
-    assert(existing.isCustom, "Only custom exercises can be deleted.");
+    await requireCustomExerciseOwner(ctx, args.exerciseId);
     await ctx.db.delete(args.exerciseId);
   },
 });

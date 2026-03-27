@@ -10,6 +10,7 @@ import {
   requireName,
   setRoutineActiveState,
 } from "./helpers";
+import { requireRoutineOwner, requireViewer } from "../authHelpers";
 
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -22,14 +23,16 @@ export async function createHandler(
     isActive?: boolean;
   },
 ) {
+  const { viewer } = await requireViewer(ctx);
   const now = Date.now();
   const daysPerWeek = normalizeDaysPerWeek(args.daysPerWeek);
   const name = requireName(args.name, "Routine name", MAX_ROUTINE_NAME_LENGTH);
   const nameKey = normalizeDisplayNameKey(name);
 
-  await ensureUniqueRoutineName(ctx, name);
+  await ensureUniqueRoutineName(ctx, viewer._id, name);
 
   const routineId = await ctx.db.insert("routines", {
+    userId: viewer._id,
     name,
     nameKey,
     daysPerWeek,
@@ -40,7 +43,7 @@ export async function createHandler(
   });
 
   if (args.isActive !== false) {
-    await setRoutineActiveState(ctx, routineId, true);
+    await setRoutineActiveState(ctx, viewer._id, routineId, true);
   }
 
   return routineId;
@@ -54,8 +57,7 @@ export async function updateHandler(
     daysPerWeek?: number;
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  assert(routine, "Routine not found.");
+  const { viewer, routine } = await requireRoutineOwner(ctx, args.routineId);
 
   const patch: Partial<typeof routine> = {
     updatedAt: Date.now(),
@@ -63,7 +65,7 @@ export async function updateHandler(
 
   if (typeof args.name === "string") {
     const name = requireName(args.name, "Routine name", MAX_ROUTINE_NAME_LENGTH);
-    await ensureUniqueRoutineName(ctx, name, { excludeRoutineId: args.routineId });
+    await ensureUniqueRoutineName(ctx, viewer._id, name, { excludeRoutineId: args.routineId });
     patch.name = name;
     patch.nameKey = normalizeDisplayNameKey(name);
   }
@@ -83,14 +85,15 @@ export async function deleteRoutineHandler(
     routineId: Id<"routines">;
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  assert(routine, "Routine not found.");
+  const { viewer, routine } = await requireRoutineOwner(ctx, args.routineId);
 
-  const sessions = await getSessionsByRoutine(ctx, args.routineId);
+  const sessions = await getSessionsByRoutine(ctx, args.routineId, viewer._id);
   for (const session of sessions) {
     const sessionExerciseList = await ctx.db
       .query("sessionExercises")
-      .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+      .withIndex("by_userId_and_session", (q) =>
+        q.eq("userId", viewer._id).eq("sessionId", session._id),
+      )
       .collect();
     for (const sessionExercise of sessionExerciseList) {
       await ctx.db.delete(sessionExercise._id);
@@ -103,11 +106,11 @@ export async function deleteRoutineHandler(
   if (routine.isActive) {
     const remaining = await ctx.db
       .query("routines")
-      .withIndex("by_updatedAt")
+      .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", viewer._id))
       .order("desc")
       .collect();
     if (remaining.length > 0) {
-      await setRoutineActiveState(ctx, remaining[0]._id, true);
+      await setRoutineActiveState(ctx, viewer._id, remaining[0]._id, true);
     }
   }
 }
@@ -116,12 +119,14 @@ export async function setActiveHandler(
   ctx: MutationCtx,
   args: { routineId: Id<"routines"> },
 ) {
-  await setRoutineActiveState(ctx, args.routineId, true);
+  const { viewer } = await requireRoutineOwner(ctx, args.routineId);
+  await setRoutineActiveState(ctx, viewer._id, args.routineId, true);
 }
 
 export async function toggleActiveHandler(
   ctx: MutationCtx,
   args: { routineId: Id<"routines">; isActive: boolean },
 ) {
-  await setRoutineActiveState(ctx, args.routineId, args.isActive);
+  const { viewer } = await requireRoutineOwner(ctx, args.routineId);
+  await setRoutineActiveState(ctx, viewer._id, args.routineId, args.isActive);
 }

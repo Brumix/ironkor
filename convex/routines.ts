@@ -26,7 +26,6 @@ import {
   reorderSessionsHandler,
   upsertSessionHandler,
 } from "./routines/sessionMutations";
-import { seedDefaultsIfEmptyHandler } from "./routines/seed";
 import { updateWeeklyPlanHandler } from "./routines/weeklyPlanMutations";
 
 export const listSummaries = query({
@@ -171,9 +170,4 @@ export const updateWeeklyPlan = mutation({
     weeklyPlan: v.array(weeklyPlanEntry),
   },
   handler: updateWeeklyPlanHandler,
-});
-
-export const seedDefaultsIfEmpty = mutation({
-  args: {},
-  handler: seedDefaultsIfEmptyHandler,
 });

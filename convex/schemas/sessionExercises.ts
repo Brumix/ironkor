@@ -2,6 +2,7 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export const sessionExercises = defineTable({
+  userId: v.optional(v.id("users")),
   sessionId: v.id("routineSessions"),
   exerciseId: v.id("exercises"),
   order: v.number(),
@@ -14,5 +15,5 @@ export const sessionExercises = defineTable({
   rir: v.optional(v.number()),
   updatedAt: v.number(),
 })
-  .index("by_session", ["sessionId"])
-  .index("by_session_order", ["sessionId", "order"]);
+  .index("by_userId_and_session", ["userId", "sessionId"])
+  .index("by_userId_and_session_order", ["userId", "sessionId", "order"]);

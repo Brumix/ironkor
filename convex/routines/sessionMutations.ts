@@ -10,6 +10,7 @@ import {
   requireName,
   sortByOrder,
 } from "./helpers";
+import { requireRoutineOwner, requireSessionOwner } from "../authHelpers";
 
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -22,19 +23,17 @@ export async function upsertSessionHandler(
     name: string;
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  assert(routine, "Routine not found.");
+  const { viewer, routine } = await requireRoutineOwner(ctx, args.routineId);
   const name = requireName(args.name, "Section name", MAX_SECTION_NAME_LENGTH);
   const nameKey = normalizeDisplayNameKey(name);
 
   if (args.sessionId) {
-    const session = await ctx.db.get(args.sessionId);
-    assert(Boolean(session), "Section not found.");
+    const { session } = await requireSessionOwner(ctx, args.sessionId);
     assert(
-      session?.routineId === args.routineId,
+      session.routineId === args.routineId,
       "Section does not belong to routine.",
     );
-    await ensureUniqueSessionName(ctx, args.routineId, name, {
+    await ensureUniqueSessionName(ctx, viewer._id, args.routineId, name, {
       excludeSessionId: args.sessionId,
     });
     await ctx.db.patch(args.sessionId, {
@@ -45,12 +44,13 @@ export async function upsertSessionHandler(
     return args.sessionId;
   }
 
-  await ensureUniqueSessionName(ctx, args.routineId, name);
+  await ensureUniqueSessionName(ctx, viewer._id, args.routineId, name);
 
-  const sessions = await getSessionsByRoutine(ctx, args.routineId);
+  const sessions = await getSessionsByRoutine(ctx, args.routineId, viewer._id);
   const nextOrder = sessions.length;
 
   const sessionId = await ctx.db.insert("routineSessions", {
+    userId: viewer._id,
     routineId: args.routineId,
     name,
     nameKey,
@@ -73,15 +73,14 @@ export async function deleteSessionHandler(
     sessionId: Id<"routineSessions">;
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  const session = await ctx.db.get(args.sessionId);
-  assert(routine, "Routine not found.");
-  assert(session, "Section not found.");
+  const { viewer, routine } = await requireRoutineOwner(ctx, args.routineId);
+  const { session } = await requireSessionOwner(ctx, args.sessionId);
   assert(session.routineId === args.routineId, "Section does not belong to routine.");
 
   const sessionExerciseList = await getSessionExercisesBySession(
     ctx,
     args.sessionId,
+    viewer._id,
   );
   for (const sessionExercise of sessionExerciseList) {
     await ctx.db.delete(sessionExercise._id);
@@ -89,7 +88,7 @@ export async function deleteSessionHandler(
 
   await ctx.db.delete(args.sessionId);
 
-  const remainingSessions = sortByOrder(await getSessionsByRoutine(ctx, args.routineId));
+  const remainingSessions = sortByOrder(await getSessionsByRoutine(ctx, args.routineId, viewer._id));
   for (let index = 0; index < remainingSessions.length; index += 1) {
     await ctx.db.patch(remainingSessions[index]._id, {
       order: index,
@@ -128,10 +127,9 @@ export async function reorderSessionsHandler(
     orderedSessionIds: Id<"routineSessions">[];
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  assert(routine, "Routine not found.");
+  const { viewer, routine } = await requireRoutineOwner(ctx, args.routineId);
 
-  const sessions = await getSessionsByRoutine(ctx, args.routineId);
+  const sessions = await getSessionsByRoutine(ctx, args.routineId, viewer._id);
   assert(
     sessions.length === args.orderedSessionIds.length,
     "Section reorder payload size mismatch.",

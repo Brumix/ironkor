@@ -1,0 +1,87 @@
+import { api } from "@convex/_generated/api";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+
+import { useAuth as useClerkAuth } from "@/features/auth/clerkCompat";
+import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
+
+const convexSessionErrorMessage =
+  "We signed you in, but couldn't establish your app session. Please try again.";
+
+export function useViewerBootstrap() {
+  const { isLoaded: isClerkLoaded, isSignedIn } = useClerkAuth();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const viewer = useQuery(api.auth.getViewer);
+  const ensureViewer = useMutation(api.auth.ensureViewer);
+  const [isEnsuringViewer, setIsEnsuringViewer] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isClerkLoaded || !isSignedIn) {
+      setErrorMessage(null);
+      return;
+    }
+
+    if (isLoading || isAuthenticated) {
+      setErrorMessage((currentError) =>
+        currentError === convexSessionErrorMessage ? null : currentError,
+      );
+      return;
+    }
+
+    setErrorMessage((currentError) =>
+      currentError ?? convexSessionErrorMessage,
+    );
+  }, [isAuthenticated, isClerkLoaded, isLoading, isSignedIn]);
+
+  useEffect(() => {
+    if (!isAuthenticated || viewer !== null || isEnsuringViewer) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    setIsEnsuringViewer(true);
+    setErrorMessage(null);
+
+    ensureViewer()
+      .catch((error: unknown) => {
+        if (!isCancelled) {
+          setErrorMessage(
+            resolveAuthErrorMessage(
+              error,
+              "We couldn't finish syncing your account.",
+            ),
+          );
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsEnsuringViewer(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [ensureViewer, isAuthenticated, isEnsuringViewer, viewer]);
+
+  const isReady =
+    isClerkLoaded &&
+    isSignedIn &&
+    isAuthenticated &&
+    !isLoading &&
+    !isEnsuringViewer &&
+    viewer !== undefined &&
+    viewer !== null &&
+    !errorMessage;
+
+  return {
+    errorMessage,
+    isAuthenticated,
+    isEnsuringViewer,
+    isLoading,
+    isReady,
+    viewer,
+  };
+}

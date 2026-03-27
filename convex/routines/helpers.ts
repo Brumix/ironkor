@@ -2,6 +2,7 @@ import { ConvexError } from "convex/values";
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import { normalizeExerciseCatalog } from "../exerciseCatalog";
+import { listViewerRoutines } from "../authHelpers";
 
 import type { Doc, Id } from "../_generated/dataModel";
 import type { DatabaseReader, MutationCtx, QueryCtx } from "../_generated/server";
@@ -205,32 +206,41 @@ export function toSectionExerciseRecord(
 export async function getSessionsByRoutine(
   ctx: { db: DatabaseReader },
   routineId: Id<"routines">,
+  userId: Id<"users">,
 ) {
   return ctx.db
     .query("routineSessions")
-    .withIndex("by_routine", (q) => q.eq("routineId", routineId))
+    .withIndex("by_userId_and_routine", (q) =>
+      q.eq("userId", userId).eq("routineId", routineId),
+    )
     .collect();
 }
 
 export async function getSessionExercisesBySession(
   ctx: { db: DatabaseReader },
   sessionId: Id<"routineSessions">,
+  userId: Id<"users">,
 ) {
   return ctx.db
     .query("sessionExercises")
-    .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+    .withIndex("by_userId_and_session", (q) =>
+      q.eq("userId", userId).eq("sessionId", sessionId),
+    )
     .collect();
 }
 
 export async function ensureUniqueRoutineName(
   ctx: { db: DatabaseReader },
+  userId: Id<"users">,
   name: string,
   options?: { excludeRoutineId?: Id<"routines"> },
 ) {
   const normalizedKey = normalizeDisplayNameKey(name);
   const indexedMatches = await ctx.db
     .query("routines")
-    .withIndex("by_nameKey", (q) => q.eq("nameKey", normalizedKey))
+    .withIndex("by_userId_and_nameKey", (q) =>
+      q.eq("userId", userId).eq("nameKey", normalizedKey),
+    )
     .collect();
 
   const indexedDuplicate = indexedMatches.find((routine) => {
@@ -244,10 +254,7 @@ export async function ensureUniqueRoutineName(
   }
 
   // Backward-compatible fallback for legacy documents missing nameKey.
-  const routines = await ctx.db
-    .query("routines")
-    .withIndex("by_updatedAt")
-    .collect();
+  const routines = await listViewerRoutines(ctx, userId);
 
   const duplicateRoutine = routines.find((routine) => {
     if (options?.excludeRoutineId && routine._id === options.excludeRoutineId) {
@@ -261,6 +268,7 @@ export async function ensureUniqueRoutineName(
 
 export async function ensureUniqueSessionName(
   ctx: { db: DatabaseReader },
+  userId: Id<"users">,
   routineId: Id<"routines">,
   name: string,
   options?: { excludeSessionId?: Id<"routineSessions"> },
@@ -268,8 +276,10 @@ export async function ensureUniqueSessionName(
   const normalizedKey = normalizeDisplayNameKey(name);
   const indexedMatches = await ctx.db
     .query("routineSessions")
-    .withIndex("by_routine_and_nameKey", (q) =>
-      q.eq("routineId", routineId).eq("nameKey", normalizedKey),
+    .withIndex("by_userId_and_routine_and_nameKey", (q) =>
+      q.eq("userId", userId)
+        .eq("routineId", routineId)
+        .eq("nameKey", normalizedKey),
     )
     .collect();
 
@@ -283,7 +293,7 @@ export async function ensureUniqueSessionName(
     assert(false, "This routine already has a section with this name.");
   }
 
-  const sessions = await getSessionsByRoutine(ctx, routineId);
+  const sessions = await getSessionsByRoutine(ctx, routineId, userId);
 
   const duplicateSession = sessions.find((session) => {
     if (options?.excludeSessionId && session._id === options.excludeSessionId) {
@@ -347,16 +357,20 @@ export async function validateWeeklyPlan(
 
 export async function setRoutineActiveState(
   ctx: MutationCtx,
+  userId: Id<"users">,
   routineId: Id<"routines">,
   isActive: boolean,
 ) {
   const target = await ctx.db.get(routineId);
   assert(target, "Routine not found.");
+  assert(target.userId === userId, "Unauthorized.");
 
   if (isActive) {
     const activeRoutines = await ctx.db
       .query("routines")
-      .withIndex("by_isActive", (q) => q.eq("isActive", true))
+      .withIndex("by_userId_and_isActive", (q) =>
+        q.eq("userId", userId).eq("isActive", true),
+      )
       .collect();
     for (const routine of activeRoutines) {
       if (routine._id !== routineId) {
@@ -378,14 +392,15 @@ export async function getDetailedRoutine(
   ctx: QueryCtx,
   routine: Doc<"routines">,
 ): Promise<RoutineDetailedRecord> {
-  const sessions = sortByOrder(await getSessionsByRoutine(ctx, routine._id));
+  assert(routine.userId, "Routine owner missing.");
+  const sessions = sortByOrder(await getSessionsByRoutine(ctx, routine._id, routine.userId));
   ensureContiguousOrder(sessions, "Section");
 
   const detailedSessions: RoutineSectionRecord[] = [];
 
   for (const session of sessions) {
     const sessionExerciseList = sortByOrder(
-      await getSessionExercisesBySession(ctx, session._id),
+      await getSessionExercisesBySession(ctx, session._id, routine.userId),
     );
     ensureContiguousOrder(sessionExerciseList, "Section exercise");
 

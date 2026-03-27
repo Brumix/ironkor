@@ -11,6 +11,7 @@ export const weeklyPlanEntry = v.object({
 
 
 export const routines = defineTable({
+    userId: v.optional(v.id("users")),
     name: v.string(),
     nameKey: v.optional(v.string()),
     daysPerWeek: v.number(),
@@ -19,6 +20,6 @@ export const routines = defineTable({
     weeklyPlan: v.array(weeklyPlanEntry),
     updatedAt: v.number(),
 })
-    .index("by_isActive", ["isActive"])
-    .index("by_nameKey", ["nameKey"])
-    .index("by_updatedAt", ["updatedAt"]);
+    .index("by_userId_and_isActive", ["userId", "isActive"])
+    .index("by_userId_and_nameKey", ["userId", "nameKey"])
+    .index("by_userId_and_updatedAt", ["userId", "updatedAt"]);

@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "concurrently -r \"bun run convex:dev\" \"bun run mobile:dev\"",
     "start": "bun run convex:dev:once && concurrently -r \"bun run convex:dev\" \"bun run mobile:dev\"",
+    "postinstall": "node ./scripts/fix-react-native-draggable-flatlist.mjs",
     "convex:dev": "convex dev",
     "convex:dev:once": "convex dev --once",
     "convex:deploy": "convex deploy",

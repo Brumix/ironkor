@@ -1,11 +1,37 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
+import AuthLoadingScreen from "@/features/auth/AuthLoadingScreen";
+import { useAuth, useSession } from "@/features/auth/clerkCompat";
+import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
 import { DraftRoutineProvider } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
 
 export default function WorkoutLayout() {
   const { theme } = useTheme();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { session } = useSession();
+  const { errorMessage, isReady } = useViewerBootstrap();
+
+  if (!isLoaded) {
+    return <AuthLoadingScreen title="Loading Ironkor" message="Preparing your session..." />;
+  }
+
+  if (!isSignedIn) {
+    return <Redirect href="/sign-in" />;
+  }
+
+  if (session?.currentTask) {
+    return <Redirect href="/auth-task" />;
+  }
+
+  if (errorMessage) {
+    return <AuthLoadingScreen title="Auth setup failed" message={errorMessage} />;
+  }
+
+  if (!isReady) {
+    return <AuthLoadingScreen title="Opening your gym logbook" message="Syncing your account..." />;
+  }
 
   return (
     <DraftRoutineProvider>

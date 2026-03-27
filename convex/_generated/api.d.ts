@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
+import type * as authHelpers from "../authHelpers.js";
 import type * as exerciseCatalog from "../exerciseCatalog.js";
 import type * as exercises from "../exercises.js";
 import type * as routines from "../routines.js";
@@ -23,6 +25,7 @@ import type * as schemas_routineSessions from "../schemas/routineSessions.js";
 import type * as schemas_routines from "../schemas/routines.js";
 import type * as schemas_sessionExercises from "../schemas/sessionExercises.js";
 import type * as schemas_unions from "../schemas/unions.js";
+import type * as schemas_users from "../schemas/users.js";
 import type * as types from "../types.js";
 
 import type {
@@ -32,6 +35,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
+  authHelpers: typeof authHelpers;
   exerciseCatalog: typeof exerciseCatalog;
   exercises: typeof exercises;
   routines: typeof routines;
@@ -47,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/routines": typeof schemas_routines;
   "schemas/sessionExercises": typeof schemas_sessionExercises;
   "schemas/unions": typeof schemas_unions;
+  "schemas/users": typeof schemas_users;
   types: typeof types;
 }>;
 

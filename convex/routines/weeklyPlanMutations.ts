@@ -4,6 +4,7 @@ import {
   sortWeeklyPlan,
   validateWeeklyPlan,
 } from "./helpers";
+import { requireRoutineOwner } from "../authHelpers";
 
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -15,8 +16,7 @@ export async function updateWeeklyPlanHandler(
     weeklyPlan: WeeklyPlanEntry[];
   },
 ) {
-  const routine = await ctx.db.get(args.routineId);
-  assert(routine, "Routine not found.");
+  const { routine } = await requireRoutineOwner(ctx, args.routineId);
 
   const normalizedPlan = sortWeeklyPlan(args.weeklyPlan);
   const daysPerWeek = normalizedPlan.filter((entry) => entry.type === "train").length;

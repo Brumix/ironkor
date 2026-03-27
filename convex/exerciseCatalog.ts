@@ -10,6 +10,8 @@ import type {
   MuscleType,
 } from "@ironkor/shared/constants";
 
+import type { Id } from "./_generated/dataModel";
+
 const BODY_PART_SET = new Set<string>(BODY_PART_VALUES);
 const EQUIPMENT_SET = new Set<string>(EQUIPMENT_VALUES);
 const MUSCLE_SET = new Set<string>(MUSCLE_VALUES);
@@ -162,6 +164,7 @@ export function normalizeMusclesText(muscles: MuscleType[]) {
 export interface LegacyExerciseLike {
   name: string;
   isCustom?: boolean;
+  ownerId?: Id<"users">;
   bodyPart?: string;
   equipment?: string;
   primaryMuscle?: string;
@@ -184,6 +187,7 @@ export interface NormalizedExerciseCatalog {
   nameText: string;
   musclesText: string;
   isCustom: boolean;
+  ownerId?: Id<"users">;
 }
 
 export function normalizeExerciseCatalog(exercise: LegacyExerciseLike): NormalizedExerciseCatalog {
@@ -226,5 +230,6 @@ export function normalizeExerciseCatalog(exercise: LegacyExerciseLike): Normaliz
     musclesText:
       exercise.musclesText?.trim() ?? normalizeMusclesText(muscleGroups),
     isCustom: exercise.isCustom ?? false,
+    ownerId: exercise.ownerId,
   };
 }

@@ -5,6 +5,10 @@ import {
   getSessionExercisesBySession,
   sortByOrder,
 } from "./helpers";
+import {
+  requireSessionExerciseOwner,
+  requireSessionOwner,
+} from "../authHelpers";
 
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -24,14 +28,19 @@ export async function upsertSessionExerciseHandler(
     rir?: number;
   },
 ) {
-  const session = await ctx.db.get(args.sessionId);
+  const { viewer, session } = await requireSessionOwner(ctx, args.sessionId);
   const exercise = await ctx.db.get(args.exerciseId);
   assert(session, "Section not found.");
   assert(exercise, "Exercise not found.");
+  if (exercise.isCustom) {
+    assert(exercise.ownerId === viewer._id, "Unauthorized.");
+  }
 
   if (args.sessionExerciseId) {
-    const existing = await ctx.db.get(args.sessionExerciseId);
-    assert(existing, "Section exercise not found.");
+    const { sessionExercise: existing } = await requireSessionExerciseOwner(
+      ctx,
+      args.sessionExerciseId,
+    );
     assert(
       existing.sessionId === args.sessionId,
       "Section exercise does not belong to section.",
@@ -47,9 +56,10 @@ export async function upsertSessionExerciseHandler(
     return args.sessionExerciseId;
   }
 
-  const current = await getSessionExercisesBySession(ctx, args.sessionId);
+  const current = await getSessionExercisesBySession(ctx, args.sessionId, viewer._id);
   const nextProgramming = buildProgrammingRecord(args);
   return ctx.db.insert("sessionExercises", {
+    userId: viewer._id,
     sessionId: args.sessionId,
     exerciseId: args.exerciseId,
     order: current.length,
@@ -72,8 +82,13 @@ export async function updateSessionExerciseProgrammingHandler(
     rir?: number;
   },
 ) {
-  const entry = await ctx.db.get(args.sessionExerciseId);
-  assert(entry, "Section exercise not found.");
+  const { sessionExercise: entry } = await (async () => {
+    const ownedSession = await requireSessionOwner(ctx, args.sessionId);
+    const ownedExercise = await requireSessionExerciseOwner(ctx, args.sessionExerciseId);
+    return {
+      sessionExercise: ownedExercise.sessionExercise,
+    };
+  })();
   assert(
     entry.sessionId === args.sessionId,
     "Section exercise does not belong to section.",
@@ -92,8 +107,11 @@ export async function deleteSessionExerciseHandler(
     sessionExerciseId: Id<"sessionExercises">;
   },
 ) {
-  const entry = await ctx.db.get(args.sessionExerciseId);
-  assert(entry, "Section exercise not found.");
+  const { viewer } = await requireSessionOwner(ctx, args.sessionId);
+  const { sessionExercise: entry } = await requireSessionExerciseOwner(
+    ctx,
+    args.sessionExerciseId,
+  );
   assert(
     entry.sessionId === args.sessionId,
     "Section exercise does not belong to section.",
@@ -101,7 +119,9 @@ export async function deleteSessionExerciseHandler(
 
   await ctx.db.delete(args.sessionExerciseId);
 
-  const remaining = sortByOrder(await getSessionExercisesBySession(ctx, args.sessionId));
+  const remaining = sortByOrder(
+    await getSessionExercisesBySession(ctx, args.sessionId, viewer._id),
+  );
   for (let index = 0; index < remaining.length; index += 1) {
     await ctx.db.patch(remaining[index]._id, {
       order: index,
@@ -117,7 +137,8 @@ export async function reorderSessionExercisesHandler(
     orderedSessionExerciseIds: Id<"sessionExercises">[];
   },
 ) {
-  const current = await getSessionExercisesBySession(ctx, args.sessionId);
+  const { viewer } = await requireSessionOwner(ctx, args.sessionId);
+  const current = await getSessionExercisesBySession(ctx, args.sessionId, viewer._id);
   assert(
     current.length === args.orderedSessionExerciseIds.length,
     "Section exercise reorder payload size mismatch.",
