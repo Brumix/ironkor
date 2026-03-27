@@ -120,6 +120,7 @@ const RoutineSessionRow = memo(function RoutineSessionRow({
           <AppButton
             accessibilityLabel={`Edit ${item.name}`}
             icon={<Ionicons color={textColor} name="create-outline" size={16} />}
+            label="Edit"
             onPress={() => {
               onOpenSession(item);
             }}
@@ -129,6 +130,7 @@ const RoutineSessionRow = memo(function RoutineSessionRow({
           <AppButton
             accessibilityLabel={`Delete ${item.name}`}
             icon={<Ionicons color={errorColor} name="trash-outline" size={16} />}
+            label="Delete"
             onPress={() => {
               onDeleteSession(item);
             }}
@@ -712,12 +714,13 @@ export default function RoutineEditorScreen() {
           fontSize: theme.tokens.typography.fontSize.sm,
         },
         sessionRow: {
-          gap: theme.tokens.spacing.md,
+          gap: theme.tokens.spacing.xs + 2,
           shadowColor: "transparent",
           shadowOpacity: 0,
           shadowRadius: 0,
           shadowOffset: { width: 0, height: 0 },
           elevation: 0,
+          padding: theme.tokens.spacing.md,
         },
         sessionRowActive: {
           borderColor: theme.colors.borderAccent,
@@ -759,7 +762,7 @@ export default function RoutineEditorScreen() {
         },
         sessionActions: {
           flexDirection: "row",
-          gap: theme.tokens.spacing.xs + 1,
+          gap: theme.tokens.spacing.xs,
           alignItems: "center",
           flexWrap: "wrap",
         },

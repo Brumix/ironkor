@@ -33,6 +33,10 @@ import {
 } from "react-native-draggable-flatlist";
 
 import {
+  BODY_PART_VALUES,
+  EQUIPMENT_VALUES,
+  MUSCLE_VALUES,
+  getUniqueBodyPartForMuscle,
   type BodyPartType,
   type EquipmentType,
   type MuscleType,
@@ -42,6 +46,7 @@ import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import ExerciseFilterRow from "@/components/ui/ExerciseFilterRow";
 import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import PressableScale from "@/components/ui/PressableScale";
@@ -53,6 +58,7 @@ import {
   createProgrammingDraft,
   formatProgrammingSummary,
   parseOptionalNumber,
+  type ProgrammingDraft,
   type ProgrammingSource,
 } from "@/features/workout/programmingDraft";
 import type { DraftRoutine, RoutineSection } from "@/features/workout/types";
@@ -104,6 +110,18 @@ function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function areProgrammingDraftsEqual(a: ProgrammingDraft, b: ProgrammingDraft) {
+  return (
+    a.sets === b.sets &&
+    a.repsText === b.repsText &&
+    a.targetWeightKg === b.targetWeightKg &&
+    a.restSeconds === b.restSeconds &&
+    a.notes === b.notes &&
+    a.tempo === b.tempo &&
+    a.rir === b.rir
+  );
+}
+
 type ExerciseSourceFilter = "all" | "preset" | "custom";
 
 
@@ -142,6 +160,16 @@ export default function SessionEditorScreen() {
           isCustom:
             sourceFilter === "all" ? undefined : sourceFilter === "custom",
           limit: 50,
+        }
+      : "skip",
+  );
+  const availableFilterOptions = useQuery(
+    api.exercises.getAvailableFilterOptions,
+    exercisePickerVisible
+      ? {
+          bodyPart: selectedBodyPart,
+          equipment: selectedEquipment,
+          primaryMuscle: selectedPrimaryMuscle,
         }
       : "skip",
   );
@@ -199,11 +227,35 @@ export default function SessionEditorScreen() {
   const [programmingDraft, setProgrammingDraft] = useState(
     createProgrammingDraft(),
   );
+  const [initialProgrammingDraft, setInitialProgrammingDraft] = useState(
+    createProgrammingDraft(),
+  );
+  const [showDiscardProgrammingModal, setShowDiscardProgrammingModal] = useState(false);
 
   const programmingEditorScrollRef = useRef<ScrollView | null>(null);
 
   const onProgrammingNotesFocus = useCallback(() => {
     scheduleScrollToEndForNotes(programmingEditorScrollRef);
+  }, []);
+
+  const handleBodyPartFilterChange = useCallback((value: BodyPartType | undefined) => {
+    setSelectedBodyPart(value);
+  }, []);
+
+  const handleEquipmentFilterChange = useCallback((value: EquipmentType | undefined) => {
+    setSelectedEquipment(value);
+  }, []);
+
+  const handlePrimaryMuscleFilterChange = useCallback((value: MuscleType | undefined) => {
+    setSelectedPrimaryMuscle(value);
+    if (!value) {
+      return;
+    }
+
+    const nextBodyPart = getUniqueBodyPartForMuscle(value);
+    if (nextBodyPart) {
+      setSelectedBodyPart(nextBodyPart);
+    }
   }, []);
 
   useEffect(() => {
@@ -215,15 +267,95 @@ export default function SessionEditorScreen() {
     setSectionDraftName(nextSession.name);
   }, [isDraftMode, selectedDraftSession, selectedSession]);
 
+  useEffect(() => {
+    if (!exercisePickerVisible || !availableFilterOptions) {
+      return;
+    }
+
+    if (
+      selectedBodyPart !== undefined &&
+      !availableFilterOptions.bodyParts.includes(selectedBodyPart)
+    ) {
+      setSelectedBodyPart(undefined);
+    }
+
+    if (
+      selectedPrimaryMuscle !== undefined &&
+      !availableFilterOptions.muscles.includes(selectedPrimaryMuscle)
+    ) {
+      setSelectedPrimaryMuscle(undefined);
+    }
+
+    if (
+      selectedEquipment !== undefined &&
+      !availableFilterOptions.equipment.includes(selectedEquipment)
+    ) {
+      setSelectedEquipment(undefined);
+    }
+  }, [
+    availableFilterOptions,
+    exercisePickerVisible,
+    selectedBodyPart,
+    selectedEquipment,
+    selectedPrimaryMuscle,
+  ]);
+
+  const effectiveAvailableFilterOptions = useMemo(
+    () =>
+      availableFilterOptions ?? {
+        bodyParts: [...BODY_PART_VALUES],
+        muscles: [...MUSCLE_VALUES],
+        equipment: [...EQUIPMENT_VALUES],
+      },
+    [availableFilterOptions],
+  );
+
   const openProgrammingEditor = useCallback((
     sessionExerciseId: string,
-    entry?: ProgrammingSource,
+    _entry?: ProgrammingSource,
   ) => {
+    const nextDraft = createProgrammingDraft();
     setEditingSessionExerciseId(sessionExerciseId);
-    setProgrammingDraft(createProgrammingDraft(entry));
+    setProgrammingDraft(nextDraft);
+    setInitialProgrammingDraft(nextDraft);
     setProgrammingFormMountKey((key) => key + 1);
     setProgrammingEditorVisible(true);
   }, []);
+
+  const hasUnsavedProgrammingChanges = useMemo(
+    () => !areProgrammingDraftsEqual(programmingDraft, initialProgrammingDraft),
+    [initialProgrammingDraft, programmingDraft],
+  );
+
+  const closeProgrammingEditor = useCallback(() => {
+    const nextDraft = createProgrammingDraft();
+    setShowDiscardProgrammingModal(false);
+    setEditingSessionExerciseId(null);
+    setProgrammingDraft(nextDraft);
+    setInitialProgrammingDraft(nextDraft);
+    setProgrammingFormMountKey((key) => key + 1);
+    setProgrammingEditorVisible(false);
+  }, []);
+
+  const closeExercisePicker = useCallback(() => {
+    staleExercisesRef.current = [];
+    setSearchText("");
+    setSelectedBodyPart(undefined);
+    setSelectedEquipment(undefined);
+    setSelectedPrimaryMuscle(undefined);
+    setSourceFilter("all");
+    setReplaceSessionExerciseId(null);
+    setExercisePickerVisible(false);
+  }, []);
+
+  const requestCloseProgrammingEditor = useCallback(() => {
+    if (hasUnsavedProgrammingChanges) {
+      setShowDiscardProgrammingModal(true);
+      return;
+    }
+
+    closeProgrammingEditor();
+  }, [closeProgrammingEditor, hasUnsavedProgrammingChanges]);
 
   function handleBackPress() {
     if (isDraftMode) {
@@ -818,20 +950,14 @@ export default function SessionEditorScreen() {
         transparent
         statusBarTranslucent
         navigationBarTranslucent
-        onRequestClose={() => {
-          setReplaceSessionExerciseId(null);
-          setExercisePickerVisible(false);
-        }}
+        onRequestClose={closeExercisePicker}
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Exercise catalog</Text>
               <Pressable
-                onPress={() => {
-                  setReplaceSessionExerciseId(null);
-                  setExercisePickerVisible(false);
-                }}
+                onPress={closeExercisePicker}
               >
                 <Text style={styles.closeText}>Close</Text>
               </Pressable>
@@ -847,12 +973,15 @@ export default function SessionEditorScreen() {
               />
 
               <ExerciseFilterRow
+                availableBodyParts={effectiveAvailableFilterOptions.bodyParts}
+                availableEquipment={effectiveAvailableFilterOptions.equipment}
+                availablePrimaryMuscles={effectiveAvailableFilterOptions.muscles}
                 bodyPart={selectedBodyPart}
                 equipment={selectedEquipment}
                 primaryMuscle={selectedPrimaryMuscle}
-                onBodyPartChange={setSelectedBodyPart}
-                onEquipmentChange={setSelectedEquipment}
-                onPrimaryMuscleChange={setSelectedPrimaryMuscle}
+                onBodyPartChange={handleBodyPartFilterChange}
+                onEquipmentChange={handleEquipmentFilterChange}
+                onPrimaryMuscleChange={handlePrimaryMuscleFilterChange}
               />
               <View style={styles.sourceFilterRow}>
                 {(
@@ -932,8 +1061,7 @@ export default function SessionEditorScreen() {
                           return;
                         }
 
-                        setReplaceSessionExerciseId(null);
-                        setExercisePickerVisible(false);
+                        closeExercisePicker();
                         openProgrammingEditor(sessionExerciseId, currentEntry);
                         return;
                       }
@@ -959,8 +1087,7 @@ export default function SessionEditorScreen() {
                         exerciseId: exercise._id,
                       });
 
-                      setReplaceSessionExerciseId(null);
-                      setExercisePickerVisible(false);
+                      closeExercisePicker();
                       openProgrammingEditor(String(sessionExerciseId), currentEntry);
                     }}
                   >
@@ -986,7 +1113,7 @@ export default function SessionEditorScreen() {
                 variant="secondary"
                 size="sm"
                 onPress={() => {
-                  setExercisePickerVisible(false);
+                  closeExercisePicker();
                   router.push({
                     pathname: "/(workout)/custom-exercise",
                     params: {
@@ -1012,23 +1139,24 @@ export default function SessionEditorScreen() {
         transparent
         statusBarTranslucent
         navigationBarTranslucent
-        onRequestClose={() => {
-          setProgrammingEditorVisible(false);
-        }}
+        onRequestClose={requestCloseProgrammingEditor}
       >
         <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={requestCloseProgrammingEditor}
+          />
           <KeyboardAvoidingView
             style={styles.modalRoot}
             behavior={Platform.OS === "ios" ? "padding" : "position"}
             keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+            pointerEvents="box-none"
           >
             <View style={styles.modalCard}>
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>Section programming</Text>
                 <Pressable
-                  onPress={() => {
-                    setProgrammingEditorVisible(false);
-                  }}
+                  onPress={requestCloseProgrammingEditor}
                 >
                   <Text style={styles.closeText}>Close</Text>
                 </Pressable>
@@ -1077,7 +1205,7 @@ export default function SessionEditorScreen() {
                       });
                     }
 
-                    setProgrammingEditorVisible(false);
+                    closeProgrammingEditor();
                   }}
                 >
                   <Text style={styles.primaryButtonText}>Save programming</Text>
@@ -1087,6 +1215,19 @@ export default function SessionEditorScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <ConfirmActionModal
+        visible={showDiscardProgrammingModal}
+        title="Discard Programming Changes"
+        message="Close this programming sheet and lose the changes you have not saved yet?"
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        confirmVariant="danger"
+        onConfirm={closeProgrammingEditor}
+        onCancel={() => {
+          setShowDiscardProgrammingModal(false);
+        }}
+      />
 
       {AlertModal}
     </WorkoutPage>

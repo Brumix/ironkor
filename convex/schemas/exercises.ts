@@ -24,6 +24,7 @@ export const exercises = defineTable({
   .index("by_bodyPart", ["bodyPart"])
   .index("by_equipment", ["equipment"])
   .index("by_bodyPart_and_equipment", ["bodyPart", "equipment"])
+  .index("by_bodyPart_and_primaryMuscle", ["bodyPart", "primaryMuscle"])
   .index("by_primaryMuscle", ["primaryMuscle"])
   .index("by_primaryMuscle_and_equipment", ["primaryMuscle", "equipment"])
   .index("by_ownerId_and_nameText", ["ownerId", "nameText"])

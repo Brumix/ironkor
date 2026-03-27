@@ -19,6 +19,12 @@ export interface ExerciseCatalogRecord {
   isCustom: boolean;
 }
 
+export interface ExerciseFilterOptionsRecord {
+  bodyParts: BodyPartType[];
+  equipment: EquipmentType[];
+  muscles: MuscleType[];
+}
+
 export interface RoutineSectionExerciseRecord {
   _id: Id<"sessionExercises">;
   sessionId: Id<"routineSessions">;

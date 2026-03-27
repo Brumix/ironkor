@@ -1,6 +1,19 @@
 import { ConvexError, v } from "convex/values";
+import {
+  BODY_PART_VALUES,
+  EQUIPMENT_VALUES,
+  MUSCLE_VALUES,
+  MUSCLES_BY_BODY_PART,
+  getBodyPartsForMuscle,
+} from "@ironkor/shared/constants";
+import type {
+  BodyPartType,
+  EquipmentType,
+  MuscleType,
+} from "@ironkor/shared/constants";
 
 import { mutation, query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import {
   requireCustomExerciseOwner,
   requireViewer,
@@ -12,8 +25,8 @@ import {
   muscleSet,
 } from "./schemas/unions";
 
-import type { Doc } from "./_generated/dataModel";
-import type { ExerciseCatalogRecord } from "./types";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { ExerciseCatalogRecord, ExerciseFilterOptionsRecord } from "./types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -66,6 +79,182 @@ function sortAndLimitExercises(
   return records
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, limit);
+}
+
+function canViewerSeeExercise(doc: Doc<"exercises">, viewerId: Id<"users">) {
+  return !doc.isCustom || doc.ownerId === viewerId;
+}
+
+function orderCanonicalValues<T extends string>(values: Iterable<T>, canonical: readonly T[]) {
+  const set = values instanceof Set ? values : new Set(values);
+  return canonical.filter((value) => set.has(value));
+}
+
+async function collectVisibleBodyParts(
+  rows: AsyncIterable<Doc<"exercises">>,
+  viewerId: Id<"users">,
+) {
+  const bodyParts = new Set<BodyPartType>();
+  for await (const doc of rows) {
+    if (!canViewerSeeExercise(doc, viewerId)) {
+      continue;
+    }
+    bodyParts.add(doc.bodyPart as BodyPartType);
+  }
+  return bodyParts;
+}
+
+async function collectVisiblePrimaryMuscles(
+  rows: AsyncIterable<Doc<"exercises">>,
+  viewerId: Id<"users">,
+) {
+  const muscles = new Set<MuscleType>();
+  for await (const doc of rows) {
+    if (!canViewerSeeExercise(doc, viewerId)) {
+      continue;
+    }
+    muscles.add(doc.primaryMuscle as MuscleType);
+  }
+  return muscles;
+}
+
+async function collectVisibleEquipment(
+  rows: AsyncIterable<Doc<"exercises">>,
+  viewerId: Id<"users">,
+) {
+  const equipment = new Set<EquipmentType>();
+  for await (const doc of rows) {
+    if (!canViewerSeeExercise(doc, viewerId)) {
+      continue;
+    }
+    equipment.add(doc.equipment as EquipmentType);
+  }
+  return equipment;
+}
+
+async function getAvailableBodyParts(
+  ctx: QueryCtx,
+  viewerId: Id<"users">,
+  args: {
+    primaryMuscle?: MuscleType;
+    equipment?: EquipmentType;
+  },
+) {
+  if (args.primaryMuscle !== undefined && args.equipment !== undefined) {
+    return orderCanonicalValues(
+      await collectVisibleBodyParts(
+        ctx.db
+          .query("exercises")
+          .withIndex("by_primaryMuscle_and_equipment", (q) =>
+            q.eq("primaryMuscle", args.primaryMuscle!).eq("equipment", args.equipment!),
+          ),
+        viewerId,
+      ),
+      BODY_PART_VALUES,
+    );
+  }
+
+  if (args.primaryMuscle !== undefined) {
+    return getBodyPartsForMuscle(args.primaryMuscle);
+  }
+
+  if (args.equipment !== undefined) {
+    return orderCanonicalValues(
+      await collectVisibleBodyParts(
+        ctx.db.query("exercises").withIndex("by_equipment", (q) => q.eq("equipment", args.equipment!)),
+        viewerId,
+      ),
+      BODY_PART_VALUES,
+    );
+  }
+
+  return [...BODY_PART_VALUES];
+}
+
+async function getAvailableMuscles(
+  ctx: QueryCtx,
+  viewerId: Id<"users">,
+  args: {
+    bodyPart?: BodyPartType;
+    equipment?: EquipmentType;
+  },
+) {
+  if (args.bodyPart !== undefined && args.equipment !== undefined) {
+    return orderCanonicalValues(
+      await collectVisiblePrimaryMuscles(
+        ctx.db
+          .query("exercises")
+          .withIndex("by_bodyPart_and_equipment", (q) =>
+            q.eq("bodyPart", args.bodyPart!).eq("equipment", args.equipment!),
+          ),
+        viewerId,
+      ),
+      MUSCLES_BY_BODY_PART[args.bodyPart],
+    );
+  }
+
+  if (args.bodyPart !== undefined) {
+    return [...MUSCLES_BY_BODY_PART[args.bodyPart]];
+  }
+
+  if (args.equipment !== undefined) {
+    return orderCanonicalValues(
+      await collectVisiblePrimaryMuscles(
+        ctx.db.query("exercises").withIndex("by_equipment", (q) => q.eq("equipment", args.equipment!)),
+        viewerId,
+      ),
+      MUSCLE_VALUES,
+    );
+  }
+
+  return [...MUSCLE_VALUES];
+}
+
+async function getAvailableEquipment(
+  ctx: QueryCtx,
+  viewerId: Id<"users">,
+  args: {
+    bodyPart?: BodyPartType;
+    primaryMuscle?: MuscleType;
+  },
+) {
+  if (args.bodyPart !== undefined && args.primaryMuscle !== undefined) {
+    return orderCanonicalValues(
+      await collectVisibleEquipment(
+        ctx.db
+          .query("exercises")
+          .withIndex("by_bodyPart_and_primaryMuscle", (q) =>
+            q.eq("bodyPart", args.bodyPart!).eq("primaryMuscle", args.primaryMuscle!),
+          ),
+        viewerId,
+      ),
+      EQUIPMENT_VALUES,
+    );
+  }
+
+  if (args.bodyPart !== undefined) {
+    return orderCanonicalValues(
+      await collectVisibleEquipment(
+        ctx.db.query("exercises").withIndex("by_bodyPart", (q) => q.eq("bodyPart", args.bodyPart!)),
+        viewerId,
+      ),
+      EQUIPMENT_VALUES,
+    );
+  }
+
+  if (args.primaryMuscle !== undefined) {
+    return orderCanonicalValues(
+      await collectVisibleEquipment(
+        ctx.db
+          .query("exercises")
+          .withIndex("by_primaryMuscle", (q) => q.eq("primaryMuscle", args.primaryMuscle!)),
+        viewerId,
+      ),
+      EQUIPMENT_VALUES,
+    );
+  }
+
+  return [...EQUIPMENT_VALUES];
 }
 
 export const hasAny = query({
@@ -220,6 +409,38 @@ export const listCustom = query({
       .take(limit);
 
     return docs.map(toExerciseCatalogRecord).sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const getAvailableFilterOptions = query({
+  args: {
+    bodyPart: v.optional(bodyPartSet),
+    equipment: v.optional(equipmentSet),
+    primaryMuscle: v.optional(muscleSet),
+  },
+  handler: async (ctx, args): Promise<ExerciseFilterOptionsRecord> => {
+    const { viewer } = await requireViewer(ctx);
+
+    const [bodyParts, muscles, equipment] = await Promise.all([
+      getAvailableBodyParts(ctx, viewer._id, {
+        primaryMuscle: args.primaryMuscle as MuscleType | undefined,
+        equipment: args.equipment as EquipmentType | undefined,
+      }),
+      getAvailableMuscles(ctx, viewer._id, {
+        bodyPart: args.bodyPart as BodyPartType | undefined,
+        equipment: args.equipment as EquipmentType | undefined,
+      }),
+      getAvailableEquipment(ctx, viewer._id, {
+        bodyPart: args.bodyPart as BodyPartType | undefined,
+        primaryMuscle: args.primaryMuscle as MuscleType | undefined,
+      }),
+    ]);
+
+    return {
+      bodyParts,
+      muscles,
+      equipment,
+    };
   },
 });
 

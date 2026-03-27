@@ -8,6 +8,7 @@
     ".": "./constants.ts",
     "./constants": "./constants.ts",
     "./enums": "./enums.ts",
+    "./exerciseTaxonomy": "./exerciseTaxonomy.ts",
     "./dates": "./dates.ts",
     "./ui": "./ui.ts",
     "./strings": "./strings.ts",

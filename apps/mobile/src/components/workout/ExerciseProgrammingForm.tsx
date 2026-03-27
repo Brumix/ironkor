@@ -16,7 +16,7 @@ import InfoPopoverButton from "@/components/ui/InfoPopoverButton";
 import type { ProgrammingDraft } from "@/features/workout/programmingDraft";
 import { useTheme } from "@/theme";
 
-const REPS_PRESETS = ["5", "8", "10", "8-12", "12-15", "15-20"] as const;
+const REPS_PRESETS = ["5", "6-8", "8", "10", "8-12", "12-15", "15-20"] as const;
 const REST_PRESETS = ["30", "45", "60", "90", "120", "180"] as const;
 const TEMPO_PRESETS = ["2-0-2", "3-0-1", "4-0-1", "3-1-2"] as const;
 const RIR_PRESETS = ["0", "1", "2", "3", "4"] as const;
@@ -64,14 +64,12 @@ interface ExerciseProgrammingFormProps {
 
 function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProgrammingFormProps) {
   const { theme } = useTheme();
+  const isCustomTempo =
+    draft.tempo !== "" && !TEMPO_PRESETS.includes(draft.tempo as (typeof TEMPO_PRESETS)[number]);
   const [showCustomReps, setShowCustomReps] = useState(
     () => !REPS_PRESETS.includes(draft.repsText as (typeof REPS_PRESETS)[number]),
   );
-  const [showCustomTempo, setShowCustomTempo] = useState(
-    () =>
-      draft.tempo !== "" &&
-      !TEMPO_PRESETS.includes(draft.tempo as (typeof TEMPO_PRESETS)[number]),
-  );
+  const [showCustomTempo, setShowCustomTempo] = useState(() => isCustomTempo);
 
   const update = useCallback(
     (patch: Partial<ProgrammingDraft>) => {
@@ -187,15 +185,6 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
           fontWeight: theme.tokens.typography.fontWeight.medium,
           minHeight: theme.tokens.layout.inlineInputMinHeight,
         },
-        clearBtn: {
-          paddingHorizontal: theme.tokens.spacing.sm,
-          paddingVertical: theme.tokens.spacing.xs,
-        },
-        clearText: {
-          color: theme.colors.error,
-          fontSize: theme.tokens.typography.fontSize.xs,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-        },
         restLabel: {
           color: theme.colors.textMuted,
           fontSize: theme.tokens.typography.fontSize.xs,
@@ -282,7 +271,7 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
       <View style={styles.section}>
         <FieldLabelWithHelp
           helpAccessibilityLabel="Show target weight help"
-          helpMessage="Optional planned load in kilograms. Use Clear if you do not want a target written down for this exercise."
+          helpMessage="Optional planned load in kilograms. Lower it back to 0 if you do not want a target written down for this exercise."
           helpTitle="Target weight (kg)"
           label="Target weight (kg)"
           labelRowStyle={styles.labelRow}
@@ -299,14 +288,6 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
           <Pressable style={styles.stepperBtn} onPress={() => { stepWeight(2.5); }}>
             <Ionicons name="add" size={theme.tokens.icon.lg} color={theme.colors.text} />
           </Pressable>
-          {draft.targetWeightKg ? (
-            <Pressable
-              style={styles.clearBtn}
-              onPress={() => { update({ targetWeightKg: "" }); }}
-            >
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
-          ) : null}
         </View>
       </View>
 
@@ -350,7 +331,7 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
       <View style={styles.section}>
         <FieldLabelWithHelp
           helpAccessibilityLabel="Show tempo help"
-          helpMessage="Timing for each part of one rep. For example 2-0-2 often means: seconds on the lowering phase, pause at the bottom, seconds on the lifting phase. It is separate from rest between sets."
+          helpMessage="Timing for each part of one rep. For example 2-0-2 often means: seconds on the lowering phase, pause at the bottom, seconds on the lifting phase. It is separate from rest between sets. Tap a selection again to clear."
           helpTitle="Tempo (optional)"
           label="Tempo (optional)"
           labelRowStyle={styles.labelRow}
@@ -376,31 +357,30 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
             );
           })}
           <Pressable
-            style={[styles.chip, draft.tempo === "" ? undefined : showCustomTempo ? styles.chipActive : undefined]}
+            style={[styles.chip, showCustomTempo && styles.chipActive]}
             onPress={() => {
+              lightHaptic();
+              if (showCustomTempo) {
+                setShowCustomTempo(false);
+                update({ tempo: "" });
+                return;
+              }
+
               setShowCustomTempo(true);
+              if (!isCustomTempo) {
+                update({ tempo: "" });
+              }
             }}
           >
             <Text
               style={[
                 styles.chipText,
-                showCustomTempo && draft.tempo !== "" && styles.chipTextActive,
+                showCustomTempo && styles.chipTextActive,
               ]}
             >
               Other
             </Text>
           </Pressable>
-          {draft.tempo !== "" ? (
-            <Pressable
-              style={styles.clearBtn}
-              onPress={() => {
-                setShowCustomTempo(false);
-                update({ tempo: "" });
-              }}
-            >
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
-          ) : null}
         </View>
         {showCustomTempo ? (
           <TextInput
@@ -417,7 +397,7 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
       <View style={styles.section}>
         <FieldLabelWithHelp
           helpAccessibilityLabel="Show RIR help"
-          helpMessage="Reps in reserve: how many good reps you feel you could still do before failure after the set. 0 means at or very near failure; higher numbers mean you stop with more left in the tank."
+          helpMessage="Reps in reserve: how many good reps you feel you could still do before failure after the set. 0 means at or very near failure; higher numbers mean you stop with more left in the tank. Tap a selection again to clear."
           helpTitle="RIR (optional)"
           label="RIR (optional)"
           labelRowStyle={styles.labelRow}
@@ -441,11 +421,6 @@ function ExerciseProgrammingForm({ draft, onChange, onNotesFocus }: ExerciseProg
               </Pressable>
             );
           })}
-          {draft.rir !== "" ? (
-            <Pressable style={styles.clearBtn} onPress={() => { update({ rir: "" }); }}>
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
-          ) : null}
         </View>
       </View>
 

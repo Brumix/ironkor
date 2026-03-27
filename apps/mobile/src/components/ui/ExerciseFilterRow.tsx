@@ -3,9 +3,6 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
-  BODY_PART_VALUES,
-  EQUIPMENT_VALUES,
-  MUSCLE_VALUES,
   type BodyPartType,
   type EquipmentType,
   type MuscleType,
@@ -26,13 +23,10 @@ interface FilterConfig {
   values: readonly string[];
 }
 
-const FILTERS: FilterConfig[] = [
-  { key: "bodyPart", label: "Body Part", values: BODY_PART_VALUES },
-  { key: "primaryMuscle", label: "Muscle", values: MUSCLE_VALUES },
-  { key: "equipment", label: "Equipment", values: EQUIPMENT_VALUES },
-];
-
 interface ExerciseFilterRowProps {
+  availableBodyParts: readonly BodyPartType[];
+  availableEquipment: readonly EquipmentType[];
+  availablePrimaryMuscles: readonly MuscleType[];
   bodyPart: BodyPartType | undefined;
   equipment: EquipmentType | undefined;
   primaryMuscle: MuscleType | undefined;
@@ -42,6 +36,9 @@ interface ExerciseFilterRowProps {
 }
 
 function ExerciseFilterRow({
+  availableBodyParts,
+  availableEquipment,
+  availablePrimaryMuscles,
   bodyPart,
   equipment,
   primaryMuscle,
@@ -76,7 +73,16 @@ function ExerciseFilterRow({
     onPrimaryMuscleChange(undefined);
   }, [onBodyPartChange, onEquipmentChange, onPrimaryMuscleChange]);
 
-  const activeConfig = FILTERS.find((f) => f.key === activePicker);
+  const filterConfigs: FilterConfig[] = useMemo(
+    () => [
+      { key: "bodyPart", label: "Body Part", values: availableBodyParts },
+      { key: "primaryMuscle", label: "Muscle", values: availablePrimaryMuscles },
+      { key: "equipment", label: "Equipment", values: availableEquipment },
+    ],
+    [availableBodyParts, availableEquipment, availablePrimaryMuscles],
+  );
+
+  const activeConfig = filterConfigs.find((f) => f.key === activePicker);
 
   const handleSelect = useCallback(
     (value: string | undefined) => {
@@ -194,7 +200,7 @@ function ExerciseFilterRow({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
       >
-        {FILTERS.map((filter) => {
+        {filterConfigs.map((filter) => {
           const currentValue = filterValues[filter.key];
           const isActive = currentValue !== undefined;
 

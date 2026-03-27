@@ -2,6 +2,7 @@ import {
   BODY_PART_VALUES,
   EQUIPMENT_VALUES,
   MUSCLE_VALUES,
+  BODY_PART_FROM_MUSCLE,
 } from "@ironkor/shared/constants";
 
 import type {
@@ -78,28 +79,6 @@ const EQUIPMENT_ALIASES: Record<string, EquipmentType> = {
   "resistance bands": "resistance band",
   smith: "smith machine",
   weighted: "weighted",
-};
-
-const BODY_PART_FROM_MUSCLE: Record<MuscleType, BodyPartType> = {
-  abs: "waist",
-  abductors: "upper legs",
-  adductors: "upper legs",
-  biceps: "upper arms",
-  calves: "lower legs",
-  "cardiovascular system": "cardio",
-  delts: "shoulders",
-  forearms: "lower arms",
-  glutes: "upper legs",
-  hamstrings: "upper legs",
-  lats: "back",
-  "levator scapulae": "back",
-  pectorals: "chest",
-  quads: "upper legs",
-  "serratus anterior": "chest",
-  spine: "back",
-  traps: "back",
-  triceps: "upper arms",
-  "upper back": "back",
 };
 
 function normalizeToken(value: string) {

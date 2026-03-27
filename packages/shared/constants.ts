@@ -4,6 +4,7 @@
 
 // Enum-like constants and types
 export * from './enums';
+export * from './exerciseTaxonomy';
 
 // UI-specific constants
 export * from './ui';
