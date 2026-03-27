@@ -168,6 +168,18 @@ export default function RoutinesScreen() {
       <SectionHeader
         title="All routines"
         subtitle="Tap actions to edit, activate, or delete"
+        action={
+          <AppButton
+            accessibilityLabel="Manage your custom exercises"
+            icon={<Ionicons color={theme.colors.text} name="barbell-outline" size={16} />}
+            label="My exercises"
+            onPress={() => {
+              router.push("/(workout)/my-exercises");
+            }}
+            size="sm"
+            variant="secondary"
+          />
+        }
       />
 
       {routines.map((routine, index) => (

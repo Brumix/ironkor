@@ -34,6 +34,18 @@ export default function WorkoutLayout() {
           }}
         />
         <Tabs.Screen
+          name="custom-exercise"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
+          name="my-exercises"
+          options={{
+            href: null,
+          }}
+        />
+        <Tabs.Screen
           name="index"
           options={{
             href: null,

@@ -41,6 +41,7 @@ export const listPreview = query({
     bodyPart: v.optional(bodyPartSet),
     equipment: v.optional(equipmentSet),
     primaryMuscle: v.optional(muscleSet),
+    isCustom: v.optional(v.boolean()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -56,6 +57,7 @@ export const listPreview = query({
           if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
           if (args.primaryMuscle !== undefined)
             builder = builder.eq("primaryMuscle", args.primaryMuscle);
+          if (args.isCustom !== undefined) builder = builder.eq("isCustom", args.isCustom);
           return builder;
         })
         .take(limit);
@@ -93,6 +95,11 @@ export const listPreview = query({
         .query("exercises")
         .withIndex("by_equipment", (q) => q.eq("equipment", args.equipment!))
         .take(limit);
+    } else if (args.isCustom !== undefined) {
+      docs = await ctx.db
+        .query("exercises")
+        .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", args.isCustom!))
+        .take(limit);
     } else {
       docs = await ctx.db
         .query("exercises")
@@ -112,10 +119,41 @@ export const listPreview = query({
         (exercise) => exercise.primaryMuscle === args.primaryMuscle,
       );
     }
+    if (args.isCustom !== undefined) {
+      results = results.filter((exercise) => exercise.isCustom === args.isCustom);
+    }
 
     return results
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, limit);
+  },
+});
+
+export const listCustom = query({
+  args: {
+    searchText: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit ?? 100, 200);
+    const searchText = normalizeNameText(args.searchText ?? "");
+
+    if (searchText) {
+      const results = await ctx.db
+        .query("exercises")
+        .withSearchIndex("search_nameText", (q) =>
+          q.search("nameText", searchText).eq("isCustom", true),
+        )
+        .take(limit);
+      return results.map(toExerciseCatalogRecord);
+    }
+
+    const docs = await ctx.db
+      .query("exercises")
+      .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", true))
+      .take(limit);
+
+    return docs.map(toExerciseCatalogRecord).sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -148,5 +186,54 @@ export const createCustom = mutation({
     });
 
     return ctx.db.insert("exercises", normalized);
+  },
+});
+
+export const updateCustom = mutation({
+  args: {
+    exerciseId: v.id("exercises"),
+    name: v.string(),
+    bodyPart: bodyPartSet,
+    equipment: equipmentSet,
+    primaryMuscle: muscleSet,
+    muscleGroups: v.array(muscleSet),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.exerciseId);
+    assert(existing !== null, "Exercise not found.");
+    assert(existing.isCustom, "Only custom exercises can be edited.");
+
+    const name = args.name.trim();
+    const description = args.description?.trim();
+    const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
+    assert(name.length > 0, "Exercise name is required.");
+    assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
+    assert(
+      uniqueMuscleGroups.includes(args.primaryMuscle),
+      "Primary muscle must be included in muscle groups.",
+    );
+
+    const normalized = normalizeExerciseCatalog({
+      ...args,
+      name,
+      muscleGroups: uniqueMuscleGroups,
+      description: description && description.length > 0 ? description : undefined,
+      isCustom: true,
+    });
+
+    await ctx.db.patch(args.exerciseId, normalized);
+  },
+});
+
+export const deleteCustom = mutation({
+  args: {
+    exerciseId: v.id("exercises"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.exerciseId);
+    assert(existing !== null, "Exercise not found.");
+    assert(existing.isCustom, "Only custom exercises can be deleted.");
+    await ctx.db.delete(args.exerciseId);
   },
 });

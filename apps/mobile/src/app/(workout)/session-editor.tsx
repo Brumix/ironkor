@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
@@ -34,9 +33,6 @@ import {
 } from "react-native-draggable-flatlist";
 
 import {
-  BODY_PART_VALUES,
-  EQUIPMENT_VALUES,
-  MUSCLE_VALUES,
   type BodyPartType,
   type EquipmentType,
   type MuscleType,
@@ -58,7 +54,6 @@ import {
   parseOptionalNumber,
   type ProgrammingSource,
 } from "@/features/workout/programmingDraft";
-import type { ExerciseCatalog } from "@/features/workout/types";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { tokens, useTheme } from "@/theme";
 
@@ -107,6 +102,8 @@ function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+type ExerciseSourceFilter = "all" | "preset" | "custom";
+
 
 export default function SessionEditorScreen() {
   const { theme } = useTheme();
@@ -126,6 +123,7 @@ export default function SessionEditorScreen() {
   const [selectedBodyPart, setSelectedBodyPart] = useState<BodyPartType | undefined>();
   const [selectedEquipment, setSelectedEquipment] = useState<EquipmentType | undefined>();
   const [selectedPrimaryMuscle, setSelectedPrimaryMuscle] = useState<MuscleType | undefined>();
+  const [sourceFilter, setSourceFilter] = useState<ExerciseSourceFilter>("all");
   const [exercisePickerVisible, setExercisePickerVisible] = useState(false);
 
   const debouncedSearch = useDebouncedValue(searchText, tokens.motion.searchDebounce);
@@ -138,6 +136,8 @@ export default function SessionEditorScreen() {
           bodyPart: selectedBodyPart,
           equipment: selectedEquipment,
           primaryMuscle: selectedPrimaryMuscle,
+          isCustom:
+            sourceFilter === "all" ? undefined : sourceFilter === "custom",
           limit: 50,
         }
       : "skip",
@@ -150,7 +150,6 @@ export default function SessionEditorScreen() {
   );
   const deleteSessionExercise = useMutation(api.routines.deleteSessionExercise);
   const reorderSessionExercises = useMutation(api.routines.reorderSessionExercises);
-  const createCustomExercise = useMutation(api.exercises.createCustom);
 
   const staleExercisesRef = useRef<typeof exercisesData>([]);
   if (exercisesData !== undefined) {
@@ -182,10 +181,7 @@ export default function SessionEditorScreen() {
   );
 
   const [sectionDraftName, setSectionDraftName] = useState("");
-  const [customExerciseVisible, setCustomExerciseVisible] = useState(false);
   const [programmingFormMountKey, setProgrammingFormMountKey] = useState(0);
-  const [customExerciseProgrammingMountKey, setCustomExerciseProgrammingMountKey] =
-    useState(0);
   const [programmingEditorVisible, setProgrammingEditorVisible] = useState(false);
   const [exerciseOrderKeys, setExerciseOrderKeys] = useState<string[]>([]);
   const [replaceSessionExerciseId, setReplaceSessionExerciseId] =
@@ -196,25 +192,10 @@ export default function SessionEditorScreen() {
     createProgrammingDraft(),
   );
 
-  const [customName, setCustomName] = useState("");
-  const [customBodyPart, setCustomBodyPart] = useState<BodyPartType>("chest");
-  const [customEquipment, setCustomEquipment] = useState<EquipmentType>("body weight");
-  const [customPrimaryMuscle, setCustomPrimaryMuscle] =
-    useState<MuscleType>("pectorals");
-  const [customMuscleGroups, setCustomMuscleGroups] = useState<MuscleType[]>(["pectorals"]);
-  const [customDescription, setCustomDescription] = useState("");
-  const [customProgrammingDraft, setCustomProgrammingDraft] =
-    useState(createProgrammingDraft());
-
   const programmingEditorScrollRef = useRef<ScrollView | null>(null);
-  const customExerciseScrollRef = useRef<ScrollView | null>(null);
 
   const onProgrammingNotesFocus = useCallback(() => {
     scheduleScrollToEndForNotes(programmingEditorScrollRef);
-  }, []);
-
-  const onCustomExerciseNotesFocus = useCallback(() => {
-    scheduleScrollToEndForNotes(customExerciseScrollRef);
   }, []);
 
   useEffect(() => {
@@ -225,22 +206,6 @@ export default function SessionEditorScreen() {
 
     setSectionDraftName(nextSession.name);
   }, [isDraftMode, selectedDraftSession, selectedSession]);
-
-  useEffect(() => {
-    if (!customMuscleGroups.includes(customPrimaryMuscle)) {
-      setCustomMuscleGroups((current) => [customPrimaryMuscle, ...current]);
-    }
-  }, [customMuscleGroups, customPrimaryMuscle]);
-
-  function resetCustomExerciseForm() {
-    setCustomName("");
-    setCustomBodyPart("chest");
-    setCustomEquipment("body weight");
-    setCustomPrimaryMuscle("pectorals");
-    setCustomMuscleGroups(["pectorals"]);
-    setCustomDescription("");
-    setCustomProgrammingDraft(createProgrammingDraft());
-  }
 
   const openProgrammingEditor = useCallback((
     sessionExerciseId: string,
@@ -471,26 +436,6 @@ export default function SessionEditorScreen() {
           alignItems: "center",
           flexWrap: "wrap",
         },
-        smallBtn: {
-          backgroundColor: theme.colors.secondarySoft,
-          borderRadius: theme.tokens.radius.xs,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          paddingHorizontal: theme.tokens.spacing.sm,
-          paddingVertical: theme.tokens.spacing.xs + 2,
-        },
-        smallBtnActive: {
-          backgroundColor: theme.colors.primary,
-          borderColor: theme.colors.primary,
-        },
-        smallBtnText: {
-          color: theme.colors.text,
-          fontSize: theme.tokens.typography.fontSize.xs,
-          fontWeight: theme.tokens.typography.fontWeight.bold,
-        },
-        smallBtnTextActive: {
-          color: theme.colors.onPrimary,
-        },
         primaryButton: {
           backgroundColor: theme.colors.primary,
           borderRadius: theme.tokens.radius.sm,
@@ -567,6 +512,31 @@ export default function SessionEditorScreen() {
           gap: theme.tokens.spacing.sm,
           marginBottom: theme.tokens.spacing.sm,
         },
+        sourceFilterRow: {
+          flexDirection: "row",
+          gap: theme.tokens.spacing.xs,
+          flexWrap: "wrap",
+        },
+        sourceFilterPill: {
+          backgroundColor: theme.colors.secondarySoft,
+          borderRadius: theme.tokens.radius.pill,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs + 1,
+        },
+        sourceFilterPillActive: {
+          backgroundColor: theme.colors.accentSoft,
+          borderColor: theme.colors.borderAccent,
+        },
+        sourceFilterText: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        sourceFilterTextActive: {
+          color: theme.colors.accent,
+        },
         pickerLoading: {
           paddingVertical: theme.tokens.spacing["2xl"],
           alignItems: "center",
@@ -583,14 +553,6 @@ export default function SessionEditorScreen() {
           paddingTop: theme.tokens.spacing.sm,
           borderTopWidth: 1,
           borderTopColor: theme.colors.borderSoft,
-        },
-        filterSection: {
-          gap: theme.tokens.spacing.xs,
-        },
-        filterChipRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: theme.tokens.spacing.xs,
         },
       }),
     [theme],
@@ -869,6 +831,38 @@ export default function SessionEditorScreen() {
                 onEquipmentChange={setSelectedEquipment}
                 onPrimaryMuscleChange={setSelectedPrimaryMuscle}
               />
+              <View style={styles.sourceFilterRow}>
+                {(
+                  [
+                    { value: "all", label: "All" },
+                    { value: "preset", label: "Preset" },
+                    { value: "custom", label: "Custom" },
+                  ] as const
+                ).map((option) => {
+                  const isActive = sourceFilter === option.value;
+                  return (
+                    <Pressable
+                      key={option.value}
+                      style={[
+                        styles.sourceFilterPill,
+                        isActive && styles.sourceFilterPillActive,
+                      ]}
+                      onPress={() => {
+                        setSourceFilter(option.value);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.sourceFilterText,
+                          isActive && styles.sourceFilterTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {isExercisesFirstLoad ? (
@@ -959,275 +953,23 @@ export default function SessionEditorScreen() {
                 variant="secondary"
                 size="sm"
                 onPress={() => {
-                  setCustomExerciseProgrammingMountKey((key) => key + 1);
-                  setCustomExerciseVisible(true);
+                  setExercisePickerVisible(false);
+                  router.push({
+                    pathname: "/(workout)/custom-exercise",
+                    params: {
+                      routineId: routineIdParam,
+                      ...(isDraftMode
+                        ? { draftSessionKey }
+                        : { sessionId: sessionIdParam }),
+                      ...(replaceSessionExerciseId
+                        ? { replaceSessionExerciseId }
+                        : {}),
+                    },
+                  });
                 }}
               />
             </View>
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={customExerciseVisible}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => {
-          setCustomExerciseVisible(false);
-        }}
-      >
-        <View style={styles.modalBackdrop}>
-          <KeyboardAvoidingView
-            style={styles.modalRoot}
-            behavior={Platform.OS === "ios" ? "padding" : "position"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
-          >
-            <View style={styles.modalCard}>
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Custom exercise</Text>
-                <Pressable
-                  onPress={() => {
-                    setCustomExerciseVisible(false);
-                  }}
-                >
-                  <Text style={styles.closeText}>Close</Text>
-                </Pressable>
-              </View>
-
-              <ScrollView
-                ref={customExerciseScrollRef}
-                contentContainerStyle={styles.sheetContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                <Text style={styles.fieldLabel}>Catalog</Text>
-                <TextInput
-                  style={styles.input}
-                  value={customName}
-                  onChangeText={setCustomName}
-                  placeholder="Exercise name"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-                <TextInput
-                  style={styles.input}
-                  value={customDescription}
-                  onChangeText={setCustomDescription}
-                  placeholder="Description (optional)"
-                  placeholderTextColor={theme.colors.textSubtle}
-                />
-
-                <View style={styles.filterSection}>
-                  <Text style={styles.fieldLabel}>Body part</Text>
-                  <View style={styles.filterChipRow}>
-                    {BODY_PART_VALUES.map((value) => (
-                      <Pressable
-                        key={`custom-body-part-${value}`}
-                        style={[
-                          styles.smallBtn,
-                          customBodyPart === value && styles.smallBtnActive,
-                        ]}
-                        onPress={() => {
-                          setCustomBodyPart(value);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.smallBtnText,
-                            customBodyPart === value && styles.smallBtnTextActive,
-                          ]}
-                        >
-                          {renderMuscleLabel(value)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.filterSection}>
-                  <Text style={styles.fieldLabel}>Equipment</Text>
-                  <View style={styles.filterChipRow}>
-                    {EQUIPMENT_VALUES.map((value) => (
-                      <Pressable
-                        key={`custom-equipment-${value}`}
-                        style={[
-                          styles.smallBtn,
-                          customEquipment === value && styles.smallBtnActive,
-                        ]}
-                        onPress={() => {
-                          setCustomEquipment(value);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.smallBtnText,
-                            customEquipment === value && styles.smallBtnTextActive,
-                          ]}
-                        >
-                          {renderMuscleLabel(value)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.filterSection}>
-                  <Text style={styles.fieldLabel}>Primary muscle</Text>
-                  <View style={styles.filterChipRow}>
-                    {MUSCLE_VALUES.map((value) => (
-                      <Pressable
-                        key={`custom-primary-muscle-${value}`}
-                        style={[
-                          styles.smallBtn,
-                          customPrimaryMuscle === value && styles.smallBtnActive,
-                        ]}
-                        onPress={() => {
-                          setCustomPrimaryMuscle(value);
-                          setCustomMuscleGroups((current) => {
-                            const next = current.filter((item) => item !== value);
-                            return [value, ...next];
-                          });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.smallBtnText,
-                            customPrimaryMuscle === value && styles.smallBtnTextActive,
-                          ]}
-                        >
-                          {renderMuscleLabel(value)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                <View style={styles.filterSection}>
-                  <Text style={styles.fieldLabel}>Muscle groups</Text>
-                  <View style={styles.filterChipRow}>
-                    {MUSCLE_VALUES.map((value) => {
-                      const isSelected = customMuscleGroups.includes(value);
-                      return (
-                        <Pressable
-                          key={`custom-muscle-group-${value}`}
-                          style={[styles.smallBtn, isSelected && styles.smallBtnActive]}
-                          onPress={() => {
-                            setCustomMuscleGroups((current) => {
-                              if (value === customPrimaryMuscle) {
-                                return current.includes(value) ? current : [value, ...current];
-                              }
-
-                              return current.includes(value)
-                                ? current.filter((item) => item !== value)
-                                : [...current, value];
-                            });
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.smallBtnText,
-                              isSelected && styles.smallBtnTextActive,
-                            ]}
-                          >
-                            {renderMuscleLabel(value)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <Text style={styles.fieldLabel}>Programming</Text>
-                <ExerciseProgrammingForm
-                  key={customExerciseProgrammingMountKey}
-                  draft={customProgrammingDraft}
-                  onChange={setCustomProgrammingDraft}
-                  onNotesFocus={onCustomExerciseNotesFocus}
-                />
-
-                <Pressable
-                  style={styles.primaryButton}
-                  onPress={async () => {
-                    if (!customName.trim()) {
-                      showAlert({ title: "Missing name", message: "Add a name for the custom exercise.", variant: "warning" });
-                      return;
-                    }
-
-                    const muscleGroups = Array.from(
-                      new Set([customPrimaryMuscle, ...customMuscleGroups]),
-                    );
-
-                    const exerciseId = await createCustomExercise({
-                      name: customName.trim(),
-                      bodyPart: customBodyPart,
-                      equipment: customEquipment,
-                      primaryMuscle: customPrimaryMuscle,
-                      muscleGroups,
-                      description: customDescription.trim() || undefined,
-                    });
-
-                    if (isDraftMode && selectedDraftSession) {
-                      const normalized = normalizeExerciseCatalog({
-                        name: customName.trim(),
-                        bodyPart: customBodyPart,
-                        equipment: customEquipment,
-                        primaryMuscle: customPrimaryMuscle,
-                        muscleGroups,
-                        description: customDescription.trim() || undefined,
-                        isCustom: true,
-                      });
-
-                      const draftExercise: ExerciseCatalog = {
-                        _id: exerciseId,
-                        _creationTime: Date.now(),
-                        ...normalized,
-                      };
-
-                      addOrReplaceExercise(
-                        selectedDraftSession.key,
-                        draftExercise,
-                        {
-                          sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
-                          repsText: customProgrammingDraft.repsText.trim() || "8-12",
-                          targetWeightKg: parseOptionalNumber(customProgrammingDraft.targetWeightKg),
-                          restSeconds: parseOptionalNumber(customProgrammingDraft.restSeconds),
-                          notes: customProgrammingDraft.notes,
-                          tempo: customProgrammingDraft.tempo,
-                          rir: parseOptionalNumber(customProgrammingDraft.rir),
-                        },
-                        replaceSessionExerciseId ?? undefined,
-                      );
-                    } else if (selectedSession) {
-                      await upsertSessionExercise({
-                        sessionId: selectedSession._id,
-                        sessionExerciseId:
-                          replaceSessionExerciseId !== null
-                            ? (replaceSessionExerciseId as Id<"sessionExercises">)
-                            : undefined,
-                        exerciseId,
-                        sets: Math.max(1, Math.floor(Number(customProgrammingDraft.sets) || 3)),
-                        repsText: customProgrammingDraft.repsText.trim() || "8-12",
-                        targetWeightKg: parseOptionalNumber(
-                          customProgrammingDraft.targetWeightKg,
-                        ),
-                        restSeconds: parseOptionalNumber(customProgrammingDraft.restSeconds),
-                        notes: customProgrammingDraft.notes,
-                        tempo: customProgrammingDraft.tempo,
-                        rir: parseOptionalNumber(customProgrammingDraft.rir),
-                      });
-                    }
-
-                    setReplaceSessionExerciseId(null);
-                    setCustomExerciseVisible(false);
-                    setExercisePickerVisible(false);
-                    resetCustomExerciseForm();
-                  }}
-                >
-                  <Text style={styles.primaryButtonText}>Create and add</Text>
-                </Pressable>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
         </View>
       </Modal>
 

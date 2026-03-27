@@ -1,0 +1,536 @@
+import { api } from "@convex/_generated/api";
+import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
+import { useMutation, useQuery } from "convex/react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+import {
+  BODY_PART_VALUES,
+  EQUIPMENT_VALUES,
+  MUSCLE_VALUES,
+  type BodyPartType,
+  type EquipmentType,
+  type MuscleType,
+} from "@ironkor/shared/constants";
+
+import AppButton from "@/components/ui/AppButton";
+import AppCard from "@/components/ui/AppCard";
+import AppTextField from "@/components/ui/AppTextField";
+import HeaderBackButton from "@/components/ui/HeaderBackButton";
+import { useAppAlert } from "@/components/ui/useAppAlert";
+import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingForm";
+import WorkoutPage from "@/components/workout/WorkoutPage";
+import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
+import {
+  createProgrammingDraft,
+  parseOptionalNumber,
+} from "@/features/workout/programmingDraft";
+import type { ExerciseCatalog } from "@/features/workout/types";
+import { useTheme } from "@/theme";
+
+import type { Id } from "@convex/_generated/dataModel";
+
+function renderLabel(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function resolveErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+  return fallback;
+}
+
+function parseFromManageFlag(
+  value: string | string[] | undefined,
+): boolean {
+  const v = Array.isArray(value) ? value[0] : value;
+  return v === "1" || v === "true";
+}
+
+function normalizeCreatePayload(args: {
+  name: string;
+  bodyPart: BodyPartType;
+  equipment: EquipmentType;
+  primaryMuscle: MuscleType;
+  muscleGroups: MuscleType[];
+  description: string;
+}) {
+  return {
+    name: args.name.trim(),
+    bodyPart: args.bodyPart,
+    equipment: args.equipment,
+    primaryMuscle: args.primaryMuscle,
+    muscleGroups: Array.from(new Set([args.primaryMuscle, ...args.muscleGroups])),
+    description: args.description.trim() || undefined,
+  };
+}
+
+export default function CustomExerciseScreen() {
+  const { theme } = useTheme();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const { showAlert, AlertModal } = useAppAlert();
+  const { addOrReplaceExercise } = useDraftRoutine();
+
+  const createCustomExercise = useMutation(api.exercises.createCustom);
+  const updateCustomExercise = useMutation(api.exercises.updateCustom);
+  const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [name, setName] = useState("");
+  const [bodyPart, setBodyPart] = useState<BodyPartType>("chest");
+  const [equipment, setEquipment] = useState<EquipmentType>("body weight");
+  const [primaryMuscle, setPrimaryMuscle] = useState<MuscleType>("pectorals");
+  const [muscleGroups, setMuscleGroups] = useState<MuscleType[]>(["pectorals"]);
+  const [description, setDescription] = useState("");
+  const [programmingDraft, setProgrammingDraft] = useState(createProgrammingDraft());
+
+  const exerciseIdParam =
+    typeof params.exerciseId === "string" && params.exerciseId.length > 0
+      ? (params.exerciseId as Id<"exercises">)
+      : undefined;
+  const isEditMode = Boolean(exerciseIdParam);
+
+  const existingExerciseDoc = useQuery(
+    api.exercises.listCustom,
+    exerciseIdParam ? {} : "skip",
+  );
+
+  const exerciseToEdit = useMemo(() => {
+    if (!exerciseIdParam || !existingExerciseDoc) {
+      return null;
+    }
+    return existingExerciseDoc.find((e) => e._id === exerciseIdParam) ?? null;
+  }, [exerciseIdParam, existingExerciseDoc]);
+
+  useEffect(() => {
+    if (!isEditMode || !exerciseToEdit) {
+      return;
+    }
+    setName(exerciseToEdit.name);
+    setBodyPart(exerciseToEdit.bodyPart);
+    setEquipment(exerciseToEdit.equipment);
+    setPrimaryMuscle(exerciseToEdit.primaryMuscle);
+    setMuscleGroups(exerciseToEdit.muscleGroups);
+    setDescription(exerciseToEdit.description ?? "");
+  }, [exerciseToEdit, isEditMode]);
+
+  const routineIdParam = typeof params.routineId === "string" ? params.routineId : "";
+  const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : "";
+  const draftSessionKeyParam =
+    typeof params.draftSessionKey === "string" ? params.draftSessionKey : "";
+  const replaceSessionExerciseIdParam =
+    typeof params.replaceSessionExerciseId === "string"
+      ? params.replaceSessionExerciseId
+      : undefined;
+  const isDraftMode = routineIdParam === "new";
+
+  /** From session editor: create exercise and attach to section. From My exercises: catalog only. */
+  const addToSession = useMemo(() => {
+    if (isEditMode) {
+      return false;
+    }
+    return (
+      (routineIdParam === "new" && draftSessionKeyParam.length > 0) ||
+      (routineIdParam.length > 0 &&
+        routineIdParam !== "new" &&
+        sessionIdParam.length > 0)
+    );
+  }, [draftSessionKeyParam, isEditMode, routineIdParam, sessionIdParam]);
+
+  const fromManage = useMemo(
+    () => parseFromManageFlag(params.fromManage),
+    [params.fromManage],
+  );
+
+  const isWaitingForData = isEditMode && exerciseIdParam && exerciseToEdit === null && existingExerciseDoc === undefined;
+  const canSubmit = name.trim().length > 0 && !isSubmitting && !isWaitingForData;
+
+  function resetCreateFormState() {
+    setName("");
+    setBodyPart("chest");
+    setEquipment("body weight");
+    setPrimaryMuscle("pectorals");
+    setMuscleGroups(["pectorals"]);
+    setDescription("");
+    setProgrammingDraft(createProgrammingDraft());
+  }
+
+  useEffect(() => {
+    if (!isEditMode) {
+      resetCreateFormState();
+    }
+  }, [isEditMode]);
+
+  function exitCustomExerciseScreen() {
+    if (!isEditMode) {
+      resetCreateFormState();
+    }
+    if (fromManage) {
+      router.replace("/(workout)/my-exercises");
+    } else {
+      router.back();
+    }
+  }
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        section: {
+          gap: theme.tokens.spacing.sm,
+        },
+        label: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
+          textTransform: "uppercase",
+        },
+        chipWrap: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.xs,
+        },
+        chip: {
+          backgroundColor: theme.colors.secondarySoft,
+          borderColor: theme.colors.borderSoft,
+          borderRadius: theme.tokens.radius.pill,
+          borderWidth: 1,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs,
+        },
+        chipActive: {
+          backgroundColor: theme.colors.accentSoft,
+          borderColor: theme.colors.borderAccent,
+        },
+        chipText: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        chipTextActive: {
+          color: theme.colors.accent,
+        },
+        footer: {
+          gap: theme.tokens.spacing.sm,
+        },
+      }),
+    [theme],
+  );
+
+  async function handleSave() {
+    if (isSubmitting) {
+      return;
+    }
+    if (!name.trim()) {
+      showAlert({
+        title: "Missing name",
+        message: "Add a name for the custom exercise.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    const payload = normalizeCreatePayload({
+      name,
+      bodyPart,
+      equipment,
+      primaryMuscle,
+      muscleGroups,
+      description,
+    });
+
+    if (isEditMode) {
+      if (!exerciseIdParam) {
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await updateCustomExercise({
+          exerciseId: exerciseIdParam,
+          ...payload,
+        });
+        exitCustomExerciseScreen();
+      } catch (error) {
+        showAlert({
+          title: "Unable to update exercise",
+          message: resolveErrorMessage(error, "Please try again."),
+          variant: "error",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (isDraftMode && !draftSessionKeyParam) {
+      showAlert({
+        title: "Missing draft session",
+        message: "Open this screen from a draft session to add the exercise.",
+        variant: "warning",
+      });
+      return;
+    }
+    if (routineIdParam !== "" && routineIdParam !== "new" && !sessionIdParam) {
+      showAlert({
+        title: "Missing session",
+        message: "Open this screen from a saved session to add the exercise.",
+        variant: "warning",
+      });
+      return;
+    }
+
+    if (!addToSession) {
+      setIsSubmitting(true);
+      try {
+        await createCustomExercise(payload);
+        exitCustomExerciseScreen();
+      } catch (error) {
+        showAlert({
+          title: "Unable to create exercise",
+          message: resolveErrorMessage(error, "Please try again."),
+          variant: "error",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const exerciseId = await createCustomExercise(payload);
+
+      if (isDraftMode) {
+        const normalized = normalizeExerciseCatalog({
+          ...payload,
+          isCustom: true,
+        });
+
+        const draftExercise: ExerciseCatalog = {
+          _id: exerciseId,
+          _creationTime: Date.now(),
+          ...normalized,
+        };
+
+        addOrReplaceExercise(
+          draftSessionKeyParam,
+          draftExercise,
+          {
+            sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
+            repsText: programmingDraft.repsText.trim() || "8-12",
+            targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
+            restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
+            notes: programmingDraft.notes,
+            tempo: programmingDraft.tempo,
+            rir: parseOptionalNumber(programmingDraft.rir),
+          },
+          replaceSessionExerciseIdParam,
+        );
+      } else {
+        await upsertSessionExercise({
+          sessionId: sessionIdParam as Id<"routineSessions">,
+          sessionExerciseId: replaceSessionExerciseIdParam as Id<"sessionExercises"> | undefined,
+          exerciseId,
+          sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
+          repsText: programmingDraft.repsText.trim() || "8-12",
+          targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
+          restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
+          notes: programmingDraft.notes,
+          tempo: programmingDraft.tempo,
+          rir: parseOptionalNumber(programmingDraft.rir),
+        });
+      }
+
+      resetCreateFormState();
+      router.replace({
+        pathname: "/(workout)/session-editor",
+        params: isDraftMode
+          ? {
+              routineId: "new",
+              draftSessionKey: draftSessionKeyParam,
+            }
+          : {
+              routineId: routineIdParam,
+              sessionId: sessionIdParam,
+            },
+      });
+    } catch (error) {
+      showAlert({
+        title: "Unable to create exercise",
+        message: resolveErrorMessage(error, "Please try again."),
+        variant: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const chipLabel = isEditMode ? "Edit" : "Create";
+  const submitLabel = isEditMode
+    ? isSubmitting ? "Saving..." : "Save changes"
+    : addToSession
+      ? isSubmitting ? "Creating..." : "Create and add"
+      : isSubmitting ? "Saving..." : "Save exercise";
+
+  const pageSubtitle = isEditMode
+    ? "Edit exercise"
+    : addToSession
+      ? "Custom exercise"
+      : "Save to your catalog";
+
+  return (
+    <WorkoutPage
+      headerChip={{ icon: "barbell-outline", label: chipLabel }}
+      title={null}
+      subtitle={pageSubtitle}
+      headerAction={<HeaderBackButton onPress={exitCustomExerciseScreen} />}
+      headerActionPosition="left"
+      scrollProps={{ keyboardShouldPersistTaps: "handled" }}
+    >
+      <AppCard>
+        <View style={styles.section}>
+          <AppTextField
+            label="Name"
+            placeholder="Exercise name"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            returnKeyType="done"
+          />
+          <AppTextField
+            label="Description (optional)"
+            placeholder="Exercise details"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+          />
+        </View>
+      </AppCard>
+
+      <AppCard>
+        <View style={styles.section}>
+          <Text style={styles.label}>Body part</Text>
+          <View style={styles.chipWrap}>
+            {BODY_PART_VALUES.map((value) => (
+              <Pressable
+                key={`body-part-${value}`}
+                style={[styles.chip, bodyPart === value && styles.chipActive]}
+                onPress={() => {
+                  setBodyPart(value);
+                }}
+              >
+                <Text style={[styles.chipText, bodyPart === value && styles.chipTextActive]}>
+                  {renderLabel(value)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </AppCard>
+
+      <AppCard>
+        <View style={styles.section}>
+          <Text style={styles.label}>Equipment</Text>
+          <View style={styles.chipWrap}>
+            {EQUIPMENT_VALUES.map((value) => (
+              <Pressable
+                key={`equipment-${value}`}
+                style={[styles.chip, equipment === value && styles.chipActive]}
+                onPress={() => {
+                  setEquipment(value);
+                }}
+              >
+                <Text style={[styles.chipText, equipment === value && styles.chipTextActive]}>
+                  {renderLabel(value)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </AppCard>
+
+      <AppCard>
+        <View style={styles.section}>
+          <Text style={styles.label}>Primary muscle</Text>
+          <View style={styles.chipWrap}>
+            {MUSCLE_VALUES.map((value) => (
+              <Pressable
+                key={`primary-muscle-${value}`}
+                style={[styles.chip, primaryMuscle === value && styles.chipActive]}
+                onPress={() => {
+                  setPrimaryMuscle(value);
+                  setMuscleGroups((current) => {
+                    const next = current.filter((item) => item !== value);
+                    return [value, ...next];
+                  });
+                }}
+              >
+                <Text
+                  style={[styles.chipText, primaryMuscle === value && styles.chipTextActive]}
+                >
+                  {renderLabel(value)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </AppCard>
+
+      <AppCard>
+        <View style={styles.section}>
+          <Text style={styles.label}>Muscle groups</Text>
+          <View style={styles.chipWrap}>
+            {MUSCLE_VALUES.map((value) => {
+              const isSelected = muscleGroups.includes(value);
+              return (
+                <Pressable
+                  key={`muscle-group-${value}`}
+                  style={[styles.chip, isSelected && styles.chipActive]}
+                  onPress={() => {
+                    setMuscleGroups((current) => {
+                      if (value === primaryMuscle) {
+                        return current.includes(value) ? current : [value, ...current];
+                      }
+                      return current.includes(value)
+                        ? current.filter((item) => item !== value)
+                        : [...current, value];
+                    });
+                  }}
+                >
+                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                    {renderLabel(value)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </AppCard>
+
+      {!isEditMode && addToSession ? (
+        <AppCard>
+          <View style={styles.section}>
+            <Text style={styles.label}>Programming</Text>
+            <ExerciseProgrammingForm draft={programmingDraft} onChange={setProgrammingDraft} />
+          </View>
+        </AppCard>
+      ) : null}
+
+      <View style={styles.footer}>
+        <AppButton
+          label={submitLabel}
+          fullWidth
+          onPress={handleSave}
+          disabled={!canSubmit}
+        />
+      </View>
+      {AlertModal}
+    </WorkoutPage>
+  );
+}
