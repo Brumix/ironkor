@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAction, useQuery } from "convex/react";
+import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Switch, Text, View } from "react-native";
@@ -12,11 +13,30 @@ import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { useAuth } from "@/features/auth/clerkCompat";
+import { useAuth, useClerk, useUser } from "@/features/auth/clerkCompat";
+import { resolveSignInMethod } from "@/features/auth/resolveSignInMethod";
 import { useTheme } from "@/theme";
+
+function getDisplayInitials(displayName: string) {
+  const words = displayName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "IA";
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word.slice(0, 1).toUpperCase())
+    .join("");
+}
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
+  const { client } = useClerk();
+  const { user } = useUser();
   const { mode, setMode, theme } = useTheme();
   const { showAlert, AlertModal } = useAppAlert();
   const viewer = useQuery(api.auth.getViewer);
@@ -26,6 +46,15 @@ export default function SettingsScreen() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+
+  const displayName = user?.fullName ?? viewer?.displayName ?? "Ironkor athlete";
+  const emailAddress = user?.primaryEmailAddress?.emailAddress ?? viewer?.primaryEmail ?? "Syncing your email...";
+  const signInMethod = resolveSignInMethod({
+    lastAuthenticationStrategy: client?.lastAuthenticationStrategy,
+    user,
+  });
+  const avatarInitials = getDisplayInitials(displayName);
+  const shouldShowAvatarImage = Boolean(user?.hasImage && user.imageUrl);
 
   const styles = useMemo(
     () =>
@@ -37,23 +66,89 @@ export default function SettingsScreen() {
         metricColumn: {
           flex: 1,
         },
-        accountMeta: {
-          color: theme.colors.textMuted,
-          fontSize: theme.tokens.typography.fontSize.sm,
+        accountActions: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: theme.tokens.spacing.sm,
         },
-        accountName: {
-          color: theme.colors.text,
+        accountAvatar: {
+          width: 76,
+          height: 76,
+          borderRadius: theme.tokens.radius.xl,
+          backgroundColor: theme.colors.accentSoft,
+          borderWidth: 1,
+          borderColor: theme.colors.borderAccent,
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        accountAvatarFallback: {
+          color: theme.colors.accentStrong,
           fontSize: theme.tokens.typography.fontSize.xl,
           fontWeight: theme.tokens.typography.fontWeight.black,
+          letterSpacing: theme.tokens.typography.letterSpacing.tight,
         },
-        accountRow: {
+        accountBadge: {
+          alignSelf: "flex-start",
+          backgroundColor: theme.colors.secondarySoft,
+          borderRadius: theme.tokens.radius.pill,
+          borderWidth: 1,
+          borderColor: theme.colors.borderSoft,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xxs,
+        },
+        accountBadgeLabel: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.xs,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.caps,
+          textTransform: "uppercase",
+        },
+        accountDetails: {
+          flex: 1,
+          gap: theme.tokens.spacing.xs,
+        },
+        accountHeader: {
           flexDirection: "row",
           gap: theme.tokens.spacing.md,
           alignItems: "center",
         },
-        accountText: {
-          flex: 1,
-          gap: theme.tokens.spacing.xxs,
+        accountMethodInline: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.xs,
+          marginTop: theme.tokens.spacing.xs,
+        },
+        accountMethodInlineLabel: {
+          color: theme.colors.textSubtle,
+          fontSize: theme.tokens.typography.fontSize.sm,
+        },
+        accountMeta: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          lineHeight:
+            theme.tokens.typography.fontSize.sm *
+            theme.tokens.typography.lineHeight.relaxed,
+        },
+        accountName: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize["2xl"],
+          fontWeight: theme.tokens.typography.fontWeight.black,
+        },
+        accountMethodValue: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.semibold,
+        },
+        accountMethodIcon: {
+          width: 24,
+          height: 24,
+          borderRadius: theme.tokens.radius.pill,
+          backgroundColor: theme.colors.accentSoft,
+          borderWidth: 1,
+          borderColor: theme.colors.borderAccent,
+          alignItems: "center",
+          justifyContent: "center",
         },
         row: {
           flexDirection: "row",
@@ -134,25 +229,45 @@ export default function SettingsScreen() {
       />
 
       <AppCard>
-        <View style={styles.accountRow}>
-          <MetricCard
-            helper="Clerk-secured account"
-            icon="shield-checkmark-outline"
-            label="Security"
-            tone="accent"
-            value="On"
-          />
-          <View style={styles.accountText}>
-            <Text style={styles.accountName}>
-              {viewer?.displayName ?? "Ironkor athlete"}
+        <View style={styles.accountHeader}>
+          <View style={styles.accountAvatar}>
+            {shouldShowAvatarImage ? (
+              <Image
+                source={{ uri: user?.imageUrl ?? "" }}
+                style={styles.accountAvatar}
+                contentFit="cover"
+                transition={theme.tokens.motion.quick}
+              />
+            ) : (
+              <Text style={styles.accountAvatarFallback}>{avatarInitials}</Text>
+            )}
+          </View>
+
+          <View style={styles.accountDetails}>
+            <View style={styles.accountBadge}>
+              <Text style={styles.accountBadgeLabel}>Profile</Text>
+            </View>
+
+            <Text selectable style={styles.accountName}>
+              {displayName}
             </Text>
-            <Text style={styles.accountMeta}>
-              {viewer?.primaryEmail ?? "Syncing your email..."}
+            <Text selectable style={styles.accountMeta}>
+              {emailAddress}
             </Text>
+
+            <View style={styles.accountMethodInline}>
+              <Text style={styles.accountMethodInlineLabel}>Signed in with</Text>
+              <View style={styles.accountMethodIcon}>
+                <Ionicons color={theme.colors.accentStrong} name={signInMethod.iconName} size={12} />
+              </View>
+              <Text selectable style={styles.accountMethodValue}>
+                {signInMethod.label}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.themeRow}>
+        <View style={styles.accountActions}>
           <AppButton
             icon={<Ionicons color={theme.colors.text} name="log-out-outline" size={16} />}
             label="Sign out"

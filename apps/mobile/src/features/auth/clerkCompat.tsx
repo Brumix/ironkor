@@ -28,9 +28,53 @@ interface SessionLike {
   };
 }
 
+interface EmailAddressLike {
+  emailAddress: string;
+}
+
+interface ExternalAccountLike {
+  provider: string;
+}
+
+interface UserLike {
+  externalAccounts: ExternalAccountLike[];
+  fullName: string | null;
+  hasImage: boolean;
+  imageUrl: string;
+  passwordEnabled: boolean;
+  primaryEmailAddress: EmailAddressLike | null;
+  verifiedExternalAccounts?: ExternalAccountLike[];
+}
+
 interface SessionState {
   isLoaded: boolean;
   session: SessionLike | null;
+}
+
+type UserState =
+  | {
+      isLoaded: false;
+      isSignedIn: undefined;
+      user: undefined;
+    }
+  | {
+      isLoaded: true;
+      isSignedIn: false;
+      user: null;
+    }
+  | {
+      isLoaded: true;
+      isSignedIn: true;
+      user: UserLike;
+    };
+
+interface ClerkClientLike {
+  lastAuthenticationStrategy: string | null;
+}
+
+interface ClerkState {
+  client: ClerkClientLike | undefined;
+  loaded: boolean;
 }
 
 interface SupportedSecondFactor {
@@ -150,9 +194,11 @@ interface ClerkExpoRuntimeModule {
 }
 
 interface ClerkReactRuntimeModule {
+  useClerk: () => ClerkState;
   useSession: () => SessionState;
   useSignIn: () => SignInState;
   useSignUp: () => SignUpState;
+  useUser: () => UserState;
 }
 
 interface ClerkErrorRuntimeModule {
@@ -214,6 +260,17 @@ const sessionFallback: SessionState = {
   session: null,
 };
 
+const userFallback: UserState = {
+  isLoaded: false,
+  isSignedIn: undefined,
+  user: undefined,
+};
+
+const clerkFallback: ClerkState = {
+  client: undefined,
+  loaded: false,
+};
+
 const signInFallback: SignInState = {
   isLoaded: false,
   signIn: {
@@ -273,6 +330,22 @@ export function useSession() {
   }
 
   return clerkReactModule.useSession();
+}
+
+export function useUser() {
+  if (!clerkReactModule) {
+    return userFallback;
+  }
+
+  return clerkReactModule.useUser();
+}
+
+export function useClerk() {
+  if (!clerkReactModule) {
+    return clerkFallback;
+  }
+
+  return clerkReactModule.useClerk();
 }
 
 export function useSignIn() {
