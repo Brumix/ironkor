@@ -55,7 +55,7 @@ function RootProviders() {
 
   if (!convexUrl) {
     return (
-      <AuthRuntimeScreen error={new Error("Missing EXPO_PUBLIC_CONVEX_URL in apps/mobile/.env.local.")} />
+      <AuthRuntimeScreen error={new Error("Missing EXPO_PUBLIC_CONVEX_URL in environment")} />
     );
   }
 
