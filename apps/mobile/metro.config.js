@@ -6,7 +6,7 @@ const repoRoot = path.resolve(__dirname, "../..");
 const config = getDefaultConfig(__dirname);
 
 // Allow Metro to resolve packages from the monorepo root
-config.watchFolders = [repoRoot];
+config.watchFolders = [...new Set([...(config.watchFolders ?? []), repoRoot])];
 
 // Ensure Metro can resolve workspace packages
 config.resolver.nodeModulesPaths = [

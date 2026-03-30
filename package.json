@@ -25,8 +25,7 @@
     "lockfile:check": "node ./scripts/check-bun-lockfiles.mjs"
   },
   "dependencies": {
-    "@ironkor/shared": "workspace:*",
-    "expo-dev-client": "~55.0.19"
+    "@ironkor/shared": "workspace:*"
   },
   "devDependencies": {
     "@convex-dev/migrations": "^0.3.3",
@@ -37,7 +36,7 @@
     "vitest": "^4.1.2"
   },
   "patchedDependencies": {
-    "expo-router@55.0.7": "patches/expo-router@55.0.7.patch",
+    "expo-router@55.0.8": "patches/expo-router@55.0.8.patch",
     "react-native-draggable-flatlist@4.0.3": "patches/react-native-draggable-flatlist@4.0.3.patch"
   }
 }

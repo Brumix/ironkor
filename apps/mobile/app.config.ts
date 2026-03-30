@@ -1,6 +1,7 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 type AppVariant = "production" | "beta" | "development";
+const EAS_PROJECT_ID = "0d005082-6c8a-4c7a-94d7-2a999b4609f2";
 
 function resolveAppVariant(appVariant?: string | null): AppVariant {
   if (appVariant === "development") {
@@ -39,11 +40,16 @@ function getAppName(variant: AppVariant) {
 function getAppIcon(variant: AppVariant) {
   switch (variant) {
     case "development":
+      return "./assets/moose_dev.png";
     case "beta":
       return "./assets/moose_beta.png";
     default:
       return "./assets/moose.png";
   }
+}
+
+function getWebFavicon(variant: AppVariant) {
+  return getAppIcon(variant);
 }
 
 function getAppScheme(variant: AppVariant) {
@@ -63,6 +69,7 @@ function getAuthRedirectDomain() {
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appVariant = resolveAppVariant(process.env.APP_VARIANT);
   const appIcon = getAppIcon(appVariant);
+  const webFavicon = getWebFavicon(appVariant);
   const authRedirectDomain = getAuthRedirectDomain();
   const associatedDomains = authRedirectDomain ? [`applinks:${authRedirectDomain}`] : undefined;
   const intentFilters = authRedirectDomain
@@ -92,11 +99,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     scheme: getAppSchemes(appVariant),
     userInterfaceStyle: "automatic",
     ios: {
+      ...config.ios,
       icon: appIcon,
       bundleIdentifier: getAppBundleIdentifier(appVariant),
       associatedDomains,
     },
     android: {
+      ...config.android,
       adaptiveIcon: {
         backgroundColor: "#17120F",
         foregroundImage: appIcon,
@@ -107,8 +116,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       intentFilters,
     },
     web: {
+      ...config.web,
       output: "static",
-      favicon: "./assets/moose.png",
+      favicon: webFavicon,
     },
     plugins: [
       "expo-router",
@@ -125,17 +135,28 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "expo-splash-screen",
         {
           backgroundColor: "#17120F",
-          image: "./assets/moose.png",
+          image: getAppIcon(appVariant),
           android: {
-            image: "./assets/moose.png",
+            image: getAppIcon(appVariant),
             imageWidth: 76,
           },
         },
       ],
     ],
     experiments: {
+      ...config.experiments,
       typedRoutes: true,
       reactCompiler: true,
+    },
+    extra: {
+      ...config.extra,
+      router: {
+        ...(config.extra?.router ?? {}),
+      },
+      eas: {
+        ...(config.extra?.eas ?? {}),
+        projectId: EAS_PROJECT_ID,
+      },
     },
     owner: "ironkor",
   };
