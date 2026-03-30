@@ -21,6 +21,12 @@ export const MAX_ROUTINE_NAME_LENGTH = 80;
 export const MAX_SECTION_NAME_LENGTH = 80;
 export const MAX_SESSIONS_PER_ROUTINE = SHARED_MAX_SESSIONS_PER_ROUTINE;
 export const MAX_EXERCISES_PER_SESSION = SHARED_MAX_EXERCISES_PER_SESSION;
+export const MAX_PROGRAMMING_SETS = 100;
+export const MAX_PROGRAMMING_REST_SECONDS = 3_600;
+export const MAX_PROGRAMMING_RIR = 15;
+export const MAX_PROGRAMMING_REPS_TEXT_LENGTH = 50;
+export const MAX_PROGRAMMING_NOTES_LENGTH = 500;
+export const MAX_PROGRAMMING_TEMPO_LENGTH = 20;
 export const TRAINING_DAY_MAP: Record<number, number[]> = {
   1: [0],
   2: [0, 3],
@@ -71,11 +77,21 @@ export function normalizeProgrammingFields(input: {
   tempo?: string;
   rir?: number;
 }) {
-  const sets = Math.max(1, Math.floor(input.sets ?? 3));
+  const sets = Math.min(
+    MAX_PROGRAMMING_SETS,
+    Math.max(1, Math.floor(input.sets ?? 3)),
+  );
   const repsText = input.repsText?.trim() ?? "8-12";
+  assert(
+    repsText.length <= MAX_PROGRAMMING_REPS_TEXT_LENGTH,
+    `Reps text must be ${MAX_PROGRAMMING_REPS_TEXT_LENGTH} characters or fewer.`,
+  );
   const restSeconds =
     typeof input.restSeconds === "number"
-      ? Math.max(0, Math.floor(input.restSeconds))
+      ? Math.min(
+          MAX_PROGRAMMING_REST_SECONDS,
+          Math.max(0, Math.floor(input.restSeconds)),
+        )
       : undefined;
   const targetWeightKg =
     typeof input.targetWeightKg === "number" &&
@@ -84,16 +100,30 @@ export function normalizeProgrammingFields(input: {
       : undefined;
   const rir =
     typeof input.rir === "number" && Number.isFinite(input.rir)
-      ? Math.max(0, Math.floor(input.rir))
+      ? Math.min(MAX_PROGRAMMING_RIR, Math.max(0, Math.floor(input.rir)))
       : undefined;
+  const notes = input.notes?.trim() ?? undefined;
+  const tempo = input.tempo?.trim() ?? undefined;
+  if (notes !== undefined) {
+    assert(
+      notes.length <= MAX_PROGRAMMING_NOTES_LENGTH,
+      `Notes must be ${MAX_PROGRAMMING_NOTES_LENGTH} characters or fewer.`,
+    );
+  }
+  if (tempo !== undefined) {
+    assert(
+      tempo.length <= MAX_PROGRAMMING_TEMPO_LENGTH,
+      `Tempo must be ${MAX_PROGRAMMING_TEMPO_LENGTH} characters or fewer.`,
+    );
+  }
 
   return {
     sets,
     repsText,
     targetWeightKg,
     restSeconds,
-    notes: input.notes?.trim() ?? undefined,
-    tempo: input.tempo?.trim() ?? undefined,
+    notes,
+    tempo,
     rir,
   };
 }

@@ -28,10 +28,25 @@ import {
 import type { Doc, Id } from "./_generated/dataModel";
 import type { ExerciseCatalogRecord, ExerciseFilterOptionsRecord } from "./types";
 
+const PREVIEW_LIMIT_DEFAULT = 50;
+const CUSTOM_LIMIT_DEFAULT = 100;
+const EXERCISE_LIMIT_MAX = 200;
+const MAX_CUSTOM_EXERCISE_NAME_LENGTH = 200;
+const MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH = 2_000;
+const MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS = 30;
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new ConvexError(message);
   }
+}
+
+function clampPositiveIntLimit(
+  value: number | undefined,
+  defaultValue: number,
+  maxValue: number,
+) {
+  return Math.min(Math.max(1, Math.floor(value ?? defaultValue)), maxValue);
 }
 
 function toExerciseCatalogRecord(doc: Doc<"exercises">): ExerciseCatalogRecord {
@@ -280,7 +295,11 @@ export const listPreview = query({
   },
   handler: async (ctx, args) => {
     const { viewer } = await requireViewer(ctx);
-    const limit = Math.min(args.limit ?? 50, 200);
+    const limit = clampPositiveIntLimit(
+      args.limit,
+      PREVIEW_LIMIT_DEFAULT,
+      EXERCISE_LIMIT_MAX,
+    );
     const searchText = normalizeNameText(args.searchText ?? "");
 
     if (searchText) {
@@ -357,7 +376,7 @@ export const listPreview = query({
     } else {
       docs = await ctx.db
         .query("exercises")
-        .withIndex("by_nameText")
+        .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", false))
         .take(limit);
     }
 
@@ -387,7 +406,11 @@ export const listCustom = query({
   },
   handler: async (ctx, args) => {
     const { viewer } = await requireViewer(ctx);
-    const limit = Math.min(args.limit ?? 100, 200);
+    const limit = clampPositiveIntLimit(
+      args.limit,
+      CUSTOM_LIMIT_DEFAULT,
+      EXERCISE_LIMIT_MAX,
+    );
     const searchText = normalizeNameText(args.searchText ?? "");
 
     if (searchText) {
@@ -457,8 +480,22 @@ export const createCustom = mutation({
     const { viewer } = await requireViewer(ctx);
     const name = args.name.trim();
     const description = args.description?.trim();
+    assert(
+      args.muscleGroups.length <= MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS,
+      `Muscle groups must contain at most ${MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS} items.`,
+    );
     const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
     assert(name.length > 0, "Exercise name is required.");
+    assert(
+      name.length <= MAX_CUSTOM_EXERCISE_NAME_LENGTH,
+      `Exercise name must be ${MAX_CUSTOM_EXERCISE_NAME_LENGTH} characters or fewer.`,
+    );
+    if (description !== undefined && description.length > 0) {
+      assert(
+        description.length <= MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH,
+        `Exercise description must be ${MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH} characters or fewer.`,
+      );
+    }
     assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
     assert(
       uniqueMuscleGroups.includes(args.primaryMuscle),
@@ -493,8 +530,22 @@ export const updateCustom = mutation({
 
     const name = args.name.trim();
     const description = args.description?.trim();
+    assert(
+      args.muscleGroups.length <= MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS,
+      `Muscle groups must contain at most ${MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS} items.`,
+    );
     const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
     assert(name.length > 0, "Exercise name is required.");
+    assert(
+      name.length <= MAX_CUSTOM_EXERCISE_NAME_LENGTH,
+      `Exercise name must be ${MAX_CUSTOM_EXERCISE_NAME_LENGTH} characters or fewer.`,
+    );
+    if (description !== undefined && description.length > 0) {
+      assert(
+        description.length <= MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH,
+        `Exercise description must be ${MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH} characters or fewer.`,
+      );
+    }
     assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
     assert(
       uniqueMuscleGroups.includes(args.primaryMuscle),

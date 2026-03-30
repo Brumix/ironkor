@@ -1,13 +1,21 @@
+import { v } from "convex/values";
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import { generateDefaultWeeklyPlan } from "./helpers";
+import { internalMutation } from "../_generated/server";
 import { normalizeExerciseCatalog } from "../exerciseCatalog";
 
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
-export async function seedDefaultsIfEmptyHandler(ctx: MutationCtx) {
-  const existingRoutine = await ctx.db.query("routines").first();
+async function seedDefaultsForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+) {
+  const existingRoutine = await ctx.db
+    .query("routines")
+    .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", userId))
+    .first();
   if (existingRoutine) {
     return { seeded: false };
   }
@@ -66,6 +74,7 @@ export async function seedDefaultsIfEmptyHandler(ctx: MutationCtx) {
   }
 
   const routineId = await ctx.db.insert("routines", {
+    userId,
     name: "Push / Pull / Legs",
     nameKey: normalizeDisplayNameKey("Push / Pull / Legs"),
     daysPerWeek: 4,
@@ -81,6 +90,7 @@ export async function seedDefaultsIfEmptyHandler(ctx: MutationCtx) {
   for (let index = 0; index < sessionNames.length; index += 1) {
     sessionIds.push(
       await ctx.db.insert("routineSessions", {
+        userId,
         routineId,
         name: sessionNames[index],
         nameKey: normalizeDisplayNameKey(sessionNames[index]),
@@ -128,6 +138,7 @@ export async function seedDefaultsIfEmptyHandler(ctx: MutationCtx) {
     for (let index = 0; index < localExercises.length; index += 1) {
       const exercise = localExercises[index];
       await ctx.db.insert("sessionExercises", {
+        userId,
         sessionId,
         exerciseId: exercise.exerciseId,
         order: index,
@@ -141,3 +152,12 @@ export async function seedDefaultsIfEmptyHandler(ctx: MutationCtx) {
 
   return { seeded: true };
 }
+
+export const seedDefaultsIfEmpty = internalMutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return seedDefaultsForUser(ctx, args.userId);
+  },
+});

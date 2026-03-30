@@ -186,3 +186,99 @@ test("facet query returns no equipment options for an impossible body-part and m
 
   expect(options.equipment).toEqual([]);
 });
+
+test("list queries clamp invalid limits to a minimum of one", async () => {
+  const { t, authed } = createAuthedTest();
+  const viewerId = await authed.mutation(api.auth.ensureViewer, {});
+  await seedExercises(t, viewerId);
+
+  const preview = await authed.query(api.exercises.listPreview, {
+    limit: -10,
+  });
+  expect(preview).toHaveLength(1);
+
+  const custom = await authed.query(api.exercises.listCustom, {
+    limit: -3,
+  });
+  expect(custom).toHaveLength(1);
+});
+
+test("listPreview fallback scope ignores other users custom rows", async () => {
+  const { t, authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  await t.run(async (ctx) => {
+    const otherUserId = await ctx.db.insert("users", {
+      tokenIdentifier: "https://clerk.test|other_custom_owner",
+      clerkUserId: "other_custom_owner",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    await ctx.db.insert(
+      "exercises",
+      normalizeExerciseCatalog({
+        name: "Aardvark Private Exercise",
+        bodyPart: "chest",
+        equipment: "cable",
+        primaryMuscle: "pectorals",
+        muscleGroups: ["pectorals"],
+        isCustom: true,
+        ownerId: otherUserId,
+      }),
+    );
+
+    await ctx.db.insert(
+      "exercises",
+      normalizeExerciseCatalog({
+        name: "Bench Press",
+        bodyPart: "chest",
+        equipment: "barbell",
+        primaryMuscle: "pectorals",
+        muscleGroups: ["pectorals", "triceps", "delts"],
+      }),
+    );
+  });
+
+  const preview = await authed.query(api.exercises.listPreview, {
+    limit: 1,
+  });
+  expect(preview).toHaveLength(1);
+  expect(preview[0]?.isCustom).toBe(false);
+});
+
+test("createCustom enforces length bounds", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  await expect(
+    authed.mutation(api.exercises.createCustom, {
+      name: "A".repeat(201),
+      bodyPart: "chest",
+      equipment: "barbell",
+      primaryMuscle: "pectorals",
+      muscleGroups: ["pectorals"],
+    }),
+  ).rejects.toThrow("Exercise name must be 200 characters or fewer.");
+
+  await expect(
+    authed.mutation(api.exercises.createCustom, {
+      name: "Valid Name",
+      bodyPart: "chest",
+      equipment: "barbell",
+      primaryMuscle: "pectorals",
+      muscleGroups: Array.from({ length: 31 }, () => "pectorals"),
+    }),
+  ).rejects.toThrow("Muscle groups must contain at most 30 items.");
+
+  await expect(
+    authed.mutation(api.exercises.createCustom, {
+      name: "Valid Name",
+      bodyPart: "chest",
+      equipment: "barbell",
+      primaryMuscle: "pectorals",
+      muscleGroups: ["pectorals"],
+      description: "B".repeat(2_001),
+    }),
+  ).rejects.toThrow("Exercise description must be 2000 characters or fewer.");
+});

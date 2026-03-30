@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 
 import { api, components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
 import schema from "@convex/schema";
 
 interface ImportMetaWithGlob {
@@ -100,6 +101,66 @@ test("routine and session limits are enforced", async () => {
   ).rejects.toThrow("Sections can have at most 40 exercises.");
 });
 
+test("exercise programming is clamped and validates text lengths", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+  const routineId = await authed.mutation(api.routines.create, {
+    name: "Programming Bounds",
+    daysPerWeek: 3,
+    isActive: true,
+  });
+  const sessionId = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "Upper",
+  });
+  const exerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Clamp Test",
+    bodyPart: "chest",
+    equipment: "barbell",
+    primaryMuscle: "pectorals",
+    muscleGroups: ["pectorals"],
+  });
+
+  const sessionExerciseId = await authed.mutation(api.routines.upsertSessionExercise, {
+    sessionId,
+    exerciseId,
+    sets: 5_000,
+    repsText: "10-12",
+    restSeconds: 99_999,
+    rir: 99,
+  });
+
+  const detail = await authed.query(api.routines.getDetailedById, { routineId });
+  const entry = detail.sessions[0]?.exercises.find((item) => item._id === sessionExerciseId);
+  expect(entry?.sets).toBe(100);
+  expect(entry?.restSeconds).toBe(3_600);
+  expect(entry?.rir).toBe(15);
+
+  await expect(
+    authed.mutation(api.routines.updateSessionExerciseProgramming, {
+      sessionId,
+      sessionExerciseId,
+      repsText: "A".repeat(51),
+    }),
+  ).rejects.toThrow("Reps text must be 50 characters or fewer.");
+
+  await expect(
+    authed.mutation(api.routines.updateSessionExerciseProgramming, {
+      sessionId,
+      sessionExerciseId,
+      notes: "B".repeat(501),
+    }),
+  ).rejects.toThrow("Notes must be 500 characters or fewer.");
+
+  await expect(
+    authed.mutation(api.routines.updateSessionExerciseProgramming, {
+      sessionId,
+      sessionExerciseId,
+      tempo: "C".repeat(21),
+    }),
+  ).rejects.toThrow("Tempo must be 20 characters or fewer.");
+});
+
 test("deleting a session clears manual weekly-plan assignments", async () => {
   const { authed } = createAuthedTest();
   await authed.mutation(api.auth.ensureViewer, {});
@@ -159,6 +220,64 @@ test("deleting the active routine promotes the next remaining routine", async ()
   expect(summaries[0]?.isActive).toBe(true);
 });
 
+test("reorder mutations reject duplicate ids", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+  const routineId = await authed.mutation(api.routines.create, {
+    name: "Dupes Guard",
+    daysPerWeek: 3,
+    isActive: true,
+  });
+  const sessionA = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "A",
+  });
+  const sessionB = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "B",
+  });
+
+  await expect(
+    authed.mutation(api.routines.reorderSessions, {
+      routineId,
+      orderedSessionIds: [sessionA, sessionA],
+    }),
+  ).rejects.toThrow("Section reorder payload contains duplicate ids.");
+
+  const exerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Test Bench",
+    bodyPart: "chest",
+    equipment: "barbell",
+    primaryMuscle: "pectorals",
+    muscleGroups: ["pectorals", "triceps"],
+  });
+
+  const entryA = await authed.mutation(api.routines.upsertSessionExercise, {
+    sessionId: sessionB,
+    exerciseId,
+    sets: 3,
+    repsText: "8-10",
+  });
+  const entryB = await authed.mutation(api.routines.upsertSessionExercise, {
+    sessionId: sessionB,
+    exerciseId,
+    sets: 4,
+    repsText: "6-8",
+  });
+
+  await expect(
+    authed.mutation(api.routines.reorderSessionExercises, {
+      sessionId: sessionB,
+      orderedSessionExerciseIds: [entryA, entryA],
+    }),
+  ).rejects.toThrow("Section exercise reorder payload contains duplicate ids.");
+
+  await authed.mutation(api.routines.reorderSessionExercises, {
+    sessionId: sessionB,
+    orderedSessionExerciseIds: [entryB, entryA],
+  });
+});
+
 test("nameKey migrations backfill legacy routines and sessions", async () => {
   const { t } = createAuthedTest();
 
@@ -198,5 +317,99 @@ test("nameKey migrations backfill legacy routines and sessions", async () => {
 
     expect(routines[0]?.nameKey).toBe("legacy push day");
     expect(sessions[0]?.nameKey).toBe("legacy session");
+  });
+});
+
+test("internal seed defaults are scoped to a specific user", async () => {
+  const { t } = createAuthedTest();
+
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      tokenIdentifier: "seed-user-token",
+      clerkUserId: "seed-user-clerk",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const result = await ctx.runMutation(internal.routines.seed.seedDefaultsIfEmpty, {
+      userId,
+    });
+    expect(result).toEqual({ seeded: true });
+
+    const routines = await ctx.db
+      .query("routines")
+      .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", userId))
+      .take(10);
+    expect(routines).toHaveLength(1);
+
+    const sessions = await ctx.db
+      .query("routineSessions")
+      .withIndex("by_userId_and_routine", (q) =>
+        q.eq("userId", userId).eq("routineId", routines[0]!._id),
+      )
+      .take(10);
+    expect(sessions.length).toBeGreaterThan(0);
+
+    const exercises = await ctx.db
+      .query("sessionExercises")
+      .withIndex("by_userId_and_session", (q) =>
+        q.eq("userId", userId).eq("sessionId", sessions[0]!._id),
+      )
+      .take(10);
+    expect(exercises.length).toBeGreaterThan(0);
+  });
+});
+
+test("ownership migrations backfill session and exercise user ids", async () => {
+  const { t } = createAuthedTest();
+
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      tokenIdentifier: "ownership-user-token",
+      clerkUserId: "ownership-user-clerk",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const routineId = await ctx.db.insert("routines", {
+      userId,
+      name: "Owner Routine",
+      daysPerWeek: 3,
+      isActive: false,
+      sessionOrder: [],
+      weeklyPlan: createTrainingWeek(),
+      updatedAt: 1,
+    });
+    const sessionId = await ctx.db.insert("routineSessions", {
+      routineId,
+      name: "Legacy Session Missing Owner",
+      order: 0,
+      updatedAt: 1,
+    });
+    const exerciseId = await ctx.db.insert(
+      "exercises",
+      normalizeExerciseCatalog({
+        name: "Owned Migration Exercise",
+        bodyPart: "chest",
+        equipment: "barbell",
+        primaryMuscle: "pectorals",
+        muscleGroups: ["pectorals"],
+      }),
+    );
+    const sessionExerciseId = await ctx.db.insert("sessionExercises", {
+      sessionId,
+      exerciseId,
+      order: 0,
+      sets: 3,
+      repsText: "8-12",
+      updatedAt: 1,
+    });
+
+    await runToCompletion(ctx, components.migrations, internal.migrations.backfillRoutineSessionUserIds);
+    await runToCompletion(ctx, components.migrations, internal.migrations.backfillSessionExerciseUserIds);
+
+    const session = await ctx.db.get(sessionId);
+    const entry = await ctx.db.get(sessionExerciseId);
+    expect(session?.userId).toBe(userId);
+    expect(entry?.userId).toBe(userId);
   });
 });

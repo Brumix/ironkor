@@ -144,6 +144,11 @@ export async function reorderSessionsHandler(
   for (const sessionId of args.orderedSessionIds) {
     assert(existingIds.has(sessionId), "Invalid section id for this routine.");
   }
+  const uniqueOrderedIds = new Set(args.orderedSessionIds);
+  assert(
+    uniqueOrderedIds.size === args.orderedSessionIds.length,
+    "Section reorder payload contains duplicate ids.",
+  );
 
   for (let index = 0; index < args.orderedSessionIds.length; index += 1) {
     await ctx.db.patch(args.orderedSessionIds[index], {

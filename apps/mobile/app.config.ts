@@ -55,9 +55,32 @@ function getAppSchemes(variant: AppVariant) {
   return [getAppScheme(variant)];
 }
 
+function getAuthRedirectDomain() {
+  const value = process.env.EXPO_PUBLIC_AUTH_REDIRECT_DOMAIN?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appVariant = resolveAppVariant(process.env.APP_VARIANT);
   const appIcon = getAppIcon(appVariant);
+  const authRedirectDomain = getAuthRedirectDomain();
+  const associatedDomains = authRedirectDomain ? [`applinks:${authRedirectDomain}`] : undefined;
+  const intentFilters = authRedirectDomain
+    ? [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          category: ["BROWSABLE", "DEFAULT"],
+          data: [
+            {
+              scheme: "https",
+              host: authRedirectDomain,
+              pathPrefix: "/callback",
+            },
+          ],
+        },
+      ]
+    : undefined;
 
   return {
     ...config,
@@ -71,6 +94,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ios: {
       icon: appIcon,
       bundleIdentifier: getAppBundleIdentifier(appVariant),
+      associatedDomains,
     },
     android: {
       adaptiveIcon: {
@@ -80,6 +104,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       softwareKeyboardLayoutMode: "resize",
       predictiveBackGestureEnabled: false,
       package: getAppBundleIdentifier(appVariant),
+      intentFilters,
     },
     web: {
       output: "static",

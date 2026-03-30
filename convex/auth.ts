@@ -23,6 +23,8 @@ import type { MutationCtx } from "./_generated/server";
 const ACCOUNT_DELETION_BATCH_SIZE = 100;
 const ACCOUNT_DELETION_RETRY_BASE_MS = 5_000;
 const ACCOUNT_DELETION_RETRY_MAX_MS = 5 * 60 * 1000;
+const ACCOUNT_DELETION_MAX_ATTEMPTS = 10;
+const ACCOUNT_DELETION_ERROR_MAX_LENGTH = 280;
 
 async function deleteDocsInBatch<T extends { _id: Id<any> }>(
   docs: T[],
@@ -89,8 +91,18 @@ async function deleteClerkUser(clerkUserId: string) {
     return;
   }
 
-  const body = await response.text();
-  throw new Error(`Unable to delete Clerk account: ${body}`);
+  throw new Error(`Unable to delete Clerk account (HTTP ${response.status}).`);
+}
+
+function normalizeDeletionErrorMessage(errorMessage: string) {
+  const trimmed = errorMessage.trim();
+  if (trimmed.length === 0) {
+    return "Unable to delete Clerk account.";
+  }
+  if (trimmed.length <= ACCOUNT_DELETION_ERROR_MAX_LENGTH) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, ACCOUNT_DELETION_ERROR_MAX_LENGTH - 3)}...`;
 }
 
 export const getViewer = query({
@@ -476,13 +488,32 @@ export const failAccountDeletionJob = internalMutation({
     if (!job || job.status === "complete") {
       return { status: "complete" as const };
     }
+    const nextAttempt = job.attempts + 1;
+    const lastError = normalizeDeletionErrorMessage(args.errorMessage);
+    if (nextAttempt >= ACCOUNT_DELETION_MAX_ATTEMPTS) {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        status: "failed",
+        attempts: nextAttempt,
+        lastError: `Max retries reached: ${lastError}`,
+        scheduledAt: Date.now(),
+      });
 
-    const retryMs = getAccountDeletionRetryMs(job.attempts + 1);
+      const viewer = await ctx.db.get(job.userId);
+      if (viewer) {
+        await patchViewerDeletionState(ctx, viewer._id, {
+          deletionStatus: "failed",
+        });
+      }
+
+      return { status: "failed" as const, retryMs: null };
+    }
+
+    const retryMs = getAccountDeletionRetryMs(nextAttempt);
     const scheduledAt = Date.now() + retryMs;
     await patchAccountDeletionJobState(ctx, job._id, {
       status: "failed",
-      attempts: job.attempts + 1,
-      lastError: args.errorMessage,
+      attempts: nextAttempt,
+      lastError,
       scheduledAt,
     });
 

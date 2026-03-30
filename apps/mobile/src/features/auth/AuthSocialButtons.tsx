@@ -12,6 +12,7 @@ import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
 const CLERK_REDIRECT_SCHEME = "ironkor";
+const AUTH_REDIRECT_DOMAIN = process.env.EXPO_PUBLIC_AUTH_REDIRECT_DOMAIN?.trim();
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -30,6 +31,9 @@ function useWarmUpBrowser() {
 }
 
 function getClerkRedirectUrl() {
+  if (AUTH_REDIRECT_DOMAIN && AUTH_REDIRECT_DOMAIN.length > 0) {
+    return `https://${AUTH_REDIRECT_DOMAIN}/callback`;
+  }
   return AuthSession.makeRedirectUri({
     path: "callback",
     scheme: CLERK_REDIRECT_SCHEME,
@@ -68,14 +72,6 @@ export default function AuthSocialButtons() {
     setIsGoogleLoading(true);
     try {
       const redirectUrl = getClerkRedirectUrl();
-
-      if (__DEV__) {
-        console.warn("[auth] Starting Google SSO", {
-          redirectUrl,
-          scheme: CLERK_REDIRECT_SCHEME,
-        });
-      }
-
       const { createdSessionId, setActive } = await startSSOFlow({
         redirectUrl,
         strategy: "oauth_google",

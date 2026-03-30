@@ -8,6 +8,13 @@ const migrations = new Migrations<DataModel>(components.migrations);
 
 type RoutineForMigration = Doc<"routines"> & { nameKey?: string };
 type RoutineSessionForMigration = Doc<"routineSessions"> & { nameKey?: string };
+type RoutineWithOptionalOwner = Doc<"routines"> & { userId?: Doc<"users">["_id"] };
+type RoutineSessionWithOptionalOwner = Doc<"routineSessions"> & {
+  userId?: Doc<"users">["_id"];
+};
+type SessionExerciseWithOptionalOwner = Doc<"sessionExercises"> & {
+  userId?: Doc<"users">["_id"];
+};
 
 export const backfillRoutineNameKeys = migrations.define({
   table: "routines",
@@ -35,9 +42,56 @@ export const backfillRoutineSessionNameKeys = migrations.define({
   },
 });
 
+export const backfillRoutineUserIds = migrations.define({
+  table: "routines",
+  migrateOne: async (_ctx, routine: RoutineWithOptionalOwner) => {
+    // Older seed data can be unowned. We keep these records unchanged here so they can be
+    // reviewed and cleaned explicitly before tightening the schema in a later deploy.
+    if (routine.userId === undefined) {
+      return undefined;
+    }
+    return undefined;
+  },
+});
+
+export const backfillRoutineSessionUserIds = migrations.define({
+  table: "routineSessions",
+  migrateOne: async (ctx, session: RoutineSessionWithOptionalOwner) => {
+    if (session.userId !== undefined) {
+      return undefined;
+    }
+    const routine = await ctx.db.get(session.routineId);
+    if (!routine?.userId) {
+      return undefined;
+    }
+    return {
+      userId: routine.userId,
+    };
+  },
+});
+
+export const backfillSessionExerciseUserIds = migrations.define({
+  table: "sessionExercises",
+  migrateOne: async (ctx, entry: SessionExerciseWithOptionalOwner) => {
+    if (entry.userId !== undefined) {
+      return undefined;
+    }
+    const session = await ctx.db.get(entry.sessionId);
+    if (!session?.userId) {
+      return undefined;
+    }
+    return {
+      userId: session.userId,
+    };
+  },
+});
+
 export const run = migrations.runner();
 
 export const runAll = migrations.runner([
   internal.migrations.backfillRoutineNameKeys,
   internal.migrations.backfillRoutineSessionNameKeys,
+  internal.migrations.backfillRoutineUserIds,
+  internal.migrations.backfillRoutineSessionUserIds,
+  internal.migrations.backfillSessionExerciseUserIds,
 ]);

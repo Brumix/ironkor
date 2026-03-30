@@ -153,6 +153,11 @@ export async function reorderSessionExercisesHandler(
   for (const entryId of args.orderedSessionExerciseIds) {
     assert(currentIds.has(entryId), "Invalid section exercise id for this section.");
   }
+  const uniqueOrderedIds = new Set(args.orderedSessionExerciseIds);
+  assert(
+    uniqueOrderedIds.size === args.orderedSessionExerciseIds.length,
+    "Section exercise reorder payload contains duplicate ids.",
+  );
 
   for (let index = 0; index < args.orderedSessionExerciseIds.length; index += 1) {
     await ctx.db.patch(args.orderedSessionExerciseIds[index], {
