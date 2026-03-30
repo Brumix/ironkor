@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Project guidance for AI/code agents working in the **Ironkor Mobile** app.
+Project guidance for AI/code agents working in the **Ironkor** app.
 
 ## Project Snapshot
 
@@ -35,10 +35,12 @@ Path aliases: `@/*` → `src/*`, `@convex/*` → `../../convex/*` (see `tsconfig
 - Run everything from **repo root** with `bun run start` (Convex + Expo together).
 - Run Expo only (from repo root): `bun run mobile:dev`
 - Run from inside this folder: `bun run start` (Expo only)
+- Expo Doctor (from this folder): `bun run doctor`
 - Lint (from this folder): `bun run lint`
 - Lint (auto-fix): `bun run lint:fix`
+- Feature-complete validation (from repo root): `bun run quality:mobile`
 - Typecheck (from repo root): `bun run typecheck`
-- After non-trivial changes, always run `bun run lint` and `bun run typecheck` from root.
+- After completing any feature that changes `apps/mobile`, always run `bun run quality:mobile` from repo root before handoff.
 
 ## Routing and Navigation
 
@@ -127,7 +129,7 @@ Path aliases: `@/*` → `src/*`, `@convex/*` → `../../convex/*` (see `tsconfig
 
 ## Before Finishing
 
-- Run `bun run lint` from this folder.
-- Run `bun run typecheck` from repo root.
+- If the completed work touched `apps/mobile`, run `bun run quality:mobile` from repo root before reporting completion.
+- If you are running checks individually from this folder, run `bun run lint` and `bun run doctor`, then run `bun run typecheck` from repo root.
 - If routes changed, note whether Expo cache clear may be needed.
 - State assumptions clearly in the handoff.

@@ -1,4 +1,4 @@
-# IronKor Mobile Design System
+# Ironkor Design System
 
 ## Design Direction
 - Minimalist + energetic fitness UI

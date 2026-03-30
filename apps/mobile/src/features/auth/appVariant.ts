@@ -15,11 +15,11 @@ export function resolveAppVariant(appVariant?: string | null): AppVariant {
 export function getAppBundleIdentifier(variant: AppVariant) {
   switch (variant) {
     case "development":
-      return "com.ironkor.ironkor.development";
-    case "beta":
-      return "com.ironkor.ironkor.beta";
+      return "com.ironkor.development";
+    case "beta":  
+      return "com.ironkor.beta";
     default:
-      return "com.ironkor.ironkor";
+      return "com.ironkor";
   }
 }
 
@@ -35,12 +35,10 @@ export function getAppName(variant: AppVariant) {
 }
 
 export function getAppScheme(variant: AppVariant) {
-  switch (variant) {
-    case "development":
-      return "ironkormobile-dev";
-    case "beta":
-      return "ironkormobile-beta";
-    default:
-      return "ironkormobile";
-  }
+  void variant;
+  return "ironkor";
+}
+
+export function getAppSchemes(variant: AppVariant) {
+  return [getAppScheme(variant)];
 }

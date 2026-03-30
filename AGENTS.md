@@ -12,7 +12,7 @@ ironkor/                      # repo root — Git root, workspace root
 ├── packages/
 │   └── shared/               # @ironkor/shared — pure TS constants, enums, validators
 └── apps/
-    └── mobile/               # Expo + React Native app (Ironkor Mobile)
+    └── mobile/               # Expo + React Native app (Ironkor)
 ```
 
 ### Architecture intent
@@ -39,7 +39,9 @@ ironkor/                      # repo root — Git root, workspace root
 | `bun run convex:dev` | Run Convex dev server only |
 | `bun run convex:deploy` | Deploy Convex to production |
 | `bun run mobile:dev` | Run Expo dev server only |
+| `bun run mobile:doctor` | Run Expo Doctor for the mobile app |
 | `bun run lint` | Lint the mobile app |
+| `bun run quality:mobile` | Run lint + Expo Doctor + typecheck for Expo app feature completion |
 | `bun run typecheck` | Typecheck mobile + convex |
 | `bun run lockfile:check` | Fail if nested `bun.lock` files exist |
 
@@ -95,7 +97,9 @@ Guidelines:
 - Always make changes from the correct workspace: root for Convex and shared, `apps/mobile` for the mobile app.
 - Do not duplicate Convex config or schema across apps — one deployment serves all.
 - Keep TypeScript strict; avoid `any`.
-- After non-trivial changes, run `bun run lint` and `bun run typecheck` from root.
+- After non-trivial changes, run the appropriate validation from root.
+- If a completed feature changes anything under `apps/mobile`, run `bun run quality:mobile` before reporting the work as finished.
+- If a change does not touch the Expo app, keep the existing validation flow and run `bun run typecheck` at minimum when the change is non-trivial.
 - Follow shared UI interaction rules in `docs/UI_STANDARDS.md` when changing card actions or list ordering behavior.
 - For workout-editor UX in the mobile app, check `apps/mobile/AGENTS.md` before changing routine creation/editing flows or planner behavior.
 - For the mobile routine editor, treat page-level edits as local until the user presses Save. Do not persist add/delete/reorder/name/planner changes for an existing routine during routine-editor interactions.

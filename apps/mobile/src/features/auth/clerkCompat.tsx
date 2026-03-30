@@ -183,16 +183,26 @@ interface SSOResult {
   signUp?: unknown;
 }
 
+interface SSOStartParams {
+  authSessionOptions?: {
+    showInRecents?: boolean;
+  };
+  identifier?: string;
+  redirectUrl?: string;
+  strategy: string;
+  unsafeMetadata?: unknown;
+}
+
 interface ClerkExpoRuntimeModule {
   ClerkProvider: ComponentType<ClerkExpoProviderProps>;
   useAuth: () => AuthState;
-}
-
-interface ClerkReactRuntimeModule {
   useClerk: () => ClerkState;
   useSession: () => SessionState;
   useSignIn: () => SignInState;
   useSignUp: () => SignUpState;
+  useSSO: () => {
+    startSSOFlow: (params: SSOStartParams) => Promise<SSOResult>;
+  };
   useUser: () => UserState;
 }
 
@@ -211,7 +221,6 @@ interface ConvexClerkRuntimeModule {
 }
 
 let clerkExpoModule: ClerkExpoRuntimeModule | null = null;
-let clerkReactModule: ClerkReactRuntimeModule | null = null;
 let clerkErrorModule: ClerkErrorRuntimeModule | null = null;
 let convexClerkModule: ConvexClerkRuntimeModule | null = null;
 let clerkRuntimeError: unknown = null;
@@ -223,19 +232,11 @@ function rejectUnavailable() {
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  clerkExpoModule = require("@clerk/clerk-expo/dist/provider/ClerkProvider") as ClerkExpoRuntimeModule;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const clerkAuthModule = require("@clerk/clerk-expo/dist/hooks/useAuth") as Pick<
-    ClerkExpoRuntimeModule,
-    "useAuth"
-  >;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  clerkReactModule = require("@clerk/clerk-react") as ClerkReactRuntimeModule;
+  clerkExpoModule = require("@clerk/clerk-expo") as ClerkExpoRuntimeModule;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   clerkErrorModule = require("@clerk/clerk-react/errors") as ClerkErrorRuntimeModule;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   convexClerkModule = require("convex/react-clerk") as ConvexClerkRuntimeModule;
-  clerkExpoModule.useAuth = clerkAuthModule.useAuth;
 } catch (error) {
   clerkRuntimeError = error;
 }
@@ -299,12 +300,7 @@ export function getClerkRuntimeError() {
 }
 
 export function isClerkRuntimeAvailable() {
-  return (
-    clerkExpoModule !== null &&
-    clerkReactModule !== null &&
-    clerkErrorModule !== null &&
-    convexClerkModule !== null
-  );
+  return clerkExpoModule !== null && clerkErrorModule !== null && convexClerkModule !== null;
 }
 
 export function getClerkSSORuntimeError() {
@@ -320,119 +316,67 @@ export function useAuth() {
 }
 
 export function useSession() {
-  if (!clerkReactModule) {
+  if (!clerkExpoModule) {
     return sessionFallback;
   }
 
-  return clerkReactModule.useSession();
+  return clerkExpoModule.useSession();
 }
 
 export function useUser() {
-  if (!clerkReactModule) {
+  if (!clerkExpoModule) {
     return userFallback;
   }
 
-  return clerkReactModule.useUser();
+  return clerkExpoModule.useUser();
 }
 
 export function useClerk() {
-  if (!clerkReactModule) {
+  if (!clerkExpoModule) {
     return clerkFallback;
   }
 
-  return clerkReactModule.useClerk();
+  return clerkExpoModule.useClerk();
 }
 
 export function useSignIn() {
-  if (!clerkReactModule) {
+  if (!clerkExpoModule) {
     return signInFallback;
   }
 
-  return clerkReactModule.useSignIn();
+  return clerkExpoModule.useSignIn();
 }
 
 export function useSignUp() {
-  if (!clerkReactModule) {
+  if (!clerkExpoModule) {
     return signUpFallback;
   }
 
-  return clerkReactModule.useSignUp();
+  return clerkExpoModule.useSignUp();
 }
 
 export function useSSO() {
-  const { isLoaded: isSignInLoaded, setActive, signIn } = useSignIn();
-  const { isLoaded: isSignUpLoaded, signUp } = useSignUp();
+  if (!clerkExpoModule) {
+    return {
+      startSSOFlow: (): Promise<SSOResult> => {
+        const error =
+          clerkRuntimeError instanceof Error
+            ? clerkRuntimeError
+            : new Error("Clerk auth is unavailable in this native client.");
+        clerkSSORuntimeError = error;
+        return Promise.reject(error);
+      },
+    };
+  }
+
+  const { startSSOFlow } = clerkExpoModule.useSSO();
 
   return {
-    startSSOFlow: async ({
-      strategy,
-    }: {
-      strategy: string;
-    }): Promise<SSOResult> => {
-      if (!isSignInLoaded || !isSignUpLoaded) {
-        return {
-          createdSessionId: null,
-          authSessionResult: null,
-          setActive,
-          signIn,
-          signUp,
-        };
-      }
-
+    startSSOFlow: async (params: SSOStartParams): Promise<SSOResult> => {
       try {
-        const WebBrowser = await import("expo-web-browser");
-        const Linking = await import("expo-linking");
-        const redirectUrl = Linking.createURL("sso-callback");
-
-        await signIn.create({
-          strategy,
-          redirectUrl,
-        });
-
-        const externalVerificationRedirectURL =
-          signIn.firstFactorVerification?.externalVerificationRedirectURL;
-
-        if (!externalVerificationRedirectURL) {
-          throw new Error("Missing external verification redirect URL for SSO flow.");
-        }
-
-        const authSessionResult = await WebBrowser.openAuthSessionAsync(
-          externalVerificationRedirectURL.toString(),
-          redirectUrl,
-        );
-
-        if (authSessionResult.type !== "success" || !authSessionResult.url) {
-          return {
-            createdSessionId: null,
-            authSessionResult,
-            setActive,
-            signIn,
-            signUp,
-          };
-        }
-
-        const params = new URL(authSessionResult.url).searchParams;
-        const rotatingTokenNonce = params.get("rotating_token_nonce") ?? "";
-
-        await signIn.reload({
-          rotatingTokenNonce,
-        });
-
-        if (signIn.firstFactorVerification?.status === "transferable") {
-          await signUp.create({
-            transfer: true,
-          });
-        }
-
+        const result = await startSSOFlow(params);
         clerkSSORuntimeError = null;
-
-        return {
-          createdSessionId: signUp.createdSessionId ?? signIn.createdSessionId ?? null,
-          authSessionResult,
-          setActive,
-          signIn,
-          signUp,
-        };
+        return result;
       } catch (error) {
         clerkSSORuntimeError = error;
         throw error;

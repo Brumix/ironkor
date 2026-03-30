@@ -17,11 +17,11 @@ function resolveAppVariant(appVariant?: string | null): AppVariant {
 function getAppBundleIdentifier(variant: AppVariant) {
   switch (variant) {
     case "development":
-      return "com.ironkor.ironkor.development";
+      return "com.ironkor.development";
     case "beta":
-      return "com.ironkor.ironkor.beta";
+      return "com.ironkor.beta";
     default:
-      return "com.ironkor.ironkor";
+      return "com.ironkor";
   }
 }
 
@@ -36,37 +36,46 @@ function getAppName(variant: AppVariant) {
   }
 }
 
-function getAppScheme(variant: AppVariant) {
+function getAppIcon(variant: AppVariant) {
   switch (variant) {
     case "development":
-      return "ironkormobile-dev";
     case "beta":
-      return "ironkormobile-beta";
+      return "./assets/moose_beta.png";
     default:
-      return "ironkormobile";
+      return "./assets/moose.png";
   }
+}
+
+function getAppScheme(variant: AppVariant) {
+  void variant;
+  return "ironkor";
+}
+
+function getAppSchemes(variant: AppVariant) {
+  return [getAppScheme(variant)];
 }
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appVariant = resolveAppVariant(process.env.APP_VARIANT);
+  const appIcon = getAppIcon(appVariant);
 
   return {
     ...config,
     name: getAppName(appVariant),
-    slug: "ironkor-mobile",
+    slug: "ironkor",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/moose.png",
-    scheme: getAppScheme(appVariant),
+    icon: appIcon,
+    scheme: getAppSchemes(appVariant),
     userInterfaceStyle: "automatic",
     ios: {
-      icon: "./assets/moose.png",
+      icon: appIcon,
       bundleIdentifier: getAppBundleIdentifier(appVariant),
     },
     android: {
       adaptiveIcon: {
         backgroundColor: "#17120F",
-        foregroundImage: "./assets/moose.png",
+        foregroundImage: appIcon,
       },
       softwareKeyboardLayoutMode: "resize",
       predictiveBackGestureEnabled: false,
@@ -102,12 +111,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     experiments: {
       typedRoutes: true,
       reactCompiler: true,
-    },
-    extra: {
-      router: {},
-      eas: {
-        projectId: "2a1abc75-b947-44ee-a54e-c17d1a732b49",
-      },
     },
     owner: "ironkor",
   };

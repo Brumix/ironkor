@@ -1,4 +1,4 @@
-# Ironkor Mobile
+# Ironkor
 
 **Ironkor** is a gym-focused mobile app for planning strength-training **routines**, organizing **sessions** (splits), and mapping exercises to a **weekly calendar**. The client is built with **Expo** and **React Native**; data and business logic live on **Convex** for real-time sync and a single TypeScript stack end to end.
 
@@ -121,9 +121,9 @@ Use a **development build** (`expo-dev-client`) when you rely on native modules 
 
 `app.config.ts` reads **`APP_VARIANT`**:
 
-- `development` → bundle id `com.ironkor.ironkor.development`, display name **Ironkor Dev**
-- `beta` → `com.ironkor.ironkor.beta`, **Ironkor Beta**
-- default → `com.ironkor.ironkor`, **Ironkor**
+- `development` → bundle id `com.ironkor.development`, display name **Ironkor Dev**
+- `beta` → `com.ironkor.beta`, **Ironkor Beta**
+- default → `com.ironkor`, **Ironkor**
 
 Use this to install multiple builds side by side.
 

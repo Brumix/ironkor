@@ -4,6 +4,7 @@ import {
   getAppBundleIdentifier,
   getAppName,
   getAppScheme,
+  getAppSchemes,
   resolveAppVariant,
 } from "@/features/auth/appVariant";
 
@@ -14,9 +15,9 @@ describe("appVariant", () => {
   });
 
   test("maps bundle identifiers per variant", () => {
-    expect(getAppBundleIdentifier("development")).toBe("com.ironkor.ironkor.development");
-    expect(getAppBundleIdentifier("beta")).toBe("com.ironkor.ironkor.beta");
-    expect(getAppBundleIdentifier("production")).toBe("com.ironkor.ironkor");
+    expect(getAppBundleIdentifier("development")).toBe("com.ironkor.development");
+    expect(getAppBundleIdentifier("beta")).toBe("com.ironkor.beta");
+    expect(getAppBundleIdentifier("production")).toBe("com.ironkor");
   });
 
   test("maps names and schemes per variant", () => {
@@ -24,8 +25,12 @@ describe("appVariant", () => {
     expect(getAppName("beta")).toBe("Ironkor Beta");
     expect(getAppName("production")).toBe("Ironkor");
 
-    expect(getAppScheme("development")).toBe("ironkormobile-dev");
-    expect(getAppScheme("beta")).toBe("ironkormobile-beta");
-    expect(getAppScheme("production")).toBe("ironkormobile");
+    expect(getAppScheme("development")).toBe("ironkor");
+    expect(getAppScheme("beta")).toBe("ironkor");
+    expect(getAppScheme("production")).toBe("ironkor");
+
+    expect(getAppSchemes("development")).toEqual(["ironkor"]);
+    expect(getAppSchemes("beta")).toEqual(["ironkor"]);
+    expect(getAppSchemes("production")).toEqual(["ironkor"]);
   });
 });

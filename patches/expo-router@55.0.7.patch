@@ -1,0 +1,13 @@
+diff --git a/build/link/linking.js b/build/link/linking.js
+index 4d95db3..cbeafcb 100644
+--- a/build/link/linking.js
++++ b/build/link/linking.js
+@@ -76,7 +76,7 @@ function getInitialURL() {
+ let _rootURL;
+ function getRootURL() {
+     if (_rootURL === undefined) {
+-        _rootURL = Linking.createURL('/');
++        _rootURL = Linking.createURL('/', { scheme: 'ironkor' });
+         if (isExpoGo) {
+             _rootURL = (0, extractPathFromURL_1.parsePathFromExpoGoLink)(_rootURL);
+         }

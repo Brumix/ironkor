@@ -15,14 +15,16 @@ Copy [apps/mobile/.env.example](/Volumes/Storage/Projects/ironkor/apps/mobile/.e
 3. Enable email + password sign-up/sign-in.
 4. Enable Google and Apple social connections.
 5. Add native application entries for:
-   - iOS development bundle ID: `com.ironkor.ironkor.development`
-   - iOS beta bundle ID: `com.ironkor.ironkor.beta`
-   - iOS production bundle ID: `com.ironkor.ironkor`
-   - Android development package: `com.ironkor.ironkor.development`
-   - Android beta package: `com.ironkor.ironkor.beta`
-   - Android production package: `com.ironkor.ironkor`
-6. Keep the Expo scheme `ironkormobile` registered for mobile redirect handling.
-7. Copy the Clerk Frontend API URL from the Convex integration screen.
+   - iOS development bundle ID: `com.ironkor.development`
+   - iOS beta bundle ID: `com.ironkor.beta`
+   - iOS production bundle ID: `com.ironkor`
+   - Android development package: `com.ironkor.development`
+   - Android beta package: `com.ironkor.beta`
+   - Android production package: `com.ironkor`
+6. In `Native applications`, add `ironkor://callback` to the `Allowlist for mobile SSO redirect` section.
+7. Keep the Expo scheme `ironkor` registered for general app deep linking and mobile SSO callbacks.
+8. Copy the Clerk Frontend API URL from the Convex integration screen.
+9. After changing app schemes or OAuth redirect URLs, regenerate and reinstall the native app before retesting social sign-in.
 
 ## Convex env
 

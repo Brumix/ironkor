@@ -43,3 +43,6 @@ yarn-error.*
 # generated native folders
 /apps/mobile/ios
 /apps/mobile/android
+
+# generated skill caches
+.agents/skills/expo-cicd-workflows/scripts/.cache/

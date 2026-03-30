@@ -21,7 +21,7 @@ ironkor/
 
 | App | Path | Description |
 |-----|------|-------------|
-| Ironkor Mobile | `apps/mobile/` | Gym logbook: routines, sessions, weekly planning |
+| Ironkor | `apps/mobile/` | Mobile gym logbook: routines, sessions, weekly planning |
 
 ---
 

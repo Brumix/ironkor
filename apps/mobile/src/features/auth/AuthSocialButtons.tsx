@@ -1,6 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import * as WebBrowser from "expo-web-browser";
+import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
@@ -8,6 +10,31 @@ import { activateAuthSession } from "@/features/auth/activateAuthSession";
 import { getClerkSSORuntimeError, useSSO } from "@/features/auth/clerkCompat";
 import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
+
+const CLERK_REDIRECT_SCHEME = "ironkor";
+
+WebBrowser.maybeCompleteAuthSession();
+
+function useWarmUpBrowser() {
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    void WebBrowser.warmUpAsync();
+
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+}
+
+function getClerkRedirectUrl() {
+  return AuthSession.makeRedirectUri({
+    path: "callback",
+    scheme: CLERK_REDIRECT_SCHEME,
+  });
+}
 
 export default function AuthSocialButtons() {
   const { theme } = useTheme();
@@ -19,6 +46,8 @@ export default function AuthSocialButtons() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useWarmUpBrowser();
 
   if (ssoRuntimeError) {
     return (
@@ -38,13 +67,27 @@ export default function AuthSocialButtons() {
     setErrorMessage(null);
     setIsGoogleLoading(true);
     try {
+      const redirectUrl = getClerkRedirectUrl();
+
+      if (__DEV__) {
+        console.warn("[auth] Starting Google SSO", {
+          redirectUrl,
+          scheme: CLERK_REDIRECT_SCHEME,
+        });
+      }
+
       const { createdSessionId, setActive } = await startSSOFlow({
+        redirectUrl,
         strategy: "oauth_google",
       });
       if (createdSessionId && setActive) {
         await activateAuthSession(setActive, createdSessionId, router);
       }
     } catch (error: unknown) {
+      if (__DEV__) {
+        console.error("[auth] Google SSO failed", error);
+      }
+
       const message = resolveAuthErrorMessage(
         error,
         "Google sign-in could not be completed.",
@@ -69,13 +112,27 @@ export default function AuthSocialButtons() {
     setErrorMessage(null);
     setIsAppleLoading(true);
     try {
+      const redirectUrl = getClerkRedirectUrl();
+
+      if (__DEV__) {
+        console.warn("[auth] Starting Apple SSO", {
+          redirectUrl,
+          scheme: CLERK_REDIRECT_SCHEME,
+        });
+      }
+
       const { createdSessionId, setActive } = await startSSOFlow({
+        redirectUrl,
         strategy: "oauth_apple",
       });
       if (createdSessionId && setActive) {
         await activateAuthSession(setActive, createdSessionId, router);
       }
     } catch (error: unknown) {
+      if (__DEV__) {
+        console.error("[auth] Apple SSO failed", error);
+      }
+
       const message = resolveAuthErrorMessage(
         error,
         "Apple sign-in could not be completed.",

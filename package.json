@@ -1,5 +1,5 @@
 {
-  "name": "ironkor",
+  "name": "ironkor-workspace",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -13,7 +13,9 @@
     "convex:dev:once": "convex dev --once",
     "convex:deploy": "convex deploy",
     "mobile:dev": "bun run --cwd apps/mobile dev:expo",
+    "mobile:doctor": "bun run --cwd apps/mobile doctor",
     "mobile:start": "bun run --cwd apps/mobile start",
+    "quality:mobile": "bun run lint && bun run mobile:doctor && bun run typecheck",
     "lint": "bun run --cwd apps/mobile lint",
     "lint:strict": "bun run --cwd apps/mobile lint:strict",
     "test": "vitest run",
@@ -35,6 +37,7 @@
     "vitest": "^4.1.2"
   },
   "patchedDependencies": {
+    "expo-router@55.0.7": "patches/expo-router@55.0.7.patch",
     "react-native-draggable-flatlist@4.0.3": "patches/react-native-draggable-flatlist@4.0.3.patch"
   }
 }

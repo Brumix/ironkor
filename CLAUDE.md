@@ -37,6 +37,12 @@ This repository is a **Bun workspace monorepo** designed to support multiple app
 - Do not add nested `bun.lock` files in workspace folders.
 - Run `bun run lockfile:check` before opening PRs to enforce this policy.
 
+### Code quality validation
+
+- When a completed feature changes anything under `apps/mobile`, treat `bun run quality:mobile` from the repo root as the required sign-off check before handoff.
+- `bun run quality:mobile` runs mobile lint, Expo Doctor, and the repo typecheck.
+- If the work does not touch the Expo app, keep the normal non-mobile validation flow.
+
 ### Current mobile workout constraints
 
 - The mobile workout routine-creation flow is draft-first: users build the full routine, sections, and exercises before the final save.
