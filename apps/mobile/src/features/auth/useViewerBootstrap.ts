@@ -10,15 +10,20 @@ const convexSessionErrorMessage =
 const accountDeletionErrorMessage =
   "Your account deletion is in progress. Please wait for it to finish before signing in again.";
 
-export function useViewerBootstrap() {
+export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {}) {
   const { isLoaded: isClerkLoaded, isSignedIn } = useClerkAuth();
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const viewer = useQuery(api.auth.getViewer);
+  const viewer = useQuery(api.auth.getViewer, enabled ? {} : "skip");
   const ensureViewer = useMutation(api.auth.ensureViewer);
   const [isEnsuringViewer, setIsEnsuringViewer] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setErrorMessage(null);
+      return;
+    }
+
     if (!isClerkLoaded || !isSignedIn) {
       setErrorMessage(null);
       return;
@@ -39,10 +44,10 @@ export function useViewerBootstrap() {
     setErrorMessage((currentError) =>
       currentError ?? convexSessionErrorMessage,
     );
-  }, [isAuthenticated, isClerkLoaded, isLoading, isSignedIn, viewer?.deletionStatus]);
+  }, [enabled, isAuthenticated, isClerkLoaded, isLoading, isSignedIn, viewer?.deletionStatus]);
 
   useEffect(() => {
-    if (!isAuthenticated || viewer !== null || isEnsuringViewer) {
+    if (!enabled || !isAuthenticated || viewer !== null || isEnsuringViewer) {
       return;
     }
 
@@ -71,9 +76,10 @@ export function useViewerBootstrap() {
     return () => {
       isCancelled = true;
     };
-  }, [ensureViewer, isAuthenticated, isEnsuringViewer, viewer]);
+  }, [enabled, ensureViewer, isAuthenticated, isEnsuringViewer, viewer]);
 
   const isReady =
+    enabled &&
     isClerkLoaded &&
     isSignedIn &&
     isAuthenticated &&

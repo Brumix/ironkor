@@ -11,7 +11,7 @@ import { useSignUp } from "@/features/auth/clerkCompat";
 import {
   getClerkFieldError,
   getClerkGlobalError,
-  resolveAuthErrorMessage,
+  resolveAuthFormErrorMessage,
 } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
@@ -22,13 +22,35 @@ export default function SignUpScreen() {
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [didAttemptSubmit, setDidAttemptSubmit] = useState(false);
   const fieldStyles = useMemo(() => styles(theme), [theme]);
+  const confirmPasswordError =
+    confirmPassword.length > 0
+      ? password === confirmPassword
+        ? null
+        : "Passwords do not match."
+      : didAttemptSubmit
+        ? "Please confirm your password."
+        : null;
+  const isCreateAccountDisabled =
+    isSubmitting ||
+    !emailAddress.trim() ||
+    !password ||
+    !confirmPassword ||
+    password !== confirmPassword;
 
   async function handleCreateAccount() {
-    if (!isLoaded || !emailAddress.trim() || !password) {
+    setDidAttemptSubmit(true);
+
+    if (!isLoaded || !emailAddress.trim() || !password || !confirmPassword) {
+      return;
+    }
+
+    if (password !== confirmPassword) {
       return;
     }
 
@@ -55,7 +77,9 @@ export default function SignUpScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(caughtError, "We couldn't create your account."),
+        resolveAuthFormErrorMessage(caughtError, "We couldn't create your account.", {
+          excludeFields: ["emailAddress", "password"],
+        }),
       );
     } finally {
       setIsSubmitting(false);
@@ -64,7 +88,11 @@ export default function SignUpScreen() {
 
   const emailError = getClerkFieldError(error, "emailAddress");
   const passwordError = getClerkFieldError(error, "password");
-  const globalError = submitError ?? getClerkGlobalError(error);
+  const globalError =
+    submitError ??
+    getClerkGlobalError(error, {
+      excludeFields: ["emailAddress", "password"],
+    });
 
   return (
     <AuthScreenShell
@@ -103,8 +131,10 @@ export default function SignUpScreen() {
       <AppTextField
         autoCapitalize="none"
         autoCorrect={false}
+        autoComplete="new-password"
         label="Password"
         onChangeText={setPassword}
+        passwordRules="minlength: 8;"
         placeholder="Create a strong password"
         secureTextEntry
         textContentType="newPassword"
@@ -112,12 +142,28 @@ export default function SignUpScreen() {
       />
       {passwordError ? <Text style={fieldStyles.errorText}>{passwordError}</Text> : null}
 
+      <AppTextField
+        autoCapitalize="none"
+        autoComplete="off"
+        autoCorrect={false}
+        label="Confirm password"
+        onChangeText={setConfirmPassword}
+        placeholder="Re-enter your password"
+        secureTextEntry
+        textContentType="none"
+        value={confirmPassword}
+      />
+      {confirmPasswordError ? (
+        <Text style={fieldStyles.errorText}>{confirmPasswordError}</Text>
+      ) : null}
+
       <Text style={fieldStyles.helperText}>
         We’ll email you a one-time verification code right after this step.
       </Text>
       {globalError ? <Text style={fieldStyles.errorText}>{globalError}</Text> : null}
 
       <AppButton
+        disabled={isCreateAccountDisabled}
         fullWidth
         label="Create account"
         loading={isSubmitting}

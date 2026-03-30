@@ -1,8 +1,11 @@
 import { Redirect, Tabs } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
+import { useAppUnlock } from "@/features/auth/AppUnlockProvider";
 import AuthLoadingScreen from "@/features/auth/AuthLoadingScreen";
 import { useAuth, useSession } from "@/features/auth/clerkCompat";
+import LocalUnlockScreen from "@/features/auth/LocalUnlockScreen";
+import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
 import { DraftRoutineProvider } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
@@ -11,7 +14,16 @@ export default function WorkoutLayout() {
   const { theme } = useTheme();
   const { isLoaded, isSignedIn } = useAuth();
   const { session } = useSession();
-  const { errorMessage, isReady } = useViewerBootstrap();
+  const secureSignOut = useSecureSignOut();
+  const {
+    errorMessage: unlockErrorMessage,
+    status: unlockStatus,
+    unlock,
+  } = useAppUnlock();
+  const isUnlocked = unlockStatus === "unavailable" || unlockStatus === "unlocked";
+  const { errorMessage, isReady } = useViewerBootstrap({
+    enabled: isSignedIn && !session?.currentTask && isUnlocked,
+  });
 
   if (!isLoaded) {
     return <AuthLoadingScreen title="Loading Ironkor" message="Preparing your session..." />;
@@ -23,6 +35,29 @@ export default function WorkoutLayout() {
 
   if (session?.currentTask) {
     return <Redirect href="/auth-task" />;
+  }
+
+  if (!isUnlocked) {
+    if (unlockStatus === "checking" || unlockStatus === "unlocking") {
+      return (
+        <AuthLoadingScreen
+          title="Unlocking Ironkor"
+          message="Verifying your device identity..."
+        />
+      );
+    }
+
+    return (
+      <LocalUnlockScreen
+        errorMessage={unlockErrorMessage}
+        onSignOut={() => {
+          void secureSignOut().catch(() => undefined);
+        }}
+        onUnlock={() => {
+          void unlock();
+        }}
+      />
+    );
   }
 
   if (errorMessage) {

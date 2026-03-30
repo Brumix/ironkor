@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AppUnlockProvider } from "@/features/auth/AppUnlockProvider";
 import AuthRuntimeScreen from "@/features/auth/AuthRuntimeScreen";
 import {
   ClerkProvider,
@@ -12,6 +13,11 @@ import {
   isClerkRuntimeAvailable,
   useAuth,
 } from "@/features/auth/clerkCompat";
+import {
+  getSecureStoreRuntimeError,
+  getSecureStoreTokenCache,
+  isSecureStoreRuntimeAvailable,
+} from "@/features/auth/secureStoreCompat";
 import { ThemeProvider, useTheme } from "@/theme";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -48,6 +54,7 @@ function RootStack() {
 
 function RootProviders() {
   const runtimeError = getClerkRuntimeError();
+  const secureStoreRuntimeError = getSecureStoreRuntimeError();
 
   if (!publishableKey) {
     return <AuthRuntimeScreen missingPublishableKey />;
@@ -63,19 +70,34 @@ function RootProviders() {
     return <AuthRuntimeScreen error={runtimeError} />;
   }
 
+  if (!isSecureStoreRuntimeAvailable()) {
+    return (
+      <AuthRuntimeScreen
+        error={
+          secureStoreRuntimeError ??
+          new Error("The current native client is missing Expo Secure Store.")
+        }
+      />
+    );
+  }
+
   const convex = getConvexClient();
+  const secureStoreTokenCache = getSecureStoreTokenCache();
 
   return (
     <ClerkProvider
       publishableKey={publishableKey}
+      tokenCache={secureStoreTokenCache}
       taskUrls={{
         "reset-password": "/auth-task",
         "setup-mfa": "/auth-task",
       }}
     >
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <RootStack />
-      </ConvexProviderWithClerk>
+      <AppUnlockProvider>
+        <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+          <RootStack />
+        </ConvexProviderWithClerk>
+      </AppUnlockProvider>
     </ClerkProvider>
   );
 }

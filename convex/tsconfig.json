@@ -21,6 +21,7 @@
     "noEmit": true,
 
     "paths": {
+      "@convex/*": ["./*"],
       "@ironkor/shared": ["../packages/shared/constants.ts"],
       "@ironkor/shared/*": ["../packages/shared/*.ts"]
     }

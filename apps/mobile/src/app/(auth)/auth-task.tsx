@@ -3,13 +3,14 @@ import { StyleSheet, Text } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
 import AuthScreenShell from "@/features/auth/AuthScreenShell";
-import { useAuth, useSession } from "@/features/auth/clerkCompat";
+import { useSession } from "@/features/auth/clerkCompat";
+import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useTheme } from "@/theme";
 
 export default function AuthTaskScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const secureSignOut = useSecureSignOut();
   const { session } = useSession();
   const taskKey = session?.currentTask?.key;
   const screenStyles = styles(theme);
@@ -19,12 +20,12 @@ export default function AuthTaskScreen() {
   }
 
   async function signOutAndGoToReset() {
-    await signOut();
+    await secureSignOut();
     router.replace("/forgot-password");
   }
 
   async function signOutAndGoToSignIn() {
-    await signOut();
+    await secureSignOut();
     router.replace("/sign-in");
   }
 

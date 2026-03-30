@@ -13,8 +13,9 @@ import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
-import { useAuth, useClerk, useUser } from "@/features/auth/clerkCompat";
+import { useClerk, useUser } from "@/features/auth/clerkCompat";
 import { resolveSignInMethod } from "@/features/auth/resolveSignInMethod";
+import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useTheme } from "@/theme";
 
 function getDisplayInitials(displayName: string) {
@@ -34,10 +35,10 @@ function getDisplayInitials(displayName: string) {
 }
 
 export default function SettingsScreen() {
-  const { signOut } = useAuth();
   const { client } = useClerk();
   const { user } = useUser();
   const { mode, setMode, theme } = useTheme();
+  const secureSignOut = useSecureSignOut();
   const { showAlert, AlertModal } = useAppAlert();
   const viewer = useQuery(api.auth.getViewer);
   const deleteMyAccount = useAction(api.auth.deleteMyAccount);
@@ -186,7 +187,7 @@ export default function SettingsScreen() {
 
     setIsSigningOut(true);
     try {
-      await signOut();
+      await secureSignOut();
       router.replace("/sign-in");
     } catch (error) {
       showAlert({
@@ -207,7 +208,7 @@ export default function SettingsScreen() {
     setIsDeletingAccount(true);
     try {
       await deleteMyAccount({});
-      await signOut();
+      await secureSignOut();
       setShowDeleteAccountModal(false);
       router.replace("/sign-in");
     } catch (error) {

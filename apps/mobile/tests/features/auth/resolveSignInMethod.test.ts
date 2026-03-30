@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { resolveSignInMethod } from "./resolveSignInMethod";
+import { resolveSignInMethod } from "@/features/auth/resolveSignInMethod";
 
 describe("resolveSignInMethod", () => {
   test("resolves email and password users", () => {

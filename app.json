@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "376ee50f-0d58-41eb-954d-c91629de68ff"
+      }
+    },
+    "android": {
+      "package": "com.ironkor.ironkor"
+    }
+  }
+}

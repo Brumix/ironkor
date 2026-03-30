@@ -17,6 +17,10 @@ interface NormalizedClerkFieldError {
   };
 }
 
+interface GetClerkGlobalErrorOptions {
+  excludeFields?: string[];
+}
+
 function getErrorMeta(meta: unknown) {
   if (!meta || typeof meta !== "object" || !("paramName" in meta)) {
     return undefined;
@@ -69,7 +73,10 @@ export function getClerkFieldError(error: unknown, field: string) {
   return matchedError?.longMessage ?? matchedError?.message;
 }
 
-export function getClerkGlobalError(error: unknown) {
+export function getClerkGlobalError(
+  error: unknown,
+  options?: GetClerkGlobalErrorOptions,
+) {
   if (error && typeof error === "object") {
     const globalMessage = (error as ClerkErrorBag).globalMessage;
     if (typeof globalMessage === "string" && globalMessage.trim().length > 0) {
@@ -77,7 +84,12 @@ export function getClerkGlobalError(error: unknown) {
     }
   }
 
-  const firstError = getErrorList(error).at(0);
+  const excludedFields = new Set(options?.excludeFields ?? []);
+  const firstError = getErrorList(error).find((item) => {
+    const fieldName = item.meta?.paramName;
+    return fieldName === undefined || !excludedFields.has(fieldName);
+  });
+
   if (!firstError) {
     return undefined;
   }
@@ -85,8 +97,12 @@ export function getClerkGlobalError(error: unknown) {
   return firstError.longMessage ?? firstError.message;
 }
 
-export function resolveAuthErrorMessage(error: unknown, fallback: string) {
-  const globalError = getClerkGlobalError(error);
+export function resolveAuthErrorMessage(
+  error: unknown,
+  fallback: string,
+  options?: GetClerkGlobalErrorOptions,
+) {
+  const globalError = getClerkGlobalError(error, options);
   if (globalError !== undefined) {
     return globalError;
   }
@@ -100,4 +116,28 @@ export function resolveAuthErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+export function resolveAuthFormErrorMessage(
+  error: unknown,
+  fallback: string,
+  options?: GetClerkGlobalErrorOptions,
+) {
+  const globalError = getClerkGlobalError(error, options);
+  if (globalError !== undefined) {
+    return globalError;
+  }
+
+  if (error && typeof error === "object") {
+    const maybeErrorBag = error as ClerkErrorBag;
+    if (
+      Array.isArray(maybeErrorBag.errors) ||
+      (maybeErrorBag.fields !== undefined &&
+        Object.keys(maybeErrorBag.fields).length > 0)
+    ) {
+      return null;
+    }
+  }
+
+  return resolveAuthErrorMessage(error, fallback);
 }

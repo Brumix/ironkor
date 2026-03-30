@@ -4,22 +4,24 @@ import { expect, test } from "vitest";
 import {
   BODY_PART_VALUES,
   EQUIPMENT_VALUES,
-  MUSCLE_VALUES,
   MUSCLES_BY_BODY_PART,
+  MUSCLE_VALUES,
   getUniqueBodyPartForMuscle,
 } from "@ironkor/shared/constants";
 
-import { api } from "./_generated/api";
-import { normalizeExerciseCatalog } from "./exerciseCatalog";
-import schema from "./schema";
-
-import type { Id } from "./_generated/dataModel";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
+import schema from "@convex/schema";
 
 interface ImportMetaWithGlob {
-  glob: (pattern: string) => Record<string, () => Promise<unknown>>;
+  glob: (pattern: string | string[]) => Record<string, () => Promise<unknown>>;
 }
 
-const modules = (import.meta as ImportMetaWithGlob).glob("./**/*.ts");
+const modules = (import.meta as ImportMetaWithGlob).glob([
+  "../**/*.ts",
+  "!../tests/**/*.ts",
+]);
 
 function createAuthedTest() {
   const t = convexTest(schema, modules);

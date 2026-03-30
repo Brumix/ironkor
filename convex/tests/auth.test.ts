@@ -1,14 +1,17 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { api } from "./_generated/api";
-import schema from "./schema";
+import { api } from "@convex/_generated/api";
+import schema from "@convex/schema";
 
 interface ImportMetaWithGlob {
-  glob: (pattern: string) => Record<string, () => Promise<unknown>>;
+  glob: (pattern: string | string[]) => Record<string, () => Promise<unknown>>;
 }
 
-const modules = (import.meta as ImportMetaWithGlob).glob("./**/*.ts");
+const modules = (import.meta as ImportMetaWithGlob).glob([
+  "../**/*.ts",
+  "!../tests/**/*.ts",
+]);
 
 function createWeeklyPlan() {
   return Array.from({ length: 7 }, (_, day) => ({

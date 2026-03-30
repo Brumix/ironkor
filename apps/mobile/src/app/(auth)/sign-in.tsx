@@ -11,7 +11,7 @@ import { useSignIn } from "@/features/auth/clerkCompat";
 import {
   getClerkFieldError,
   getClerkGlobalError,
-  resolveAuthErrorMessage,
+  resolveAuthFormErrorMessage,
 } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
@@ -86,7 +86,9 @@ export default function SignInScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(caughtError, "Sign-in failed. Please try again."),
+        resolveAuthFormErrorMessage(caughtError, "Sign-in failed. Please try again.", {
+          excludeFields: ["identifier", "password"],
+        }),
       );
     } finally {
       setIsSubmitting(false);
@@ -118,9 +120,10 @@ export default function SignInScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "The verification code wasn't accepted.",
+          { excludeFields: ["code"] },
         ),
       );
     } finally {
@@ -132,7 +135,11 @@ export default function SignInScreen() {
   const identifierError = getClerkFieldError(error, "identifier");
   const passwordError = getClerkFieldError(error, "password");
   const codeError = getClerkFieldError(error, "code");
-  const globalError = submitError ?? getClerkGlobalError(error);
+  const globalError =
+    submitError ??
+    getClerkGlobalError(error, {
+      excludeFields: ["identifier", "password", "code"],
+    });
 
   return (
     <AuthScreenShell

@@ -1,18 +1,20 @@
-import component from "@convex-dev/migrations/test";
 import { runToCompletion } from "@convex-dev/migrations";
+import component from "@convex-dev/migrations/test";
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api, components, internal } from "./_generated/api";
-import schema from "./schema";
-
-import type { Id } from "./_generated/dataModel";
+import { api, components, internal } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import schema from "@convex/schema";
 
 interface ImportMetaWithGlob {
-  glob: (pattern: string) => Record<string, () => Promise<unknown>>;
+  glob: (pattern: string | string[]) => Record<string, () => Promise<unknown>>;
 }
 
-const modules = (import.meta as ImportMetaWithGlob).glob("./**/*.ts");
+const modules = (import.meta as ImportMetaWithGlob).glob([
+  "../**/*.ts",
+  "!../tests/**/*.ts",
+]);
 
 function createAuthedTest() {
   const t = convexTest(schema, modules);

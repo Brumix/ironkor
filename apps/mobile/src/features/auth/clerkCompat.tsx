@@ -1,3 +1,4 @@
+import type { ClerkProviderProps as ClerkExpoProviderProps } from "@clerk/clerk-expo/dist/provider/ClerkProvider";
 import type { ComponentType, ReactNode } from "react";
 
 export interface ClerkFieldError {
@@ -182,14 +183,8 @@ interface SSOResult {
   signUp?: unknown;
 }
 
-interface ClerkProviderShimProps {
-  children: ReactNode;
-  publishableKey: string;
-  taskUrls?: Record<string, string>;
-}
-
 interface ClerkExpoRuntimeModule {
-  ClerkProvider: ComponentType<ClerkProviderShimProps>;
+  ClerkProvider: ComponentType<ClerkExpoProviderProps>;
   useAuth: () => AuthState;
 }
 
@@ -455,19 +450,14 @@ export function isClerkAPIResponseError(error: unknown): error is ClerkAPIRespon
 }
 
 export function ClerkProvider({
-  children,
   ...props
-}: {
-  children: ReactNode;
-  publishableKey: string;
-  taskUrls?: Record<string, string>;
-}) {
+}: ClerkExpoProviderProps) {
   if (!clerkExpoModule) {
-    return <>{children}</>;
+    return <>{props.children}</>;
   }
 
   const Provider = clerkExpoModule.ClerkProvider;
-  return <Provider {...props}>{children}</Provider>;
+  return <Provider {...props}>{props.children}</Provider>;
 }
 
 export function ConvexProviderWithClerk({

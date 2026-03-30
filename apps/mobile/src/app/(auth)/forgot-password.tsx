@@ -10,7 +10,7 @@ import { useSignIn } from "@/features/auth/clerkCompat";
 import {
   getClerkFieldError,
   getClerkGlobalError,
-  resolveAuthErrorMessage,
+  resolveAuthFormErrorMessage,
 } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
@@ -58,9 +58,10 @@ export default function ForgotPasswordScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "We couldn't start password reset.",
+          { excludeFields: ["identifier"] },
         ),
       );
     } finally {
@@ -92,9 +93,10 @@ export default function ForgotPasswordScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "That reset code wasn't accepted.",
+          { excludeFields: ["code"] },
         ),
       );
     } finally {
@@ -134,9 +136,10 @@ export default function ForgotPasswordScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "We couldn't update your password.",
+          { excludeFields: ["password"] },
         ),
       );
     } finally {
@@ -147,7 +150,11 @@ export default function ForgotPasswordScreen() {
   const identifierError = getClerkFieldError(error, "identifier");
   const codeError = getClerkFieldError(error, "code");
   const passwordError = getClerkFieldError(error, "password");
-  const globalError = submitError ?? getClerkGlobalError(error);
+  const globalError =
+    submitError ??
+    getClerkGlobalError(error, {
+      excludeFields: ["identifier", "code", "password"],
+    });
   const showResetForm = isLoaded && signIn.status === "needs_new_password";
 
   return (

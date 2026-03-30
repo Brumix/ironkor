@@ -1,6 +1,9 @@
 import { expect, test, vi } from "vitest";
 
-import { activateAuthSession, type SetActiveLike } from "./activateAuthSession";
+import {
+  activateAuthSession,
+  type SetActiveLike,
+} from "@/features/auth/activateAuthSession";
 
 test("routes authenticated users to the workout home when no auth task is pending", async () => {
   const replace = vi.fn();

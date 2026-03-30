@@ -17,7 +17,7 @@ export default function AuthRuntimeScreen({
     ? "Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in apps/mobile/.env.local to enable authentication."
     : resolveAuthErrorMessage(
         error,
-        "The current native client is missing one of the Clerk auth modules. Rebuild the iOS or Android app after installing native dependencies.",
+        "The current native client is missing one of the required auth or secure-storage native modules. Rebuild the iOS or Android app after installing native dependencies.",
       );
 
   return (

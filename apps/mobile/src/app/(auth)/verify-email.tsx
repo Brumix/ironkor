@@ -10,7 +10,7 @@ import { useSignUp } from "@/features/auth/clerkCompat";
 import {
   getClerkFieldError,
   getClerkGlobalError,
-  resolveAuthErrorMessage,
+  resolveAuthFormErrorMessage,
 } from "@/features/auth/clerkErrors";
 import { useTheme } from "@/theme";
 
@@ -62,9 +62,10 @@ export default function VerifyEmailScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "That verification code wasn't accepted.",
+          { excludeFields: ["code"] },
         ),
       );
     } finally {
@@ -83,9 +84,10 @@ export default function VerifyEmailScreen() {
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
-        resolveAuthErrorMessage(
+        resolveAuthFormErrorMessage(
           caughtError,
           "We couldn't resend the verification code.",
+          { excludeFields: ["code"] },
         ),
       );
     } finally {
@@ -94,7 +96,11 @@ export default function VerifyEmailScreen() {
   }
 
   const codeError = getClerkFieldError(error, "code");
-  const globalError = submitError ?? getClerkGlobalError(error);
+  const globalError =
+    submitError ??
+    getClerkGlobalError(error, {
+      excludeFields: ["code"],
+    });
 
   return (
     <AuthScreenShell

@@ -17,11 +17,14 @@
     "lint": "bun run --cwd apps/mobile lint",
     "lint:strict": "bun run --cwd apps/mobile lint:strict",
     "test": "vitest run",
+    "test:mobile": "vitest run apps/mobile/tests",
+    "test:convex": "vitest run convex/tests",
     "typecheck": "tsc --noEmit -p apps/mobile/tsconfig.json && tsc --noEmit -p convex/tsconfig.json",
     "lockfile:check": "node ./scripts/check-bun-lockfiles.mjs"
   },
   "dependencies": {
-    "@ironkor/shared": "workspace:*"
+    "@ironkor/shared": "workspace:*",
+    "expo-dev-client": "~55.0.19"
   },
   "devDependencies": {
     "@convex-dev/migrations": "^0.3.3",
