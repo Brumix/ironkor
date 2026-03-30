@@ -7,18 +7,21 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "env": {
         "APP_VARIANT": "development"
       }
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "env": {
         "APP_VARIANT": "beta"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production"
     }
   },
   "submit": {

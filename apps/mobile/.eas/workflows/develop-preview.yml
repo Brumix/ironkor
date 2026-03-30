@@ -1,0 +1,47 @@
+name: Develop Preview
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+concurrency:
+  cancel_in_progress: true
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+jobs:
+  #build_ios_preview:
+  #  name: Build iOS Preview
+  #  type: build
+  #  params:
+  #    platform: ios
+  #    profile: preview
+
+  build_android_preview:
+    name: Build Android Preview
+    type: build
+    params:
+      platform: android
+      profile: preview
+
+  comment_preview:
+    name: Comment Preview Builds
+    type: github-comment
+    if: ${{ github.event_name == 'pull_request' }}
+    needs:
+    #  - build_ios_preview
+      - build_android_preview
+    params:
+      message: Preview builds for this develop-targeted PR are ready for testing.
+      build_ids:
+      #  - ${{ needs.build_ios_preview.outputs.build_id }}
+        - ${{ needs.build_android_preview.outputs.build_id }}
+
