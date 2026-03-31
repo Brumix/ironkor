@@ -1,5 +1,7 @@
 import {
+  countTrainingDays,
   getDetailedRoutine,
+  getRoutineWeeklyPlan,
   getSessionsByRoutine,
   sortByOrder,
 } from "./helpers";
@@ -26,6 +28,7 @@ export async function listSummariesHandler(
 
   const summaries: RoutineSummaryRecord[] = [];
   for (const routine of routines) {
+    const weeklyPlan = getRoutineWeeklyPlan(routine);
     const sessions = sortByOrder(await getSessionsByRoutine(ctx, routine._id, viewer._id));
     const sessionSummaries: RoutineSectionSummaryRecord[] = [];
     for (const session of sessions) {
@@ -48,6 +51,8 @@ export async function listSummariesHandler(
 
     summaries.push({
       ...routine,
+      daysPerWeek: countTrainingDays(weeklyPlan),
+      weeklyPlan,
       sessions: sessionSummaries,
     });
   }

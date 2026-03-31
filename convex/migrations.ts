@@ -2,6 +2,11 @@ import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 import { Migrations } from "@convex-dev/migrations";
 
 import { components, internal } from "./_generated/api";
+import {
+  countTrainingDays,
+  getRoutineWeeklyPlan,
+  isValidRoutineWeeklyPlan,
+} from "./routines/helpers";
 import type { DataModel, Doc } from "./_generated/dataModel";
 
 const migrations = new Migrations<DataModel>(components.migrations);
@@ -14,6 +19,9 @@ type RoutineSessionWithOptionalOwner = Doc<"routineSessions"> & {
 };
 type SessionExerciseWithOptionalOwner = Doc<"sessionExercises"> & {
   userId?: Doc<"users">["_id"];
+};
+type RoutineWithLegacyWeeklyPlan = Omit<Doc<"routines">, "weeklyPlan"> & {
+  weeklyPlan?: unknown;
 };
 
 export const backfillRoutineNameKeys = migrations.define({
@@ -51,6 +59,26 @@ export const backfillRoutineUserIds = migrations.define({
       return undefined;
     }
     return undefined;
+  },
+});
+
+export const backfillRoutineWeeklyPlans = migrations.define({
+  table: "routines",
+  migrateOne: async (_ctx, routine: RoutineWithLegacyWeeklyPlan) => {
+    const weeklyPlan = getRoutineWeeklyPlan(routine);
+    const daysPerWeek = countTrainingDays(weeklyPlan);
+
+    if (
+      isValidRoutineWeeklyPlan(routine.weeklyPlan) &&
+      routine.daysPerWeek === daysPerWeek
+    ) {
+      return undefined;
+    }
+
+    return {
+      weeklyPlan,
+      daysPerWeek,
+    };
   },
 });
 
@@ -92,6 +120,7 @@ export const runAll = migrations.runner([
   internal.migrations.backfillRoutineNameKeys,
   internal.migrations.backfillRoutineSessionNameKeys,
   internal.migrations.backfillRoutineUserIds,
+  internal.migrations.backfillRoutineWeeklyPlans,
   internal.migrations.backfillRoutineSessionUserIds,
   internal.migrations.backfillSessionExerciseUserIds,
 ]);

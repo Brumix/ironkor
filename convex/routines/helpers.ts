@@ -44,6 +44,11 @@ export interface WeeklyPlanEntry {
   manualSessionId?: Id<"routineSessions">;
 }
 
+type RoutineWithPossiblyMissingWeeklyPlan = {
+  daysPerWeek: number;
+  weeklyPlan?: unknown;
+};
+
 export function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new ConvexError(message);
@@ -203,6 +208,71 @@ export function sortByOrder<T extends { order: number }>(items: T[]) {
 
 export function sortWeeklyPlan(weeklyPlan: WeeklyPlanEntry[]) {
   return [...weeklyPlan].sort((a, b) => a.day - b.day);
+}
+
+export function countTrainingDays(weeklyPlan: WeeklyPlanEntry[]) {
+  return weeklyPlan.filter((entry) => entry.type === "train").length;
+}
+
+export function isValidRoutineWeeklyPlan(
+  weeklyPlan: unknown,
+): weeklyPlan is WeeklyPlanEntry[] {
+  if (!Array.isArray(weeklyPlan) || weeklyPlan.length !== DAY_INDEXES.length) {
+    return false;
+  }
+
+  const seenDays = new Set<number>();
+
+  for (const entry of weeklyPlan) {
+    if (typeof entry !== "object" || entry === null) {
+      return false;
+    }
+
+    const candidate = entry as Partial<WeeklyPlanEntry>;
+    if (
+      typeof candidate.day !== "number" ||
+      !DAY_INDEXES.includes(candidate.day as (typeof DAY_INDEXES)[number]) ||
+      seenDays.has(candidate.day)
+    ) {
+      return false;
+    }
+
+    if (candidate.type !== "train" && candidate.type !== "rest") {
+      return false;
+    }
+
+    if (
+      candidate.assignmentMode !== "auto" &&
+      candidate.assignmentMode !== "manual"
+    ) {
+      return false;
+    }
+
+    if (candidate.type === "rest" && candidate.manualSessionId !== undefined) {
+      return false;
+    }
+
+    if (
+      candidate.assignmentMode === "auto" &&
+      candidate.manualSessionId !== undefined
+    ) {
+      return false;
+    }
+
+    seenDays.add(candidate.day);
+  }
+
+  return seenDays.size === DAY_INDEXES.length;
+}
+
+export function getRoutineWeeklyPlan(
+  routine: RoutineWithPossiblyMissingWeeklyPlan,
+) {
+  if (isValidRoutineWeeklyPlan(routine.weeklyPlan)) {
+    return sortWeeklyPlan(routine.weeklyPlan);
+  }
+
+  return generateDefaultWeeklyPlan(routine.daysPerWeek);
 }
 
 export function toExerciseCatalogRecord(
@@ -435,9 +505,12 @@ export async function getDetailedRoutine(
     });
   }
 
+  const weeklyPlan = getRoutineWeeklyPlan(routine);
+
   return {
     ...routine,
-    weeklyPlan: sortWeeklyPlan(routine.weeklyPlan as WeeklyPlanEntry[]),
+    daysPerWeek: countTrainingDays(weeklyPlan),
+    weeklyPlan,
     sessions: detailedSessions,
   };
 }

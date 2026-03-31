@@ -1,9 +1,9 @@
 import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import {
+  getRoutineWeeklyPlan,
   MAX_SESSIONS_PER_ROUTINE,
   MAX_SECTION_NAME_LENGTH,
-  WeeklyPlanEntry,
   assert,
   ensureUniqueSessionName,
   getSessionExercisesBySession,
@@ -103,7 +103,7 @@ export async function deleteSessionHandler(
 
   const nextOrder = remainingSessions.map((item) => item._id);
 
-  const adjustedWeeklyPlan = (routine.weeklyPlan as WeeklyPlanEntry[]).map((entry) => {
+  const adjustedWeeklyPlan = getRoutineWeeklyPlan(routine).map((entry) => {
     if (
       entry.assignmentMode === "manual" &&
       entry.manualSessionId === args.sessionId
@@ -112,7 +112,6 @@ export async function deleteSessionHandler(
         day: entry.day,
         type: "train" as const,
         assignmentMode: "auto" as const,
-        manualSessionId: undefined,
       };
     }
     return entry;

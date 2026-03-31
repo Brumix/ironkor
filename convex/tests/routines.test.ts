@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { api, components, internal } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
+import { getRoutineWeeklyPlan } from "@convex/routines/helpers";
 import schema from "@convex/schema";
 
 interface ImportMetaWithGlob {
@@ -317,6 +318,55 @@ test("nameKey migrations backfill legacy routines and sessions", async () => {
 
     expect(routines[0]?.nameKey).toBe("legacy push day");
     expect(sessions[0]?.nameKey).toBe("legacy session");
+  });
+});
+
+test("legacy routines without a usable weekly plan fall back to a default schedule", () => {
+  const weeklyPlan = getRoutineWeeklyPlan({
+    daysPerWeek: 4,
+  });
+
+  expect(weeklyPlan).toHaveLength(7);
+  expect(weeklyPlan.filter((entry) => entry.type === "train")).toHaveLength(4);
+});
+
+test("weekly plan migration backfills malformed legacy routines", async () => {
+  const { authed, t } = createAuthedTest();
+  const viewerId = await authed.mutation(api.auth.ensureViewer, {});
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("routines", {
+      userId: viewerId,
+      name: "Legacy Weekly Plan",
+      daysPerWeek: 3,
+      isActive: true,
+      sessionOrder: [],
+      weeklyPlan: [],
+      updatedAt: 1,
+    });
+  });
+
+  const detail = await authed.query(api.routines.getActiveDetailed, {});
+  expect(detail?.weeklyPlan).toHaveLength(7);
+  expect(detail?.daysPerWeek).toBe(3);
+
+  await t.run(async (ctx) => {
+    await runToCompletion(
+      ctx,
+      components.migrations,
+      internal.migrations.backfillRoutineWeeklyPlans,
+    );
+
+    const routines = await ctx.db
+      .query("routines")
+      .withIndex("by_userId_and_isActive", (q) =>
+        q.eq("userId", viewerId).eq("isActive", true),
+      )
+      .take(1);
+
+    expect(routines).toHaveLength(1);
+    expect(routines[0]?.weeklyPlan).toHaveLength(7);
+    expect(routines[0]?.daysPerWeek).toBe(3);
   });
 });
 
