@@ -1,27 +1,25 @@
 import { useCallback } from "react";
 
 import { useAppUnlock } from "@/features/auth/AppUnlockProvider";
-import { useAuth } from "@/features/auth/clerkCompat";
+import { useAuth, useLocalCredentials } from "@/features/auth/clerkCompat";
+import { runSecureSignOutCleanup } from "@/features/auth/secureSignOutCleanup";
 
 export function useSecureSignOut() {
   const { clearEnrollment } = useAppUnlock();
+  const { clearCredentials, userOwnsCredentials } = useLocalCredentials();
   const { signOut } = useAuth();
 
   return useCallback(async () => {
-    let clearEnrollmentError: unknown = null;
-
-    try {
-      await clearEnrollment();
-    } catch (error) {
-      clearEnrollmentError = error;
-    }
+    const cleanupError = await runSecureSignOutCleanup({
+      clearEnrollment,
+      clearLocalCredentials: clearCredentials,
+      shouldClearLocalCredentials: userOwnsCredentials === true,
+    });
 
     await signOut();
 
-    if (clearEnrollmentError) {
-      throw clearEnrollmentError instanceof Error
-        ? clearEnrollmentError
-        : new Error("We couldn't clear the local unlock enrollment.");
+    if (cleanupError) {
+      throw cleanupError;
     }
-  }, [clearEnrollment, signOut]);
+  }, [clearCredentials, clearEnrollment, signOut, userOwnsCredentials]);
 }

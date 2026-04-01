@@ -12,8 +12,12 @@ type Identity = NonNullable<
   Awaited<ReturnType<QueryCtx["auth"]["getUserIdentity"]>>
 >;
 
+type UserDoc = Doc<"users">;
 type ReaderCtx = QueryCtx | MutationCtx;
-type DeletionStatus = Doc<"users">["deletionStatus"];
+
+const USER_LOOKUP_LIMIT = 20;
+
+export const ACCOUNT_RESTORE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -33,19 +37,43 @@ export async function getViewerByTokenIdentifier(
   ctx: { db: DatabaseReader },
   tokenIdentifier: string,
 ) {
-  return ctx.db
+  const activeUsers = await ctx.db
     .query("users")
-    .withIndex("by_tokenIdentifier", (q) =>
-      q.eq("tokenIdentifier", tokenIdentifier),
+    .withIndex("by_tokenIdentifier_and_accountStatus", (q) =>
+      q.eq("tokenIdentifier", tokenIdentifier).eq("accountStatus", "active"),
     )
-    .unique();
+    .take(2);
+  if (activeUsers.length > 0) {
+    return pickMostRecentUser(activeUsers);
+  }
+
+  const users = await listUsersByTokenIdentifier(ctx, tokenIdentifier);
+  return pickMostRecentUser(users.filter(isActiveUser));
+}
+
+export async function getRestoreCandidateByTokenIdentifier(
+  ctx: { db: DatabaseReader },
+  tokenIdentifier: string,
+  now = Date.now(),
+) {
+  const users = await listUsersByTokenIdentifier(ctx, tokenIdentifier);
+  const restoreCandidates = users
+    .filter((user) => isRestoreCandidateEligible(user, now))
+    .sort((left, right) => {
+      const deletedAtDelta = getDeletedAtTimestamp(right) - getDeletedAtTimestamp(left);
+      if (deletedAtDelta !== 0) {
+        return deletedAtDelta;
+      }
+      return right._creationTime - left._creationTime;
+    });
+
+  return restoreCandidates[0] ?? null;
 }
 
 export async function requireViewer(ctx: ReaderCtx) {
   const identity = await requireIdentity(ctx);
   const viewer = await getViewerByTokenIdentifier(ctx, identity.tokenIdentifier);
   invariant(viewer, "Viewer profile not found.");
-  invariant(!isDeletionBlocked(viewer.deletionStatus), getDeletionBlockedMessage(viewer.deletionStatus));
   return { identity, viewer };
 }
 
@@ -101,21 +129,52 @@ export async function requireCustomExerciseOwner(
 export function getIdentitySnapshot(identity: Identity) {
   return {
     clerkUserId: identity.subject,
-    displayName: identity.name ?? undefined,
-    imageUrl: identity.pictureUrl ?? undefined,
-    primaryEmail: identity.email ?? undefined,
     tokenIdentifier: identity.tokenIdentifier,
   };
 }
 
-export function isDeletionBlocked(status: DeletionStatus) {
-  return status !== undefined && status !== "complete";
+export function getDeletedAtTimestamp(user: UserDoc) {
+  return user.deletedAt ?? user.deletionRequestedAt ?? user.updatedAt ?? user._creationTime;
 }
 
-export function getDeletionBlockedMessage(status: DeletionStatus) {
-  if (status === "failed") {
-    return "Account deletion is being retried. Please wait a moment and try again later.";
-  }
+export function getRestoreEligibleUntilTimestamp(user: UserDoc) {
+  return user.restoreEligibleUntil ?? (getDeletedAtTimestamp(user) + ACCOUNT_RESTORE_WINDOW_MS);
+}
 
-  return "Account deletion is in progress.";
+export function isDeletedUser(user: UserDoc) {
+  return user.accountStatus === "deleted" || (
+    user.accountStatus === undefined &&
+    (
+      user.deletionStatus !== undefined ||
+      user.deletionRequestedAt !== undefined ||
+      user.deletionJobId !== undefined
+    )
+  );
+}
+
+export function isActiveUser(user: UserDoc) {
+  return !isDeletedUser(user);
+}
+
+export function isRestoreCandidateEligible(user: UserDoc, now = Date.now()) {
+  const restoreDecision = user.restoreDecision ?? "pending";
+  return (
+    isDeletedUser(user) &&
+    restoreDecision === "pending" &&
+    getRestoreEligibleUntilTimestamp(user) > now
+  );
+}
+
+async function listUsersByTokenIdentifier(
+  ctx: { db: DatabaseReader },
+  tokenIdentifier: string,
+) {
+  return ctx.db
+    .query("users")
+    .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", tokenIdentifier))
+    .take(USER_LOOKUP_LIMIT);
+}
+
+function pickMostRecentUser<T extends { _creationTime: number }>(users: T[]) {
+  return [...users].sort((left, right) => right._creationTime - left._creationTime)[0] ?? null;
 }

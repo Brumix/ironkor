@@ -71,6 +71,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const appIcon = getAppIcon(appVariant);
   const webFavicon = getWebFavicon(appVariant);
   const authRedirectDomain = getAuthRedirectDomain();
+  const configExtra = (config.extra ?? {}) as ExpoConfig["extra"] & {
+    eas?: Record<string, unknown>;
+    router?: Record<string, unknown>;
+  };
   const associatedDomains = authRedirectDomain ? [`applinks:${authRedirectDomain}`] : undefined;
   const intentFilters = authRedirectDomain
     ? [
@@ -149,12 +153,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       reactCompiler: true,
     },
     extra: {
-      ...config.extra,
+      ...configExtra,
       router: {
-        ...(config.extra?.router ?? {}),
+        ...(configExtra.router ?? {}),
       },
       eas: {
-        ...(config.extra?.eas ?? {}),
+        ...(configExtra.eas ?? {}),
         projectId: EAS_PROJECT_ID,
       },
     },

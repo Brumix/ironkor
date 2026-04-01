@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
@@ -13,6 +13,7 @@ import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { useAccountDeletionTransition } from "@/features/auth/AccountDeletionTransitionProvider";
 import { useClerk, useUser } from "@/features/auth/clerkCompat";
 import { resolveSignInMethod } from "@/features/auth/resolveSignInMethod";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
@@ -37,10 +38,13 @@ function getDisplayInitials(displayName: string) {
 export default function SettingsScreen() {
   const { client } = useClerk();
   const { user } = useUser();
+  const {
+    beginAccountDeletionTransition,
+    endAccountDeletionTransition,
+  } = useAccountDeletionTransition();
   const { mode, setMode, theme } = useTheme();
   const secureSignOut = useSecureSignOut();
   const { showAlert, AlertModal } = useAppAlert();
-  const viewer = useQuery(api.auth.getViewer);
   const deleteMyAccount = useAction(api.auth.deleteMyAccount);
   const [autoStartTimer, setAutoStartTimer] = useState(true);
   const [hapticFeedback, setHapticFeedback] = useState(true);
@@ -48,8 +52,8 @@ export default function SettingsScreen() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
-  const displayName = user?.fullName ?? viewer?.displayName ?? "Ironkor athlete";
-  const emailAddress = user?.primaryEmailAddress?.emailAddress ?? viewer?.primaryEmail ?? "Syncing your email...";
+  const displayName = user?.fullName ?? "Ironkor athlete";
+  const emailAddress = user?.primaryEmailAddress?.emailAddress ?? "Syncing your email...";
   const signInMethod = resolveSignInMethod({
     lastAuthenticationStrategy: client?.lastAuthenticationStrategy,
     user,
@@ -171,6 +175,41 @@ export default function SettingsScreen() {
           fontSize: theme.tokens.typography.fontSize.sm,
           lineHeight: theme.tokens.typography.fontSize.sm * theme.tokens.typography.lineHeight.relaxed,
         },
+        dangerCard: {
+          backgroundColor: theme.colors.errorSoft,
+          borderColor: theme.colors.error,
+        },
+        dangerHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: theme.tokens.spacing.sm,
+        },
+        dangerIcon: {
+          width: 42,
+          height: 42,
+          borderRadius: theme.tokens.radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: theme.colors.surface,
+          borderWidth: 1,
+          borderColor: theme.colors.error,
+        },
+        dangerTitleBlock: {
+          flex: 1,
+          gap: theme.tokens.spacing.xxs,
+        },
+        dangerTitle: {
+          color: theme.colors.text,
+          fontSize: theme.tokens.typography.fontSize.lg,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+        },
+        dangerDescription: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          lineHeight:
+            theme.tokens.typography.fontSize.sm *
+            theme.tokens.typography.lineHeight.relaxed,
+        },
         themeRow: {
           flexDirection: "row",
           gap: theme.tokens.spacing.sm,
@@ -206,12 +245,18 @@ export default function SettingsScreen() {
     }
 
     setIsDeletingAccount(true);
+    beginAccountDeletionTransition();
     try {
+      setShowDeleteAccountModal(false);
+      // Let the shared auth layout swap out the workout tabs before we flag the user as deleting.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
       await deleteMyAccount({});
       await secureSignOut();
-      setShowDeleteAccountModal(false);
       router.replace("/sign-in");
     } catch (error) {
+      endAccountDeletionTransition();
       showAlert({
         title: "Delete account failed",
         message: error instanceof Error ? error.message : "Please try again.",
@@ -276,16 +321,6 @@ export default function SettingsScreen() {
             onPress={handleSignOut}
             size="sm"
             variant="secondary"
-          />
-          <AppButton
-            icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
-            label="Delete account"
-            loading={isDeletingAccount}
-            onPress={() => {
-              setShowDeleteAccountModal(true);
-            }}
-            size="sm"
-            variant="danger"
           />
         </View>
       </AppCard>
@@ -362,10 +397,40 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      <SectionHeader
+        title="Danger zone"
+        subtitle="Permanent account actions stay here at the end of settings"
+      />
+
+      <AppCard style={styles.dangerCard}>
+        <View style={styles.dangerHeader}>
+          <View style={styles.dangerIcon}>
+            <Ionicons color={theme.colors.error} name="warning-outline" size={20} />
+          </View>
+          <View style={styles.dangerTitleBlock}>
+            <Text style={styles.dangerTitle}>Delete account permanently</Text>
+            <Text style={styles.dangerDescription}>
+              This removes your current Ironkor account from active use. We preserve your routines, sessions, and custom exercises for 30 days in case you want to restore this account later.
+            </Text>
+          </View>
+        </View>
+
+        <AppButton
+          fullWidth
+          icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
+          label="Delete account"
+          loading={isDeletingAccount}
+          onPress={() => {
+            setShowDeleteAccountModal(true);
+          }}
+          variant="danger"
+        />
+      </AppCard>
+
       <ConfirmActionModal
         visible={showDeleteAccountModal}
         title="Delete account"
-        message="This permanently deletes your Ironkor account, routines, sessions, and custom exercises."
+        message="This deletes your current Ironkor account from active use. Your routines, sessions, and custom exercises stay preserved for 30 days so you can restore this account later. If you sign in again within 30 days, you can restore it or start fresh. After 30 days, or if you choose Start fresh, the old account is deleted forever."
         confirmLabel="Delete forever"
         cancelLabel="Cancel"
         confirmVariant="danger"

@@ -1,6 +1,8 @@
 import { Redirect, Tabs } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
+import { useAccountDeletionTransition } from "@/features/auth/AccountDeletionTransitionProvider";
+import AccountRestoreChoiceModal from "@/features/auth/AccountRestoreChoiceModal";
 import { useAppUnlock } from "@/features/auth/AppUnlockProvider";
 import AuthLoadingScreen from "@/features/auth/AuthLoadingScreen";
 import { useAuth, useSession } from "@/features/auth/clerkCompat";
@@ -14,6 +16,7 @@ export default function WorkoutLayout() {
   const { theme } = useTheme();
   const { isLoaded, isSignedIn } = useAuth();
   const { session } = useSession();
+  const { isAccountDeletionTransitioning } = useAccountDeletionTransition();
   const secureSignOut = useSecureSignOut();
   const {
     errorMessage: unlockErrorMessage,
@@ -21,8 +24,19 @@ export default function WorkoutLayout() {
     unlock,
   } = useAppUnlock();
   const isUnlocked = unlockStatus === "unavailable" || unlockStatus === "unlocked";
-  const { errorMessage, isReady } = useViewerBootstrap({
-    enabled: isSignedIn && !session?.currentTask && isUnlocked,
+  const {
+    errorMessage,
+    isReady,
+    isResolvingRestoreChoice,
+    restoreCandidate,
+    restorePreviousAccount,
+    startFreshAccount,
+  } = useViewerBootstrap({
+    enabled:
+      isSignedIn &&
+      !session?.currentTask &&
+      isUnlocked &&
+      !isAccountDeletionTransitioning,
   });
 
   if (!isLoaded) {
@@ -35,6 +49,15 @@ export default function WorkoutLayout() {
 
   if (session?.currentTask) {
     return <Redirect href="/auth-task" />;
+  }
+
+  if (isAccountDeletionTransitioning) {
+    return (
+      <AuthLoadingScreen
+        title="Deleting your account"
+        message="Signing you out and preserving your previous Ironkor account..."
+      />
+    );
   }
 
   if (!isUnlocked) {
@@ -57,6 +80,26 @@ export default function WorkoutLayout() {
           void unlock();
         }}
       />
+    );
+  }
+
+  if (restoreCandidate) {
+    return (
+      <>
+        <AuthLoadingScreen
+          title="Restore your previous account"
+          message={
+            errorMessage ??
+            "Choose whether to bring back your previous Ironkor account or start with a fresh workspace."
+          }
+        />
+        <AccountRestoreChoiceModal
+          visible
+          isSubmitting={isResolvingRestoreChoice}
+          onRestore={restorePreviousAccount}
+          onStartFresh={startFreshAccount}
+        />
+      </>
     );
   }
 

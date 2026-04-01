@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useMemo, useRef } from "react";
+
 import type { ClerkProviderProps as ClerkExpoProviderProps } from "@clerk/clerk-expo/dist/provider/ClerkProvider";
 import type { ComponentType, ReactNode } from "react";
 
@@ -22,6 +24,8 @@ interface AuthState {
   } | null;
   signOut: () => Promise<void>;
 }
+
+type SessionAudience = string | string[] | null | undefined;
 
 interface SessionLike {
   currentTask?: {
@@ -193,6 +197,22 @@ interface SSOStartParams {
   unsafeMetadata?: unknown;
 }
 
+interface LocalCredentialsPayload {
+  identifier?: string;
+  password: string;
+}
+
+type BiometricType = "face-recognition" | "fingerprint";
+
+interface LocalCredentialsState {
+  authenticate: () => Promise<SignInResult>;
+  biometricType: BiometricType | null;
+  clearCredentials: () => Promise<void>;
+  hasCredentials: boolean;
+  setCredentials: (credentials: LocalCredentialsPayload) => Promise<void>;
+  userOwnsCredentials: boolean | null;
+}
+
 interface ClerkExpoRuntimeModule {
   ClerkProvider: ComponentType<ClerkExpoProviderProps>;
   useAuth: () => AuthState;
@@ -210,19 +230,37 @@ interface ClerkErrorRuntimeModule {
   isClerkAPIResponseError: (error: unknown) => boolean;
 }
 
-interface ConvexClerkProviderProps {
-  children: ReactNode;
-  client: unknown;
-  useAuth: () => AuthState;
+interface ClerkLocalCredentialsRuntimeModule {
+  useLocalCredentials: () => LocalCredentialsState;
 }
 
-interface ConvexClerkRuntimeModule {
-  ConvexProviderWithClerk: ComponentType<ConvexClerkProviderProps>;
+interface ConvexAuthStateLike {
+  fetchAccessToken: (args: {
+    forceRefreshToken: boolean;
+  }) => Promise<string | null>;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+interface ConvexProviderWithAuthProps {
+  children: ReactNode;
+  client: unknown;
+  useAuth: () => ConvexAuthStateLike;
+}
+
+interface ClerkTokenFetchOptions {
+  skipCache?: boolean;
+  template?: string;
+}
+
+interface ConvexReactRuntimeModule {
+  ConvexProviderWithAuth: ComponentType<ConvexProviderWithAuthProps>;
 }
 
 let clerkExpoModule: ClerkExpoRuntimeModule | null = null;
 let clerkErrorModule: ClerkErrorRuntimeModule | null = null;
-let convexClerkModule: ConvexClerkRuntimeModule | null = null;
+let clerkLocalCredentialsModule: ClerkLocalCredentialsRuntimeModule | null = null;
+let convexReactModule: ConvexReactRuntimeModule | null = null;
 let clerkRuntimeError: unknown = null;
 let clerkSSORuntimeError: unknown = null;
 
@@ -236,9 +274,16 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   clerkErrorModule = require("@clerk/clerk-react/errors") as ClerkErrorRuntimeModule;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  convexClerkModule = require("convex/react-clerk") as ConvexClerkRuntimeModule;
+  convexReactModule = require("convex/react") as ConvexReactRuntimeModule;
 } catch (error) {
   clerkRuntimeError = error;
+}
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  clerkLocalCredentialsModule = require("@clerk/clerk-expo/local-credentials") as ClerkLocalCredentialsRuntimeModule;
+} catch {
+  clerkLocalCredentialsModule = null;
 }
 
 const authFallback: AuthState = {
@@ -295,12 +340,21 @@ const signUpFallback: SignUpState = {
   setActive: undefined,
 };
 
+const localCredentialsFallback: LocalCredentialsState = {
+  authenticate: rejectUnavailable,
+  biometricType: null,
+  clearCredentials: () => Promise.resolve(),
+  hasCredentials: false,
+  setCredentials: () => Promise.resolve(),
+  userOwnsCredentials: null,
+};
+
 export function getClerkRuntimeError() {
   return clerkRuntimeError;
 }
 
 export function isClerkRuntimeAvailable() {
-  return clerkExpoModule !== null && clerkErrorModule !== null && convexClerkModule !== null;
+  return clerkExpoModule !== null && clerkErrorModule !== null && convexReactModule !== null;
 }
 
 export function getClerkSSORuntimeError() {
@@ -353,6 +407,14 @@ export function useSignUp() {
   }
 
   return clerkExpoModule.useSignUp();
+}
+
+export function useLocalCredentials() {
+  if (!clerkLocalCredentialsModule) {
+    return localCredentialsFallback;
+  }
+
+  return clerkLocalCredentialsModule.useLocalCredentials();
 }
 
 export function useSSO() {
@@ -413,14 +475,94 @@ export function ConvexProviderWithClerk({
   client: unknown;
   useAuth: typeof useAuth;
 }) {
-  if (!convexClerkModule) {
+  const Provider = convexReactModule?.ConvexProviderWithAuth;
+  if (!Provider) {
     return <>{children}</>;
   }
 
-  const Provider = convexClerkModule.ConvexProviderWithClerk;
+  function useAuthFromClerk() {
+    return useConvexAuthFromClerkState(useAuthProp);
+  }
+
   return (
-    <Provider client={client as never} useAuth={useAuthProp as never}>
+    <Provider client={client as never} useAuth={useAuthFromClerk as never}>
       {children}
     </Provider>
   );
+}
+
+function useConvexAuthFromClerkState(useAuthHook: typeof useAuth): ConvexAuthStateLike {
+  const {
+    getToken,
+    isLoaded,
+    isSignedIn,
+    sessionClaims,
+  } = useAuthHook();
+  const getTokenRef = useRef(getToken);
+  const sessionAudience = getConvexSessionAudience(sessionClaims?.aud);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  const fetchAccessToken = useCallback(
+    ({ forceRefreshToken }: { forceRefreshToken: boolean }) =>
+      fetchConvexAccessTokenWithFallback({
+        forceRefreshToken,
+        getToken: getTokenRef.current,
+        preferredAudience: sessionAudience,
+      }),
+    [sessionAudience],
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: !isLoaded,
+      isAuthenticated: isSignedIn,
+      fetchAccessToken,
+    }),
+    [fetchAccessToken, isLoaded, isSignedIn],
+  );
+}
+
+export function getConvexSessionAudience(audience: SessionAudience) {
+  if (Array.isArray(audience)) {
+    return audience.includes("convex") ? "native" : "template";
+  }
+
+  return audience === "convex" ? "native" : "template";
+}
+
+export async function fetchConvexAccessTokenWithFallback({
+  forceRefreshToken,
+  getToken,
+  preferredAudience,
+}: {
+  forceRefreshToken: boolean;
+  getToken: (options?: ClerkTokenFetchOptions) => Promise<string | null>;
+  preferredAudience: ReturnType<typeof getConvexSessionAudience>;
+}) {
+  const tokenOptions: ClerkTokenFetchOptions[] =
+    preferredAudience === "native"
+      ? [
+          { skipCache: forceRefreshToken },
+          { skipCache: forceRefreshToken, template: "convex" },
+        ]
+      : [
+          { skipCache: forceRefreshToken, template: "convex" },
+          { skipCache: forceRefreshToken },
+        ];
+
+  for (const options of tokenOptions) {
+    try {
+      const token = await getToken(options);
+      if (token) {
+        return token;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }

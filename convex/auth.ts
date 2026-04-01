@@ -1,46 +1,62 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import {
   action,
-  internalAction,
   internalMutation,
   internalQuery,
   mutation,
   query,
 } from "./_generated/server";
-import { requireEnv } from "./env";
 import {
-  getViewerByTokenIdentifier as findViewerByTokenIdentifier,
+  ACCOUNT_RESTORE_WINDOW_MS,
+  getDeletedAtTimestamp,
   getIdentitySnapshot,
-  isDeletionBlocked,
+  getRestoreCandidateByTokenIdentifier as findRestoreCandidateByTokenIdentifier,
+  getRestoreEligibleUntilTimestamp,
+  getViewerByTokenIdentifier as findViewerByTokenIdentifier,
+  isDeletedUser,
   requireIdentity,
 } from "./authHelpers";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
-const ACCOUNT_DELETION_BATCH_SIZE = 100;
+const ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE = 100;
 const ACCOUNT_DELETION_RETRY_BASE_MS = 5_000;
 const ACCOUNT_DELETION_RETRY_MAX_MS = 5 * 60 * 1000;
 const ACCOUNT_DELETION_MAX_ATTEMPTS = 10;
 const ACCOUNT_DELETION_ERROR_MAX_LENGTH = 280;
 
-async function deleteDocsInBatch<T extends { _id: Id<any> }>(
-  docs: T[],
-  deleter: (docId: T["_id"]) => Promise<void>,
-) {
-  for (const doc of docs) {
-    await deleter(doc._id);
-  }
-  return docs.length;
-}
+type AccountDeletionJob = Doc<"accountDeletionJobs">;
+type SnapshotDoc = { _id: Id<any> };
 
 function getAccountDeletionRetryMs(attempts: number) {
   return Math.min(
     ACCOUNT_DELETION_RETRY_MAX_MS,
     ACCOUNT_DELETION_RETRY_BASE_MS * 2 ** Math.max(0, attempts),
   );
+}
+
+function normalizeDeletionErrorMessage(
+  errorMessage: string,
+  fallbackMessage = "Unable to capture the deleted account snapshot.",
+) {
+  const trimmed = errorMessage.trim();
+  if (trimmed.length === 0) {
+    return fallbackMessage;
+  }
+  if (trimmed.length <= ACCOUNT_DELETION_ERROR_MAX_LENGTH) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, ACCOUNT_DELETION_ERROR_MAX_LENGTH - 3)}...`;
+}
+
+function toDeletionFailureMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Unable to capture the deleted account snapshot.";
 }
 
 async function scheduleAccountDeletionJob(
@@ -64,7 +80,7 @@ async function patchAccountDeletionJobState(
   });
 }
 
-async function patchViewerDeletionState(
+async function patchViewerState(
   ctx: MutationCtx,
   viewerId: Id<"users">,
   updates: Partial<Doc<"users">>,
@@ -75,34 +91,146 @@ async function patchViewerDeletionState(
   });
 }
 
-async function deleteClerkUser(clerkUserId: string) {
-  const clerkSecretKey = requireEnv("CLERK_SECRET_KEY");
-  const response = await fetch(
-    `https://api.clerk.com/v1/users/${encodeURIComponent(clerkUserId)}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${clerkSecretKey}`,
-      },
-    },
-  );
-
-  if (response.ok || response.status === 404) {
+async function insertAccountDeletionChunk(
+  ctx: MutationCtx,
+  args: {
+    entityIds: Array<
+      Id<"routines"> | Id<"routineSessions"> | Id<"sessionExercises"> | Id<"exercises">
+    >;
+    entityType: Doc<"accountDeletionJobChunks">["entityType"];
+    jobId: Id<"accountDeletionJobs">;
+    chunkIndex: number;
+  },
+) {
+  if (args.entityIds.length === 0) {
     return;
   }
 
-  throw new Error(`Unable to delete Clerk account (HTTP ${response.status}).`);
+  await ctx.db.insert("accountDeletionJobChunks", {
+    jobId: args.jobId,
+    entityType: args.entityType,
+    chunkIndex: args.chunkIndex,
+    entityIds: args.entityIds,
+    createdAt: Date.now(),
+  });
 }
 
-function normalizeDeletionErrorMessage(errorMessage: string) {
-  const trimmed = errorMessage.trim();
-  if (trimmed.length === 0) {
-    return "Unable to delete Clerk account.";
+async function continueAccountDeletionJob(
+  ctx: MutationCtx,
+  job: AccountDeletionJob,
+  cursor: string,
+  chunkIndexDelta: number,
+) {
+  await patchAccountDeletionJobState(ctx, job._id, {
+    status: "capturing",
+    cursor,
+    currentChunkIndex: job.currentChunkIndex + chunkIndexDelta,
+    attempts: 0,
+    lastError: undefined,
+    scheduledAt: Date.now(),
+  });
+  await scheduleAccountDeletionJob(ctx, job._id);
+  return { status: "capturing" as const };
+}
+
+async function advanceAccountDeletionJobPhase(
+  ctx: MutationCtx,
+  job: AccountDeletionJob,
+  nextPhase: Doc<"accountDeletionJobs">["phase"],
+) {
+  await patchAccountDeletionJobState(ctx, job._id, {
+    status: nextPhase === "complete" ? "complete" : "capturing",
+    phase: nextPhase,
+    cursor: undefined,
+    currentChunkIndex: 0,
+    attempts: 0,
+    lastError: undefined,
+    scheduledAt: Date.now(),
+    completedAt: nextPhase === "complete" ? Date.now() : undefined,
+  });
+  if (nextPhase !== "complete") {
+    await scheduleAccountDeletionJob(ctx, job._id);
   }
-  if (trimmed.length <= ACCOUNT_DELETION_ERROR_MAX_LENGTH) {
-    return trimmed;
+  return {
+    status: nextPhase === "complete" ? ("complete" as const) : ("capturing" as const),
+  };
+}
+
+async function captureSnapshotPage<T extends SnapshotDoc>(
+  ctx: MutationCtx,
+  args: {
+    docs: T[];
+    entityType: Doc<"accountDeletionJobChunks">["entityType"];
+    job: AccountDeletionJob;
+    nextPhase: Doc<"accountDeletionJobs">["phase"];
+    page: {
+      continueCursor: string;
+      isDone: boolean;
+    };
+  },
+) {
+  await insertAccountDeletionChunk(ctx, {
+    jobId: args.job._id,
+    entityType: args.entityType,
+    chunkIndex: args.job.currentChunkIndex,
+    entityIds: args.docs.map((doc) => doc._id),
+  });
+
+  if (!args.page.isDone) {
+    return continueAccountDeletionJob(
+      ctx,
+      args.job,
+      args.page.continueCursor,
+      args.docs.length > 0 ? 1 : 0,
+    );
   }
-  return `${trimmed.slice(0, ACCOUNT_DELETION_ERROR_MAX_LENGTH - 3)}...`;
+
+  return advanceAccountDeletionJobPhase(ctx, args.job, args.nextPhase);
+}
+
+async function failAccountDeletionJob(
+  ctx: MutationCtx,
+  job: AccountDeletionJob,
+  errorMessage: string,
+) {
+  const nextAttempt = job.attempts + 1;
+  const lastError = normalizeDeletionErrorMessage(errorMessage);
+  const viewer = await ctx.db.get(job.userId);
+
+  if (nextAttempt >= ACCOUNT_DELETION_MAX_ATTEMPTS) {
+    await patchAccountDeletionJobState(ctx, job._id, {
+      status: "failed",
+      attempts: nextAttempt,
+      lastError: `Max retries reached: ${lastError}`,
+      scheduledAt: Date.now(),
+    });
+
+    if (viewer && viewer.accountStatus !== "active") {
+      await patchViewerState(ctx, viewer._id, {
+        deletionStatus: "failed",
+      });
+    }
+
+    return { status: "failed" as const, retryMs: null };
+  }
+
+  const retryMs = getAccountDeletionRetryMs(nextAttempt);
+  const scheduledAt = Date.now() + retryMs;
+  await patchAccountDeletionJobState(ctx, job._id, {
+    status: "failed",
+    attempts: nextAttempt,
+    lastError,
+    scheduledAt,
+  });
+
+  if (viewer && viewer.accountStatus !== "active") {
+    await patchViewerState(ctx, viewer._id, {
+      deletionStatus: "failed",
+    });
+  }
+
+  await scheduleAccountDeletionJob(ctx, job._id, retryMs);
+  return { status: "failed" as const, retryMs };
 }
 
 export const getViewer = query({
@@ -117,6 +245,36 @@ export const getViewer = query({
   },
 });
 
+export const getRestoreCandidate = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const activeViewer = await findViewerByTokenIdentifier(ctx, identity.tokenIdentifier);
+    if (activeViewer) {
+      return null;
+    }
+
+    const candidate = await findRestoreCandidateByTokenIdentifier(
+      ctx,
+      identity.tokenIdentifier,
+      Date.now(),
+    );
+    if (!candidate) {
+      return null;
+    }
+
+    return {
+      deletedAt: getDeletedAtTimestamp(candidate),
+      restoreEligibleUntil: getRestoreEligibleUntilTimestamp(candidate),
+      userId: candidate._id,
+    };
+  },
+});
+
 export const ensureViewer = mutation({
   args: {},
   handler: async (ctx) => {
@@ -126,42 +284,113 @@ export const ensureViewer = mutation({
 
     const existing = await findViewerByTokenIdentifier(ctx, snapshot.tokenIdentifier);
     if (existing) {
-      if (isDeletionBlocked(existing.deletionStatus)) {
-        throw new Error("Account deletion is in progress.");
-      }
-
       await ctx.db.patch(existing._id, {
+        accountStatus: "active",
         clerkUserId: snapshot.clerkUserId,
-        displayName: snapshot.displayName,
-        imageUrl: snapshot.imageUrl,
-        primaryEmail: snapshot.primaryEmail,
         updatedAt: now,
       });
       return existing._id;
     }
 
+    const restoreCandidate = await findRestoreCandidateByTokenIdentifier(
+      ctx,
+      snapshot.tokenIdentifier,
+      now,
+    );
+    if (restoreCandidate) {
+      throw new ConvexError("Restore decision required.");
+    }
+
     return ctx.db.insert("users", {
       ...snapshot,
+      accountStatus: "active",
       createdAt: now,
       updatedAt: now,
     });
   },
 });
 
+export const restoreDeletedAccount = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireIdentity(ctx);
+    const activeViewer = await findViewerByTokenIdentifier(ctx, identity.tokenIdentifier);
+    if (activeViewer) {
+      return activeViewer._id;
+    }
+
+    const restoreCandidate = await findRestoreCandidateByTokenIdentifier(
+      ctx,
+      identity.tokenIdentifier,
+      Date.now(),
+    );
+    if (!restoreCandidate) {
+      throw new ConvexError("No deleted account is available to restore.");
+    }
+
+    const restoredAt = Date.now();
+    await patchViewerState(ctx, restoreCandidate._id, {
+      accountStatus: "active",
+      clerkUserId: identity.subject,
+      deletedAt: undefined,
+      deletionJobId: undefined,
+      deletionRequestedAt: undefined,
+      deletionStatus: undefined,
+      restoreDecision: undefined,
+      restoreEligibleUntil: undefined,
+    });
+
+    if (restoreCandidate.deletionJobId) {
+      const deletionJob = await ctx.db.get(restoreCandidate.deletionJobId);
+      if (deletionJob) {
+        await patchAccountDeletionJobState(ctx, deletionJob._id, {
+          restorationStatus: "restored",
+          restoredAt,
+          restoredUserId: restoreCandidate._id,
+        });
+      }
+    }
+
+    return restoreCandidate._id;
+  },
+});
+
+export const declineDeletedAccountRestore = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await requireIdentity(ctx);
+    const restoreCandidate = await findRestoreCandidateByTokenIdentifier(
+      ctx,
+      identity.tokenIdentifier,
+      Date.now(),
+    );
+    if (!restoreCandidate) {
+      return { status: "complete" as const };
+    }
+
+    await patchViewerState(ctx, restoreCandidate._id, {
+      restoreDecision: "declined",
+    });
+
+    return { status: "declined" as const };
+  },
+});
+
 export const deleteMyAccount = action({
   args: {},
   handler: async (ctx): Promise<{
-    status: "pending" | "complete" | "purging" | "deleting_clerk" | "failed";
+    status: "pending" | "complete" | "capturing" | "failed";
     jobId: Id<"accountDeletionJobs"> | null;
   }> => {
     const identity = await requireIdentity(ctx);
-    const viewer: Doc<"users"> | null = await ctx.runQuery(internal.auth.getViewerByTokenIdentifier, {
-      tokenIdentifier: identity.tokenIdentifier,
-    });
+    const viewer: Doc<"users"> | null = await ctx.runQuery(
+      internal.auth.getViewerByTokenIdentifier,
+      {
+        tokenIdentifier: identity.tokenIdentifier,
+      },
+    );
 
-    const clerkUserId = viewer?.clerkUserId ?? identity.subject;
     if (!viewer?._id) {
-      await deleteClerkUser(clerkUserId);
       return {
         status: "complete" as const,
         jobId: null,
@@ -169,8 +398,9 @@ export const deleteMyAccount = action({
     }
 
     return ctx.runMutation(internal.auth.queueAccountDeletion, {
+      clerkUserId: viewer.clerkUserId,
+      tokenIdentifier: viewer.tokenIdentifier,
       viewerId: viewer._id,
-      clerkUserId,
     });
   },
 });
@@ -184,19 +414,11 @@ export const getViewerByTokenIdentifier = internalQuery({
   },
 });
 
-export const getAccountDeletionJob = internalQuery({
-  args: {
-    jobId: v.id("accountDeletionJobs"),
-  },
-  handler: async (ctx, args) => {
-    return ctx.db.get(args.jobId);
-  },
-});
-
 export const queueAccountDeletion = internalMutation({
   args: {
-    viewerId: v.id("users"),
     clerkUserId: v.string(),
+    tokenIdentifier: v.string(),
+    viewerId: v.id("users"),
   },
   handler: async (ctx, args) => {
     const viewer = await ctx.db.get(args.viewerId);
@@ -209,7 +431,7 @@ export const queueAccountDeletion = internalMutation({
 
     if (viewer.deletionJobId) {
       const existingJob = await ctx.db.get(viewer.deletionJobId);
-      if (existingJob) {
+      if (existingJob && existingJob.status !== "complete") {
         return {
           status: existingJob.status,
           jobId: existingJob._id,
@@ -218,22 +440,48 @@ export const queueAccountDeletion = internalMutation({
     }
 
     const now = Date.now();
+    const restoreEligibleUntil = now + ACCOUNT_RESTORE_WINDOW_MS;
+    const relatedUsers = await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", args.tokenIdentifier))
+      .take(20);
+
+    for (const relatedUser of relatedUsers) {
+      if (relatedUser._id === args.viewerId || !isDeletedUser(relatedUser)) {
+        continue;
+      }
+      if ((relatedUser.restoreDecision ?? "pending") !== "pending") {
+        continue;
+      }
+      await patchViewerState(ctx, relatedUser._id, {
+        restoreDecision: "declined",
+      });
+    }
+
     const jobId = await ctx.db.insert("accountDeletionJobs", {
       userId: viewer._id,
       clerkUserId: args.clerkUserId,
+      tokenIdentifier: args.tokenIdentifier,
       status: "pending",
-      phase: "delete_session_exercises",
+      phase: "capture_routines",
+      restorationStatus: "not_restored",
+      deletedAt: now,
+      restoreEligibleUntil,
+      currentChunkIndex: 0,
       attempts: 0,
       createdAt: now,
       updatedAt: now,
       scheduledAt: now,
     });
 
-    await ctx.db.patch(args.viewerId, {
-      deletionStatus: "pending",
-      deletionRequestedAt: now,
+    await patchViewerState(ctx, args.viewerId, {
+      accountStatus: "deleted",
+      deletedAt: now,
       deletionJobId: jobId,
-      updatedAt: now,
+      deletionRequestedAt: now,
+      deletionStatus: "pending",
+      restoreDecision: "pending",
+      restoreEligibleUntil,
     });
 
     await scheduleAccountDeletionJob(ctx, jobId);
@@ -256,275 +504,100 @@ export const processAccountDeletionJob = internalMutation({
     }
 
     const viewer = await ctx.db.get(job.userId);
-    if (!viewer && job.phase !== "complete") {
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "complete",
-        phase: "complete",
-        completedAt: Date.now(),
-        lastError: undefined,
+    if (viewer && viewer.accountStatus !== "active" && viewer.deletionStatus !== "pending") {
+      await patchViewerState(ctx, viewer._id, {
+        deletionStatus: "pending",
       });
-      return { status: "complete" as const };
-    }
-
-    if (viewer && viewer.deletionStatus !== "purging" && job.phase !== "delete_clerk") {
-      await patchViewerDeletionState(ctx, viewer._id, {
-        deletionStatus: "purging",
-      });
-    }
-
-    if (job.phase === "delete_session_exercises") {
-      const sessionExercises = await ctx.db
-        .query("sessionExercises")
-        .withIndex("by_userId_and_session", (q) => q.eq("userId", job.userId))
-        .take(ACCOUNT_DELETION_BATCH_SIZE);
-      const deleted = await deleteDocsInBatch(sessionExercises, (docId) => ctx.db.delete(docId));
-
-      if (deleted > 0) {
-        await patchAccountDeletionJobState(ctx, job._id, {
-          status: "purging",
-          scheduledAt: Date.now(),
-        });
-        await scheduleAccountDeletionJob(ctx, job._id);
-        return { status: "purging" as const, deleted };
-      }
-
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "purging",
-        phase: "delete_routine_sessions",
-        lastError: undefined,
-        scheduledAt: Date.now(),
-      });
-      await scheduleAccountDeletionJob(ctx, job._id);
-      return { status: "purging" as const, deleted: 0 };
-    }
-
-    if (job.phase === "delete_routine_sessions") {
-      const routineSessions = await ctx.db
-        .query("routineSessions")
-        .withIndex("by_userId_and_routine", (q) => q.eq("userId", job.userId))
-        .take(ACCOUNT_DELETION_BATCH_SIZE);
-      const deleted = await deleteDocsInBatch(routineSessions, (docId) => ctx.db.delete(docId));
-
-      if (deleted > 0) {
-        await patchAccountDeletionJobState(ctx, job._id, {
-          status: "purging",
-          scheduledAt: Date.now(),
-        });
-        await scheduleAccountDeletionJob(ctx, job._id);
-        return { status: "purging" as const, deleted };
-      }
-
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "purging",
-        phase: "delete_routines",
-        lastError: undefined,
-        scheduledAt: Date.now(),
-      });
-      await scheduleAccountDeletionJob(ctx, job._id);
-      return { status: "purging" as const, deleted: 0 };
-    }
-
-    if (job.phase === "delete_routines") {
-      const routines = await ctx.db
-        .query("routines")
-        .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", job.userId))
-        .take(ACCOUNT_DELETION_BATCH_SIZE);
-      const deleted = await deleteDocsInBatch(routines, (docId) => ctx.db.delete(docId));
-
-      if (deleted > 0) {
-        await patchAccountDeletionJobState(ctx, job._id, {
-          status: "purging",
-          scheduledAt: Date.now(),
-        });
-        await scheduleAccountDeletionJob(ctx, job._id);
-        return { status: "purging" as const, deleted };
-      }
-
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "purging",
-        phase: "delete_custom_exercises",
-        lastError: undefined,
-        scheduledAt: Date.now(),
-      });
-      await scheduleAccountDeletionJob(ctx, job._id);
-      return { status: "purging" as const, deleted: 0 };
-    }
-
-    if (job.phase === "delete_custom_exercises") {
-      const customExercises = await ctx.db
-        .query("exercises")
-        .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", job.userId))
-        .take(ACCOUNT_DELETION_BATCH_SIZE);
-      const deleted = await deleteDocsInBatch(customExercises, (docId) => ctx.db.delete(docId));
-
-      if (deleted > 0) {
-        await patchAccountDeletionJobState(ctx, job._id, {
-          status: "purging",
-          scheduledAt: Date.now(),
-        });
-        await scheduleAccountDeletionJob(ctx, job._id);
-        return { status: "purging" as const, deleted };
-      }
-
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "deleting_clerk",
-        phase: "delete_clerk",
-        lastError: undefined,
-        scheduledAt: Date.now(),
-      });
-      if (viewer) {
-        await patchViewerDeletionState(ctx, viewer._id, {
-          deletionStatus: "deleting_clerk",
-        });
-      }
-      await ctx.scheduler.runAfter(0, internal.auth.deleteClerkAccountForJob, {
-        jobId: job._id,
-      });
-      return { status: "deleting_clerk" as const, deleted: 0 };
-    }
-
-    if (job.phase === "delete_clerk") {
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "deleting_clerk",
-        lastError: undefined,
-        scheduledAt: Date.now(),
-      });
-      if (viewer) {
-        await patchViewerDeletionState(ctx, viewer._id, {
-          deletionStatus: "deleting_clerk",
-        });
-      }
-      await ctx.scheduler.runAfter(0, internal.auth.deleteClerkAccountForJob, {
-        jobId: job._id,
-      });
-      return { status: "deleting_clerk" as const };
-    }
-
-    if (job.phase === "delete_viewer") {
-      if (viewer) {
-        await ctx.db.delete(viewer._id);
-      }
-
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "complete",
-        phase: "complete",
-        completedAt: Date.now(),
-        lastError: undefined,
-      });
-      return { status: "complete" as const };
-    }
-
-    return { status: job.status };
-  },
-});
-
-export const deleteClerkAccountForJob = internalAction({
-  args: {
-    jobId: v.id("accountDeletionJobs"),
-  },
-  handler: async (ctx, args) => {
-    const job = await ctx.runQuery(internal.auth.getAccountDeletionJob, {
-      jobId: args.jobId,
-    });
-    if (!job || job.status === "complete") {
-      return { status: "complete" as const };
     }
 
     try {
-      await deleteClerkUser(job.clerkUserId);
-      await ctx.runMutation(internal.auth.markClerkDeletionReady, {
-        jobId: job._id,
-      });
-      return { status: "complete" as const };
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : "Unable to delete Clerk account.";
-      await ctx.runMutation(internal.auth.failAccountDeletionJob, {
-        jobId: job._id,
-        errorMessage: message,
-      });
-      return { status: "failed" as const, error: message };
-    }
-  },
-});
-
-export const markClerkDeletionReady = internalMutation({
-  args: {
-    jobId: v.id("accountDeletionJobs"),
-  },
-  handler: async (ctx, args) => {
-    const job = await ctx.db.get(args.jobId);
-    if (!job || job.status === "complete") {
-      return { status: "complete" as const };
-    }
-
-    const viewer = await ctx.db.get(job.userId);
-    if (viewer) {
-      await patchViewerDeletionState(ctx, viewer._id, {
-        deletionStatus: "purging",
-      });
-    }
-
-    await patchAccountDeletionJobState(ctx, job._id, {
-      status: "purging",
-      phase: "delete_viewer",
-      lastError: undefined,
-      scheduledAt: Date.now(),
-    });
-    await scheduleAccountDeletionJob(ctx, job._id);
-    return { status: "purging" as const };
-  },
-});
-
-export const failAccountDeletionJob = internalMutation({
-  args: {
-    jobId: v.id("accountDeletionJobs"),
-    errorMessage: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const job = await ctx.db.get(args.jobId);
-    if (!job || job.status === "complete") {
-      return { status: "complete" as const };
-    }
-    const nextAttempt = job.attempts + 1;
-    const lastError = normalizeDeletionErrorMessage(args.errorMessage);
-    if (nextAttempt >= ACCOUNT_DELETION_MAX_ATTEMPTS) {
-      await patchAccountDeletionJobState(ctx, job._id, {
-        status: "failed",
-        attempts: nextAttempt,
-        lastError: `Max retries reached: ${lastError}`,
-        scheduledAt: Date.now(),
-      });
-
-      const viewer = await ctx.db.get(job.userId);
-      if (viewer) {
-        await patchViewerDeletionState(ctx, viewer._id, {
-          deletionStatus: "failed",
+      if (job.phase === "capture_routines") {
+        const page = await ctx.db
+          .query("routines")
+          .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "routine",
+          job,
+          nextPhase: "capture_routine_sessions",
+          page,
         });
       }
 
-      return { status: "failed" as const, retryMs: null };
+      if (job.phase === "capture_routine_sessions") {
+        const page = await ctx.db
+          .query("routineSessions")
+          .withIndex("by_userId_and_routine", (q) => q.eq("userId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "routineSession",
+          job,
+          nextPhase: "capture_session_exercises",
+          page,
+        });
+      }
+
+      if (job.phase === "capture_session_exercises") {
+        const page = await ctx.db
+          .query("sessionExercises")
+          .withIndex("by_userId_and_session", (q) => q.eq("userId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "sessionExercise",
+          job,
+          nextPhase: "capture_custom_exercises",
+          page,
+        });
+      }
+
+      if (job.phase === "capture_custom_exercises") {
+        const page = await ctx.db
+          .query("exercises")
+          .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "customExercise",
+          job,
+          nextPhase: "finalize_user",
+          page,
+        });
+      }
+
+      if (job.phase === "finalize_user") {
+        if (viewer && viewer.accountStatus !== "active") {
+          await patchViewerState(ctx, viewer._id, {
+            accountStatus: "deleted",
+            deletedAt: job.deletedAt,
+            deletionJobId: job._id,
+            deletionRequestedAt: job.deletedAt,
+            deletionStatus: "pending",
+            restoreDecision: viewer.restoreDecision ?? "pending",
+            restoreEligibleUntil: job.restoreEligibleUntil,
+          });
+        }
+
+        return advanceAccountDeletionJobPhase(ctx, job, "complete");
+      }
+
+      return { status: job.status };
+    } catch (error) {
+      return failAccountDeletionJob(ctx, job, toDeletionFailureMessage(error));
     }
-
-    const retryMs = getAccountDeletionRetryMs(nextAttempt);
-    const scheduledAt = Date.now() + retryMs;
-    await patchAccountDeletionJobState(ctx, job._id, {
-      status: "failed",
-      attempts: nextAttempt,
-      lastError,
-      scheduledAt,
-    });
-
-    const viewer = await ctx.db.get(job.userId);
-    if (viewer) {
-      await patchViewerDeletionState(ctx, viewer._id, {
-        deletionStatus: "failed",
-      });
-    }
-
-    await scheduleAccountDeletionJob(ctx, job._id, retryMs);
-    return { status: "failed" as const, retryMs };
   },
 });

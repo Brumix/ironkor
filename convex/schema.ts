@@ -1,6 +1,9 @@
 import { defineSchema } from "convex/server";
 
-import { accountDeletionJobs } from "./schemas/accountDeletionJobs";
+import {
+  accountDeletionJobChunks,
+  accountDeletionJobs,
+} from "./schemas/accountDeletionJobs";
 import { exercises } from "./schemas/exercises";
 import { routines } from "./schemas/routines";
 import { routineSessions } from "./schemas/routineSessions";
@@ -10,6 +13,7 @@ import { users } from "./schemas/users";
 export default defineSchema({
   users,
   accountDeletionJobs,
+  accountDeletionJobChunks,
   routines,
   routineSessions,
   exercises,

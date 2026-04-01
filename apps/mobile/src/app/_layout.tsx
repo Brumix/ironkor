@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AccountDeletionTransitionProvider } from "@/features/auth/AccountDeletionTransitionProvider";
 import { AppUnlockProvider } from "@/features/auth/AppUnlockProvider";
 import AuthRuntimeScreen from "@/features/auth/AuthRuntimeScreen";
 import {
@@ -93,11 +94,13 @@ function RootProviders() {
         "setup-mfa": "/auth-task",
       }}
     >
-      <AppUnlockProvider>
-        <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-          <RootStack />
-        </ConvexProviderWithClerk>
-      </AppUnlockProvider>
+      <AccountDeletionTransitionProvider>
+        <AppUnlockProvider>
+          <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+            <RootStack />
+          </ConvexProviderWithClerk>
+        </AppUnlockProvider>
+      </AccountDeletionTransitionProvider>
     </ClerkProvider>
   );
 }

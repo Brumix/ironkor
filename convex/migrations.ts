@@ -2,6 +2,7 @@ import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 import { Migrations } from "@convex-dev/migrations";
 
 import { components, internal } from "./_generated/api";
+import { ACCOUNT_RESTORE_WINDOW_MS } from "./authHelpers";
 import {
   countTrainingDays,
   getRoutineWeeklyPlan,
@@ -22,6 +23,15 @@ type SessionExerciseWithOptionalOwner = Doc<"sessionExercises"> & {
 };
 type RoutineWithLegacyWeeklyPlan = Omit<Doc<"routines">, "weeklyPlan"> & {
   weeklyPlan?: unknown;
+};
+type UserWithOptionalAccountLifecycle = Doc<"users"> & {
+  accountStatus?: "active" | "deleted";
+  deletedAt?: number;
+  restoreEligibleUntil?: number;
+  restoreDecision?: "pending" | "declined";
+};
+type AccountDeletionJobWithOptionalRestorationStatus = Doc<"accountDeletionJobs"> & {
+  restorationStatus?: "not_restored" | "restored";
 };
 
 export const backfillRoutineNameKeys = migrations.define({
@@ -114,6 +124,47 @@ export const backfillSessionExerciseUserIds = migrations.define({
   },
 });
 
+export const backfillUserAccountLifecycle = migrations.define({
+  table: "users",
+  migrateOne: async (_ctx, user: UserWithOptionalAccountLifecycle) => {
+    if (user.accountStatus !== undefined) {
+      return undefined;
+    }
+
+    const hasLegacyDeletionMarker =
+      user.deletionStatus !== undefined ||
+      user.deletionRequestedAt !== undefined ||
+      user.deletionJobId !== undefined;
+
+    if (!hasLegacyDeletionMarker) {
+      return {
+        accountStatus: "active" as const,
+      };
+    }
+
+    const deletedAt = user.deletionRequestedAt ?? user.updatedAt ?? user._creationTime;
+    return {
+      accountStatus: "deleted" as const,
+      deletedAt,
+      restoreDecision: "pending" as const,
+      restoreEligibleUntil: deletedAt + ACCOUNT_RESTORE_WINDOW_MS,
+    };
+  },
+});
+
+export const backfillAccountDeletionJobRestorationStatus = migrations.define({
+  table: "accountDeletionJobs",
+  migrateOne: async (_ctx, job: AccountDeletionJobWithOptionalRestorationStatus) => {
+    if (job.restorationStatus !== undefined) {
+      return undefined;
+    }
+
+    return {
+      restorationStatus: "not_restored" as const,
+    };
+  },
+});
+
 export const run = migrations.runner();
 
 export const runAll = migrations.runner([
@@ -123,4 +174,6 @@ export const runAll = migrations.runner([
   internal.migrations.backfillRoutineWeeklyPlans,
   internal.migrations.backfillRoutineSessionUserIds,
   internal.migrations.backfillSessionExerciseUserIds,
+  internal.migrations.backfillUserAccountLifecycle,
+  internal.migrations.backfillAccountDeletionJobRestorationStatus,
 ]);

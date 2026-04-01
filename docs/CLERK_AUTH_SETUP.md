@@ -28,12 +28,10 @@ Copy [apps/mobile/.env.example](/Volumes/Storage/Projects/ironkor/apps/mobile/.e
 
 ## Convex env
 
-Set these environment variables on both Convex deployments:
+Set this environment variable on both Convex deployments:
 
 - `CLERK_JWT_ISSUER_DOMAIN`
   - Use the Clerk Frontend API URL from the Clerk Convex integration.
-- `CLERK_SECRET_KEY`
-  - Use the Clerk secret key for the same Clerk application.
 
 The dev deployment already has:
 
@@ -41,9 +39,7 @@ The dev deployment already has:
 
 You still need to set:
 
-- `CLERK_SECRET_KEY` on dev
 - `CLERK_JWT_ISSUER_DOMAIN` on prod
-- `CLERK_SECRET_KEY` on prod
 
 ## Convex auth expectation
 
@@ -63,4 +59,4 @@ That value must match the Clerk issuer exactly or authenticated Convex requests 
 5. Build and test Apple sign-in on iOS hardware.
 6. Build and test password reset.
 7. Build and test sign-out.
-8. Build and test account deletion after `CLERK_SECRET_KEY` is set in Convex.
+8. Build and test account deletion and the 30-day restore flow.
