@@ -4,8 +4,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   NestableDraggableFlatList,
   NestableScrollContainer,
@@ -185,6 +185,39 @@ function reorderSessionOptionsByIndex(
   return reordered;
 }
 
+function arePlannerEntriesEqual(left: DraftWeeklyPlanEntry[], right: DraftWeeklyPlanEntry[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((entry, index) =>
+    entry.day === right[index]?.day && entry.type === right[index]?.type,
+  );
+}
+
+function buildSessionSnapshot(sessions: SessionOption[]) {
+  return sessions.map((session, index) => ({
+    id: session.persistedId ? String(session.persistedId) : `local:${session.key}`,
+    name: session.name,
+    order: index,
+  }));
+}
+
+function areSessionSnapshotsEqual(
+  left: ReturnType<typeof buildSessionSnapshot>,
+  right: ReturnType<typeof buildSessionSnapshot>,
+) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((session, index) =>
+    session.id === right[index]?.id &&
+    session.name === right[index]?.name &&
+    session.order === right[index]?.order,
+  );
+}
+
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export default function RoutineEditorScreen() {
   const { theme } = useTheme();
@@ -238,6 +271,12 @@ export default function RoutineEditorScreen() {
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
+
+  useLayoutEffect(() => {
+    if (!isNew && selectedRoutine === null) {
+      router.replace("/(workout)/routines");
+    }
+  }, [isNew, router, selectedRoutine]);
 
   const resetNewRoutineUi = useCallback(() => {
     setNewSessionName("");
@@ -333,6 +372,54 @@ export default function RoutineEditorScreen() {
   const plannerEntries = isNew ? sortPlanner(draft?.weeklyPlan ?? []) : sortPlanner(plannerDraft);
   const canAddSession = newSessionName.trim().length > 0;
   const isAtSessionLimit = sessionListData.length >= MAX_SESSIONS_PER_ROUTINE;
+  const persistedPlannerEntries = useMemo(
+    () =>
+      sortPlanner(
+        selectedRoutine?.weeklyPlan.map((entry: RoutineDetailed["weeklyPlan"][number]) => ({
+          day: entry.day,
+          type: entry.type,
+        })) ?? [],
+      ),
+    [selectedRoutine?.weeklyPlan],
+  );
+  const persistedSessionSnapshot = useMemo(
+    () =>
+      buildSessionSnapshot(
+        sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
+          key: String(session._id),
+          name: session.name,
+          order: session.order,
+          exerciseCount: session.exercises.length,
+          persistedId: session._id,
+        })),
+      ),
+    [selectedRoutine?.sessions],
+  );
+  const currentSessionSnapshot = useMemo(
+    () => buildSessionSnapshot(sessionListData),
+    [sessionListData],
+  );
+  const hasExistingRoutineChanges = useMemo(() => {
+    if (isNew || !selectedRoutine) {
+      return false;
+    }
+
+    return (
+      routineNameValue !== selectedRoutine.name ||
+      !arePlannerEntriesEqual(plannerEntries, persistedPlannerEntries) ||
+      !areSessionSnapshotsEqual(currentSessionSnapshot, persistedSessionSnapshot)
+    );
+  }, [
+    currentSessionSnapshot,
+    isNew,
+    persistedPlannerEntries,
+    persistedSessionSnapshot,
+    plannerEntries,
+    routineNameValue,
+    selectedRoutine,
+  ]);
+  const hasPageChanges = isNew ? hasChanges : hasExistingRoutineChanges;
+  const shouldShowSaveAction = hasPageChanges || isSaving;
 
   function navigateToRoutines() {
     router.replace("/(workout)/routines");
@@ -349,21 +436,31 @@ export default function RoutineEditorScreen() {
 
   function handleBackPress() {
     if (isNew) {
-      if (hasChanges) {
+      if (hasPageChanges) {
         setShowDiscardModal(true);
         return;
       }
 
       clearNewRoutineDraft();
     } else {
+      if (hasPageChanges) {
+        setShowDiscardModal(true);
+        return;
+      }
+
       resetExistingRoutineUi();
     }
 
     navigateToRoutines();
   }
 
-  function confirmDiscardDraft() {
-    clearNewRoutineDraft();
+  function confirmDiscardChanges() {
+    if (isNew) {
+      clearNewRoutineDraft();
+    } else {
+      resetExistingRoutineUi();
+    }
+
     setShowDiscardModal(false);
     navigateToRoutines();
   }
@@ -808,23 +905,50 @@ export default function RoutineEditorScreen() {
           textTransform: "uppercase",
           letterSpacing: theme.tokens.typography.letterSpacing.wide,
         },
-        saveButton: {
-          marginTop: theme.tokens.spacing.sm,
-          backgroundColor: theme.colors.primary,
-          borderRadius: theme.tokens.radius.md,
-          paddingVertical: theme.tokens.spacing.md,
-          alignItems: "center",
+        headerSaveButton: {
+          alignSelf: "flex-start",
+          minHeight: 0,
+          borderRadius: theme.tokens.radius.pill,
           borderWidth: 1,
           borderColor: theme.colors.primary,
+          backgroundColor: theme.colors.primary,
+          paddingHorizontal: theme.tokens.spacing.sm,
+          paddingVertical: theme.tokens.spacing.xs,
+          justifyContent: "center",
+          alignItems: "center",
         },
-        saveButtonText: {
+        headerSaveButtonText: {
           color: theme.colors.onPrimary,
-          fontSize: theme.tokens.typography.fontSize.md,
-          fontWeight: theme.tokens.typography.fontWeight.black,
+          fontFamily: theme.tokens.typography.fontFamily.body,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          fontWeight: theme.tokens.typography.fontWeight.bold,
+          letterSpacing: theme.tokens.typography.letterSpacing.wide,
         },
       }),
     [theme],
   );
+
+  const saveAction = shouldShowSaveAction ? (
+    <PressableScale
+      accessibilityLabel={selectedRoutine ? "Save routine changes" : "Save routine"}
+      accessibilityRole="button"
+      disabled={isSaving}
+      onPress={() => {
+        void handleSaveRoutine();
+      }}
+      pressedOpacity={0.95}
+      pressedScale={0.98}
+      style={styles.headerSaveButton}
+    >
+      {isSaving ? (
+        <ActivityIndicator color={theme.colors.onPrimary} size="small" />
+      ) : (
+        <Text style={styles.headerSaveButtonText}>
+          {selectedRoutine ? "Save changes" : "Save routine"}
+        </Text>
+      )}
+    </PressableScale>
+  ) : null;
 
   const renderSessionItem = useCallback(({ item, drag }: RenderItemParams<SessionOption>) => (
     <RoutineSessionRow
@@ -857,9 +981,9 @@ export default function RoutineEditorScreen() {
   ) {
     return (
       <WorkoutPage
-        headerAction={<HeaderBackButton onPress={handleBackPress} />}
-        headerActionPosition="left"
+        headerLeftAction={<HeaderBackButton onPress={handleBackPress} />}
         headerChip={{ icon: "create-outline", label: "Edit" }}
+        stickyHeader
         title={null}
       >
         <View style={styles.card}>
@@ -869,28 +993,31 @@ export default function RoutineEditorScreen() {
     );
   }
 
-  if (!isNew && !selectedRoutine) {
+  if (!isNew && selectedRoutine === null) {
     return (
       <WorkoutPage
-        headerAction={<HeaderBackButton onPress={handleBackPress} />}
-        headerActionPosition="left"
+        headerLeftAction={<HeaderBackButton onPress={handleBackPress} />}
         headerChip={{ icon: "create-outline", label: "Edit" }}
+        stickyHeader
         title={null}
       >
-        <View />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Leaving editor…</Text>
+        </View>
       </WorkoutPage>
     );
   }
 
   return (
     <WorkoutPage
-      headerAction={<HeaderBackButton onPress={handleBackPress} />}
-      headerActionPosition="left"
+      headerLeftAction={<HeaderBackButton onPress={handleBackPress} />}
       headerChip={{
         icon: selectedRoutine ? "create-outline" : "add-circle-outline",
         label: selectedRoutine ? "Edit" : "Create",
       }}
+      headerRightAction={saveAction}
       scrollComponent={NestableScrollContainer}
+      stickyHeader
       title={null}
     >
       <Text style={styles.fieldLabel}>Routine name</Text>
@@ -1007,25 +1134,18 @@ export default function RoutineEditorScreen() {
         ))}
       </View>
 
-      <Pressable
-        style={[styles.saveButton, isSaving && { opacity: 0.7 }]}
-        onPress={() => {
-          void handleSaveRoutine();
-        }}
-      >
-        <Text style={styles.saveButtonText}>
-          {isSaving ? "Saving..." : selectedRoutine ? "Save changes" : "Save routine"}
-        </Text>
-      </Pressable>
-
       <ConfirmActionModal
         visible={showDiscardModal}
-        title="Discard Draft"
-        message="Leave this routine and lose the sections, exercises, and planner changes you have not saved yet?"
+        title={isNew ? "Discard Draft" : "Discard Changes"}
+        message={
+          isNew
+            ? "Leave this routine and lose the sections, exercises, and planner changes you have not saved yet?"
+            : "Leave this routine and lose the page-level changes you have not saved yet?"
+        }
         confirmLabel="Discard"
         cancelLabel="Keep editing"
         confirmVariant="danger"
-        onConfirm={confirmDiscardDraft}
+        onConfirm={confirmDiscardChanges}
         onCancel={() => {
           setShowDiscardModal(false);
         }}

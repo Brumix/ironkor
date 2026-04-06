@@ -55,6 +55,69 @@ function createDefaultDraftRoutine(): DraftRoutine {
   };
 }
 
+function areWeeklyPlansEqual(left: DraftWeeklyPlanEntry[], right: DraftWeeklyPlanEntry[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((entry, index) =>
+    entry.day === right[index]?.day && entry.type === right[index]?.type,
+  );
+}
+
+function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
+  const next = left ?? createDefaultDraftRoutine();
+  const nextSessions = sortByOrder(next.sessions);
+  const baselineSessions = sortByOrder(right.sessions);
+
+  if (next.name !== right.name) {
+    return false;
+  }
+
+  if (!areWeeklyPlansEqual(sortWeeklyPlan(next.weeklyPlan), sortWeeklyPlan(right.weeklyPlan))) {
+    return false;
+  }
+
+  if (nextSessions.length !== baselineSessions.length) {
+    return false;
+  }
+
+  for (const [sessionIndex, session] of nextSessions.entries()) {
+    const baselineSession = baselineSessions[sessionIndex];
+    if (session.name !== baselineSession.name || session.order !== baselineSession.order) {
+      return false;
+    }
+
+    if (session.exercises.length !== baselineSession.exercises.length) {
+      return false;
+    }
+
+    const nextExercises = sortByOrder(session.exercises);
+    const baselineExercises = sortByOrder(baselineSession.exercises);
+
+    for (const [exerciseIndex, exercise] of nextExercises.entries()) {
+      const baselineExercise = baselineExercises[exerciseIndex];
+      if (
+        !(
+        exercise.order === baselineExercise.order &&
+        exercise.exerciseId === baselineExercise.exerciseId &&
+        exercise.sets === baselineExercise.sets &&
+        exercise.repsText === baselineExercise.repsText &&
+        exercise.targetWeightKg === baselineExercise.targetWeightKg &&
+        exercise.restSeconds === baselineExercise.restSeconds &&
+        exercise.notes === baselineExercise.notes &&
+        exercise.tempo === baselineExercise.tempo &&
+        exercise.rir === baselineExercise.rir
+        )
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 interface DraftRoutineContextValue {
   draft: DraftRoutine | null;
   hasChanges: boolean;
@@ -87,13 +150,8 @@ const DraftRoutineContext = createContext<DraftRoutineContextValue | null>(null)
 
 export function DraftRoutineProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<DraftRoutine | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
   const sessionCounter = useRef(0);
   const exerciseCounter = useRef(0);
-
-  const markChanged = useCallback(() => {
-    setHasChanges(true);
-  }, []);
 
   const ensureDraft = useCallback(() => {
     setDraft((current) => current ?? createDefaultDraftRoutine());
@@ -101,7 +159,6 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
 
   const clearDraft = useCallback(() => {
     setDraft(null);
-    setHasChanges(false);
   }, []);
 
   const updateDraft = useCallback((updater: (current: DraftRoutine) => DraftRoutine) => {
@@ -109,8 +166,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
       const base = current ?? createDefaultDraftRoutine();
       return updater(base);
     });
-    markChanged();
-  }, [markChanged]);
+  }, []);
 
   const setRoutineName = useCallback((name: string) => {
     updateDraft((current) => ({
@@ -379,6 +435,11 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
       ),
     }));
   }, [updateDraft]);
+
+  const hasChanges = useMemo(
+    () => !areDraftRoutinesEqual(draft, createDefaultDraftRoutine()),
+    [draft],
+  );
 
   const value = useMemo<DraftRoutineContextValue>(() => ({
     draft,

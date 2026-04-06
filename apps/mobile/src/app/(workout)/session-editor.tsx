@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -199,6 +200,12 @@ export default function SessionEditorScreen() {
       ? { routineId: routineIdParam as Id<"routines"> }
       : "skip",
   );
+
+  useLayoutEffect(() => {
+    if (!isDraftMode && selectedRoutine === null) {
+      router.replace("/(workout)/routines");
+    }
+  }, [isDraftMode, router, selectedRoutine]);
 
   const selectedSession = useMemo(
     () =>
@@ -823,6 +830,21 @@ export default function SessionEditorScreen() {
       >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Syncing...</Text>
+        </View>
+      </WorkoutPage>
+    );
+  }
+
+  if (!isDraftMode && selectedRoutine === null) {
+    return (
+      <WorkoutPage
+        headerAction={<HeaderBackButton onPress={handleBackPress} />}
+        headerActionPosition="left"
+        headerChip={{ icon: "create-outline", label: "Section" }}
+        title={null}
+      >
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Leaving editor…</Text>
         </View>
       </WorkoutPage>
     );

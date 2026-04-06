@@ -5,7 +5,7 @@ import {
   getSessionsByRoutine,
   sortByOrder,
 } from "./helpers";
-import { requireRoutineOwner, requireViewer } from "../authHelpers";
+import { requireViewer } from "../authHelpers";
 
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -64,7 +64,11 @@ export async function getDetailedByIdHandler(
   ctx: QueryCtx,
   args: { routineId: Id<"routines"> },
 ) {
-  const { routine } = await requireRoutineOwner(ctx, args.routineId);
+  const { viewer } = await requireViewer(ctx);
+  const routine = await ctx.db.get(args.routineId);
+  if (!routine || routine.userId !== viewer._id) {
+    return null;
+  }
   return getDetailedRoutine(ctx, routine);
 }
 

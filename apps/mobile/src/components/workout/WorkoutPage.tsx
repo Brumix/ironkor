@@ -10,6 +10,10 @@ import { useTheme } from "@/theme";
 import type { ComponentType, ReactNode } from "react";
 import type { ScrollViewProps } from "react-native";
 
+function transparentize(color: string) {
+  return color.startsWith("#") && color.length === 7 ? `${color}00` : "transparent";
+}
+
 interface WorkoutPageProps {
   headerChip: {
     icon: keyof typeof Ionicons.glyphMap;
@@ -19,6 +23,9 @@ interface WorkoutPageProps {
   subtitle?: string;
   headerAction?: ReactNode;
   headerActionPosition?: "left" | "right";
+  headerLeftAction?: ReactNode;
+  headerRightAction?: ReactNode;
+  stickyHeader?: boolean;
   scrollComponent?: ComponentType<ScrollViewProps>;
   scrollProps?: ScrollViewProps;
   children: ReactNode;
@@ -30,6 +37,9 @@ export default function WorkoutPage({
   subtitle,
   headerAction,
   headerActionPosition = "right",
+  headerLeftAction,
+  headerRightAction,
+  stickyHeader = false,
   scrollComponent: ScrollComponent = ScrollView,
   scrollProps,
   children,
@@ -37,12 +47,15 @@ export default function WorkoutPage({
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const headerTitle = title === undefined ? (subtitle ?? headerChip.label) : title;
+  const resolvedLeftAction = headerLeftAction ?? (headerActionPosition === "left" ? headerAction : null);
+  const resolvedRightAction = headerRightAction ?? (headerActionPosition === "right" ? headerAction : null);
   const {
     contentContainerStyle,
     keyboardShouldPersistTaps,
     showsVerticalScrollIndicator,
     ...restScrollProps
   } = scrollProps ?? {};
+  const stickyHeaderFadeEnd = transparentize(theme.colors.background);
 
   const styles = useMemo(
     () =>
@@ -71,6 +84,22 @@ export default function WorkoutPage({
           paddingHorizontal: theme.tokens.spacing.xl,
           gap: theme.tokens.spacing.lg,
         },
+        stickyHeaderShell: {
+          position: "relative",
+          overflow: "visible",
+          paddingTop: insets.top + theme.tokens.spacing.sm,
+          paddingHorizontal: theme.tokens.spacing.xl,
+          paddingBottom: theme.tokens.spacing.md,
+          backgroundColor: theme.colors.background,
+          zIndex: 2,
+        },
+        stickyHeaderFade: {
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: -(theme.tokens.spacing.xs + 1),
+          height: theme.tokens.spacing.sm,
+        },
         header: {
           marginBottom: theme.tokens.spacing.xs,
         },
@@ -91,6 +120,7 @@ export default function WorkoutPage({
           flexDirection: "row",
           alignItems: "center",
           gap: theme.tokens.spacing.sm,
+          flexWrap: "wrap",
         },
         chip: {
           alignSelf: "flex-start",
@@ -127,7 +157,31 @@ export default function WorkoutPage({
           gap: theme.tokens.spacing.xs,
         },
       }),
-    [theme],
+    [insets.top, theme],
+  );
+
+  const headerContent = (
+    <Animated.View
+      entering={FadeInDown.duration(theme.tokens.motion.normal).springify()}
+      style={styles.header}
+    >
+      <View style={styles.headerRow}>
+        <View style={styles.headerLead}>
+          <View style={styles.titleRow}>
+            <View style={styles.chipRow}>
+              {resolvedLeftAction}
+              <View style={styles.chip}>
+                <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
+                <Text style={styles.chipLabel}>{headerChip.label}</Text>
+              </View>
+            </View>
+            {headerTitle ? <Text style={styles.title}>{headerTitle}</Text> : null}
+            {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+        </View>
+        {resolvedRightAction ? <View style={styles.headerAction}>{resolvedRightAction}</View> : null}
+      </View>
+    </Animated.View>
   );
 
   return (
@@ -143,12 +197,25 @@ export default function WorkoutPage({
         style={styles.lowerGlowOverlay}
       />
 
+      {stickyHeader ? (
+        <View style={styles.stickyHeaderShell}>
+          {headerContent}
+          <LinearGradient
+            colors={[theme.colors.background, stickyHeaderFadeEnd]}
+            pointerEvents="none"
+            style={styles.stickyHeaderFade}
+          />
+        </View>
+      ) : null}
+
       <ScrollComponent
         {...restScrollProps}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: insets.top + theme.tokens.spacing.lg,
+            paddingTop: stickyHeader
+              ? theme.tokens.spacing.lg
+              : insets.top + theme.tokens.spacing.lg,
             paddingBottom: insets.bottom + 140,
           },
           contentContainerStyle,
@@ -156,26 +223,7 @@ export default function WorkoutPage({
         keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? "handled"}
         showsVerticalScrollIndicator={showsVerticalScrollIndicator ?? false}
       >
-        <Animated.View entering={FadeInDown.duration(theme.tokens.motion.normal).springify()} style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerLead}>
-              <View style={styles.titleRow}>
-                <View style={styles.chipRow}>
-                  {headerAction && headerActionPosition === "left" ? headerAction : null}
-                  <View style={styles.chip}>
-                    <Ionicons color={theme.colors.accent} name={headerChip.icon} size={14} />
-                    <Text style={styles.chipLabel}>{headerChip.label}</Text>
-                  </View>
-                </View>
-                {headerTitle ? <Text style={styles.title}>{headerTitle}</Text> : null}
-                {subtitle && subtitle !== headerTitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-              </View>
-            </View>
-            {headerAction && headerActionPosition === "right" ? (
-              <View style={styles.headerAction}>{headerAction}</View>
-            ) : null}
-          </View>
-        </Animated.View>
+        {stickyHeader ? null : headerContent}
         {children}
       </ScrollComponent>
     </View>

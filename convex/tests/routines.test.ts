@@ -74,6 +74,7 @@ test("routine and session limits are enforced", async () => {
   ).rejects.toThrow("Routines can have at most 12 sections.");
 
   const detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail).not.toBeNull();
   const exerciseId = await authed.mutation(api.exercises.createCustom, {
     name: "Cable Row",
     bodyPart: "back",
@@ -82,7 +83,7 @@ test("routine and session limits are enforced", async () => {
     muscleGroups: ["lats"],
   });
 
-  const sessionId = detail.sessions[0]!._id;
+  const sessionId = detail!.sessions[0]!._id;
   for (let index = 0; index < 40; index += 1) {
     await authed.mutation(api.routines.upsertSessionExercise, {
       sessionId,
@@ -132,7 +133,8 @@ test("exercise programming is clamped and validates text lengths", async () => {
   });
 
   const detail = await authed.query(api.routines.getDetailedById, { routineId });
-  const entry = detail.sessions[0]?.exercises.find((item) => item._id === sessionExerciseId);
+  expect(detail).not.toBeNull();
+  const entry = detail!.sessions[0]?.exercises.find((item) => item._id === sessionExerciseId);
   expect(entry?.sets).toBe(100);
   expect(entry?.restSeconds).toBe(3_600);
   expect(entry?.rir).toBe(15);
@@ -190,7 +192,8 @@ test("deleting a session clears manual weekly-plan assignments", async () => {
   });
 
   const detail = await authed.query(api.routines.getDetailedById, { routineId });
-  expect(detail.weeklyPlan[0]).toMatchObject({
+  expect(detail).not.toBeNull();
+  expect(detail!.weeklyPlan[0]).toMatchObject({
     day: 0,
     type: "train",
     assignmentMode: "auto",
@@ -219,6 +222,19 @@ test("deleting the active routine promotes the next remaining routine", async ()
   expect(summaries).toHaveLength(1);
   expect(summaries[0]?._id).toBe(secondaryRoutineId);
   expect(summaries[0]?.isActive).toBe(true);
+});
+
+test("getDetailedById returns null after routine is deleted", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+  const routineId = await authed.mutation(api.routines.create, {
+    name: "Deleted Detail",
+    daysPerWeek: 3,
+    isActive: false,
+  });
+  await authed.mutation(api.routines.deleteRoutine, { routineId });
+  const detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail).toBeNull();
 });
 
 test("reorder mutations reject duplicate ids", async () => {
