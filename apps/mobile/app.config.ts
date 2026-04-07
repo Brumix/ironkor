@@ -130,13 +130,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-apple-authentication",
       "expo-web-browser",
       [
-        "@sentry/react-native/expo",
-        {
-          organization: "ironkor",
-          project: "mobile",
-        },
-      ],
-      [
         "expo-secure-store",
         {
           faceIDPermission: "Allow Ironkor to unlock your training data with Face ID.",

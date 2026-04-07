@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/react-native";
 import { ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -25,16 +24,7 @@ import { ThemeProvider, useTheme } from "@/theme";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 let convexClient: ConvexReactClient | null = null;
-
-Sentry.init({
-  dsn: sentryDsn,
-  enableLogs: true,
-  sendDefaultPii: true,
-  tracesSampleRate: 1.0,
-  profilesSampleRate: 1.0,
-});
 
 function getConvexClient() {
   if (!convexUrl) {
@@ -130,4 +120,4 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+export default RootLayout;

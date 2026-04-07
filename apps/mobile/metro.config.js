@@ -1,9 +1,9 @@
-const { getSentryExpoConfig } = require("@sentry/react-native/metro");
+const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "../..");
 
-const config = getSentryExpoConfig(__dirname);
+const config = getDefaultConfig(__dirname);
 
 // Allow Metro to resolve packages from the monorepo root
 config.watchFolders = [...new Set([...(config.watchFolders ?? []), repoRoot])];
