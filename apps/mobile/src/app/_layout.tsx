@@ -19,6 +19,7 @@ import {
   getSecureStoreTokenCache,
   isSecureStoreRuntimeAvailable,
 } from "@/features/auth/secureStoreCompat";
+import AppErrorBoundary from "@/features/errors/AppErrorBoundary";
 import { ThemeProvider, useTheme } from "@/theme";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -97,7 +98,9 @@ function RootProviders() {
       <AccountDeletionTransitionProvider>
         <AppUnlockProvider>
           <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-            <RootStack />
+            <AppErrorBoundary>
+              <RootStack />
+            </AppErrorBoundary>
           </ConvexProviderWithClerk>
         </AppUnlockProvider>
       </AccountDeletionTransitionProvider>

@@ -1,9 +1,9 @@
 import { api } from "@convex/_generated/api";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useConvexAuth, useMutation, useQueries, type RequestForQueries } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth as useClerkAuth } from "@/features/auth/clerkCompat";
-import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
+import { resolveStartupErrorMessage } from "@/features/errors/startupErrors";
 
 import type { Doc, Id } from "@convex/_generated/dataModel";
 
@@ -63,8 +63,40 @@ export function isViewerBootstrapReady({
 export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {}) {
   const { isLoaded: isClerkLoaded, isSignedIn } = useClerkAuth();
   const { isAuthenticated, isLoading } = useConvexAuth();
-  const viewer = useQuery(api.auth.getViewer, enabled ? {} : "skip");
-  const restoreCandidate = useQuery(api.auth.getRestoreCandidate, enabled ? {} : "skip");
+  const bootstrapQueries = useMemo<RequestForQueries>(
+    () =>
+      enabled
+        ? {
+            restoreCandidate: {
+              query: api.auth.getRestoreCandidate,
+              args: {},
+            },
+            viewer: {
+              query: api.auth.getViewer,
+              args: {},
+            },
+          }
+        : ({} as RequestForQueries),
+    [enabled],
+  );
+  const bootstrapResults = useQueries(bootstrapQueries);
+  const viewerQueryResult = bootstrapResults.viewer as ViewerBootstrapState | Error | undefined;
+  const restoreCandidateQueryResult = bootstrapResults.restoreCandidate as
+    | RestoreCandidateState
+    | Error
+    | undefined;
+  const bootstrapQueryError =
+    viewerQueryResult instanceof Error
+      ? viewerQueryResult
+      : restoreCandidateQueryResult instanceof Error
+        ? restoreCandidateQueryResult
+        : null;
+  const viewer =
+    viewerQueryResult instanceof Error ? undefined : viewerQueryResult;
+  const restoreCandidate =
+    restoreCandidateQueryResult instanceof Error
+      ? undefined
+      : restoreCandidateQueryResult;
   const ensureViewer = useMutation(api.auth.ensureViewer);
   const restoreDeletedAccount = useMutation(api.auth.restoreDeletedAccount);
   const declineDeletedAccountRestore = useMutation(api.auth.declineDeletedAccountRestore);
@@ -90,6 +122,16 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
       return;
     }
 
+    if (bootstrapQueryError) {
+      setErrorMessage(
+        resolveStartupErrorMessage(
+          bootstrapQueryError,
+          "We couldn't finish loading your workspace.",
+        ),
+      );
+      return;
+    }
+
     if (restoreCandidate) {
       setErrorMessage((currentError) =>
         currentError === convexSessionErrorMessage ? restoreDecisionRequiredMessage : currentError,
@@ -110,6 +152,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
     setErrorMessage((currentError) => currentError ?? convexSessionErrorMessage);
   }, [
     enabled,
+    bootstrapQueryError,
     isAuthenticated,
     isClerkLoaded,
     isLoading,
@@ -121,6 +164,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
     if (
       !enabled ||
       !isAuthenticated ||
+      bootstrapQueryError !== null ||
       viewer !== null ||
       restoreCandidate !== null ||
       isEnsuringViewer ||
@@ -138,7 +182,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
           return;
         }
 
-        const resolvedMessage = resolveAuthErrorMessage(
+        const resolvedMessage = resolveStartupErrorMessage(
           error,
           "We couldn't finish syncing your account.",
         );
@@ -158,6 +202,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
   }, [
     enabled,
     ensureViewer,
+    bootstrapQueryError,
     isAuthenticated,
     isEnsuringViewer,
     isResolvingRestoreChoice,
@@ -177,7 +222,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
     } catch (error: unknown) {
       if (isMountedRef.current) {
         setErrorMessage(
-          resolveAuthErrorMessage(
+          resolveStartupErrorMessage(
             error,
             "We couldn't restore your previous Ironkor account.",
           ),
@@ -203,7 +248,7 @@ export function useViewerBootstrap({ enabled = true }: { enabled?: boolean } = {
     } catch (error: unknown) {
       if (isMountedRef.current) {
         setErrorMessage(
-          resolveAuthErrorMessage(
+          resolveStartupErrorMessage(
             error,
             "We couldn't create a fresh Ironkor account for this session.",
           ),

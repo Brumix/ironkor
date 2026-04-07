@@ -31,6 +31,7 @@ import { useAuth, useSession } from "@/features/auth/clerkCompat";
 import LocalUnlockScreen from "@/features/auth/LocalUnlockScreen";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
+import AppErrorScreen from "@/features/errors/AppErrorScreen";
 import BodyDataSelectors from "@/features/onboarding/body-data-selectors";
 import {
   EXPERIENCE_OPTIONS,
@@ -350,7 +351,49 @@ export default function OnboardingFlow() {
   }
 
   if (errorMessage) {
-    return <AuthLoadingScreen message={errorMessage} title="Auth setup failed" />;
+    return (
+      <AppErrorScreen
+        eyebrow="Workspace sync"
+        message={errorMessage}
+        primaryAction={{
+          label: "Try again",
+          onPress: () => {
+            router.replace("/");
+          },
+          variant: "accent",
+        }}
+        secondaryAction={{
+          label: "Sign out",
+          onPress: () => {
+            void secureSignOut().catch(() => undefined);
+          },
+        }}
+        title="We couldn't open onboarding"
+      />
+    );
+  }
+
+  if (onboardingGate.errorMessage) {
+    return (
+      <AppErrorScreen
+        eyebrow="Profile sync"
+        message={onboardingGate.errorMessage}
+        primaryAction={{
+          label: "Try again",
+          onPress: () => {
+            router.replace("/");
+          },
+          variant: "accent",
+        }}
+        secondaryAction={{
+          label: "Sign out",
+          onPress: () => {
+            void secureSignOut().catch(() => undefined);
+          },
+        }}
+        title="We couldn't load your onboarding profile"
+      />
+    );
   }
 
   if (!isReady || onboardingGate.isLoading || !onboardingGate.summary || !formState) {

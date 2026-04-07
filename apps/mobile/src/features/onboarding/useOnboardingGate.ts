@@ -1,14 +1,16 @@
 import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useQueries, type RequestForQueries } from "convex/react";
+import { useMemo } from "react";
 
-interface OnboardingSummary {
-  blocked: boolean;
-  isComplete: boolean;
-  resumeStep: number;
-}
+import { resolveStartupErrorMessage } from "@/features/errors/startupErrors";
+
+import type { FunctionReturnType } from "convex/server";
+
+type OnboardingSummary = FunctionReturnType<typeof api.profile.getViewerProfileSummary>;
+type OnboardingGateSummary = Pick<OnboardingSummary, "blocked" | "isComplete" | "resumeStep">;
 
 export function resolveOnboardingGateState(
-  summary: OnboardingSummary | null | undefined,
+  summary: OnboardingGateSummary | null | undefined,
   enabled: boolean,
 ) {
   if (!enabled) {
@@ -47,11 +49,44 @@ export function resolveOnboardingGateState(
 }
 
 export function useOnboardingGate({ enabled = true }: { enabled?: boolean } = {}) {
-  const summary = useQuery(api.profile.getViewerProfileSummary, enabled ? {} : "skip");
+  const onboardingQueries = useMemo<RequestForQueries>(
+    () =>
+      enabled
+        ? {
+            summary: {
+              query: api.profile.getViewerProfileSummary,
+              args: {},
+            },
+          }
+        : ({} as RequestForQueries),
+    [enabled],
+  );
+  const queryResults = useQueries(onboardingQueries);
+  const summaryResult = queryResults.summary as OnboardingSummary | Error | undefined;
+  const error = summaryResult instanceof Error ? summaryResult : null;
+  const summary = summaryResult instanceof Error ? undefined : summaryResult;
+
+  if (error) {
+    return {
+      blocked: false,
+      error,
+      errorMessage: resolveStartupErrorMessage(
+        error,
+        "We couldn't load your profile for this environment.",
+      ),
+      isComplete: false,
+      isLoading: false,
+      resumeStep: 0,
+      summary: null,
+    };
+  }
+
   const gateState = resolveOnboardingGateState(summary, enabled);
 
   return {
     ...gateState,
+    error: null,
+    errorMessage: null,
     summary,
   };
 }

@@ -1,4 +1,4 @@
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Tabs, router } from "expo-router";
 
 import WorkoutBottomNav from "@/components/workout/WorkoutBottomNav";
 import { useAccountDeletionTransition } from "@/features/auth/AccountDeletionTransitionProvider";
@@ -9,6 +9,7 @@ import { useAuth, useSession } from "@/features/auth/clerkCompat";
 import LocalUnlockScreen from "@/features/auth/LocalUnlockScreen";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
+import AppErrorScreen from "@/features/errors/AppErrorScreen";
 import { useOnboardingGate } from "@/features/onboarding/useOnboardingGate";
 import { DraftRoutineProvider } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
@@ -106,11 +107,53 @@ export default function WorkoutLayout() {
   }
 
   if (errorMessage) {
-    return <AuthLoadingScreen title="Auth setup failed" message={errorMessage} />;
+    return (
+      <AppErrorScreen
+        eyebrow="Workspace sync"
+        message={errorMessage}
+        primaryAction={{
+          label: "Try again",
+          onPress: () => {
+            router.replace("/");
+          },
+          variant: "accent",
+        }}
+        secondaryAction={{
+          label: "Sign out",
+          onPress: () => {
+            void secureSignOut().catch(() => undefined);
+          },
+        }}
+        title="We couldn't open your gym logbook"
+      />
+    );
   }
 
   if (!isReady) {
     return <AuthLoadingScreen title="Opening your gym logbook" message="Syncing your account..." />;
+  }
+
+  if (onboardingGate.errorMessage) {
+    return (
+      <AppErrorScreen
+        eyebrow="Profile sync"
+        message={onboardingGate.errorMessage}
+        primaryAction={{
+          label: "Try again",
+          onPress: () => {
+            router.replace("/");
+          },
+          variant: "accent",
+        }}
+        secondaryAction={{
+          label: "Sign out",
+          onPress: () => {
+            void secureSignOut().catch(() => undefined);
+          },
+        }}
+        title="We couldn't open your profile"
+      />
+    );
   }
 
   if (onboardingGate.isLoading) {
