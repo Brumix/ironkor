@@ -42,6 +42,7 @@ interface ExternalAccountLike {
 }
 
 interface UserLike {
+  id: string;
   externalAccounts: ExternalAccountLike[];
   fullName: string | null;
   hasImage: boolean;

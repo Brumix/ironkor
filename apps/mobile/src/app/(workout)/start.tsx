@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeInUp, LinearTransition, ZoomIn } from "react-native-reanimated";
 
@@ -13,13 +14,45 @@ import MetricCard from "@/components/ui/MetricCard";
 import ProgressBar from "@/components/ui/ProgressBar";
 import SectionHeader from "@/components/ui/SectionHeader";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { buildWeeklyPlan, getSessionById, getTodayPlan } from "@/features/workout/selectors";
+import type { RoutineSection } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
+function resolveWorkoutDurationMinutes(startedAt: number | null) {
+  if (startedAt === null) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round((Date.now() - startedAt) / 60000));
+}
+
+function countTotalSets(exercises: RoutineSection["exercises"]) {
+  return exercises.reduce((sum, entry) => sum + entry.sets, 0);
+}
+
+function countCompletedSets(
+  exercises: RoutineSection["exercises"],
+  completedExerciseIds: string[],
+) {
+  return exercises.reduce(
+    (sum, entry) =>
+      completedExerciseIds.includes(String(entry._id)) ? sum + entry.sets : sum,
+    0,
+  );
+}
 
 export default function StartScreen() {
   const { theme } = useTheme();
   const [completedExerciseIds, setCompletedExerciseIds] = useState<string[]>([]);
+  const completionCapturedRef = useRef(false);
+  const startedCapturedRef = useRef(false);
+  const abandonmentCapturedRef = useRef(false);
+  const workoutStartedAtRef = useRef<number | null>(null);
+  const activeRoutineIdRef = useRef<string | null>(null);
+  const todaySessionIdRef = useRef<string | null>(null);
+  const completedSetCountRef = useRef(0);
+  const trackedWorkoutKeyRef = useRef<string | null>(null);
 
   const activeRoutineData = useQuery(api.routines.getActiveDetailed);
   const activeRoutine = activeRoutineData ?? null;
@@ -31,9 +64,102 @@ export default function StartScreen() {
   const completedCount = completedExerciseIds.length;
   const completionProgress = totalExercises > 0 ? completedCount / totalExercises : 0;
   const isWorkoutComplete = totalExercises > 0 && completedCount === totalExercises;
+  const totalSetCount = todaySession ? countTotalSets(todaySession.exercises) : 0;
+  const completedSetCount = todaySession
+    ? countCompletedSets(todaySession.exercises, completedExerciseIds)
+    : 0;
   const estimatedRestMinutes = todaySession
     ? Math.round(todaySession.exercises.reduce((sum, entry) => sum + (entry.restSeconds ?? 0), 0) / 60)
     : 0;
+  const workoutTrackingKey =
+    activeRoutine && todaySession
+      ? `${String(activeRoutine._id)}:${String(todaySession._id)}`
+      : null;
+
+  const captureWorkoutAbandoned = useCallback(() => {
+    if (
+      !startedCapturedRef.current ||
+      completionCapturedRef.current ||
+      abandonmentCapturedRef.current
+    ) {
+      return;
+    }
+
+    const routineId = activeRoutineIdRef.current;
+    const sessionId = todaySessionIdRef.current;
+    if (!routineId || !sessionId) {
+      return;
+    }
+
+    abandonmentCapturedRef.current = true;
+    captureAnalyticsEvent("workout_abandoned", {
+      routine_id: routineId,
+      session_id: sessionId,
+      duration_minutes: resolveWorkoutDurationMinutes(workoutStartedAtRef.current),
+      completed_sets: completedSetCountRef.current,
+    });
+  }, []);
+
+  useEffect(() => {
+    activeRoutineIdRef.current = activeRoutine ? String(activeRoutine._id) : null;
+    todaySessionIdRef.current = todaySession ? String(todaySession._id) : null;
+    completedSetCountRef.current = completedSetCount;
+  }, [activeRoutine, completedSetCount, todaySession]);
+
+  useEffect(() => {
+    if (!workoutTrackingKey || !activeRoutine || !todaySession) {
+      trackedWorkoutKeyRef.current = null;
+      workoutStartedAtRef.current = null;
+      startedCapturedRef.current = false;
+      completionCapturedRef.current = false;
+      abandonmentCapturedRef.current = false;
+      return;
+    }
+
+    if (trackedWorkoutKeyRef.current === workoutTrackingKey) {
+      return;
+    }
+
+    trackedWorkoutKeyRef.current = workoutTrackingKey;
+    workoutStartedAtRef.current = Date.now();
+    startedCapturedRef.current = true;
+    completionCapturedRef.current = false;
+    abandonmentCapturedRef.current = false;
+
+    captureAnalyticsEvent("workout_started", {
+      routine_id: String(activeRoutine._id),
+      session_id: String(todaySession._id),
+      planned_exercise_count: totalExercises,
+    });
+  }, [activeRoutine, todaySession, totalExercises, workoutTrackingKey]);
+
+  useEffect(() => {
+    if (
+      !isWorkoutComplete ||
+      !activeRoutine ||
+      !todaySession ||
+      completionCapturedRef.current
+    ) {
+      return;
+    }
+
+    completionCapturedRef.current = true;
+    captureAnalyticsEvent("workout_completed", {
+      routine_id: String(activeRoutine._id),
+      session_id: String(todaySession._id),
+      exercise_count: totalExercises,
+      duration_minutes: resolveWorkoutDurationMinutes(workoutStartedAtRef.current),
+      completed_sets: totalSetCount,
+    });
+  }, [activeRoutine, isWorkoutComplete, todaySession, totalExercises, totalSetCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        captureWorkoutAbandoned();
+      };
+    }, [captureWorkoutAbandoned]),
+  );
 
   const styles = useMemo(
     () =>

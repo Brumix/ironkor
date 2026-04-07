@@ -1,5 +1,6 @@
 import { Component, useState } from "react";
 
+import { captureAnalyticsException } from "@/config/posthog";
 import AppErrorScreen from "@/features/errors/AppErrorScreen";
 import { resolveStartupErrorMessage } from "@/features/errors/startupErrors";
 
@@ -30,7 +31,14 @@ class AppErrorBoundaryInner extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("[app] Unhandled render error", error, errorInfo.componentStack);
+    captureAnalyticsException(error, {
+      boundary: "AppErrorBoundary",
+      componentStack: errorInfo.componentStack ?? null,
+    });
+
+    if (__DEV__) {
+      console.error("[app] Unhandled render error", error, errorInfo.componentStack);
+    }
   }
 
   render() {

@@ -23,6 +23,7 @@ import {
 } from "@/features/auth/appUnlockStorage";
 import { useAuth } from "@/features/auth/clerkCompat";
 import {
+  canSecureStoreUseBiometricAuthentication,
   getSecureStoreModule,
   isSecureStoreRuntimeAvailable,
 } from "@/features/auth/secureStoreCompat";
@@ -61,7 +62,7 @@ export function AppUnlockProvider({ children }: { children: ReactNode }) {
     }
 
     return {
-      canUseBiometricAuthentication: secureStore.canUseBiometricAuthentication,
+      canUseBiometricAuthentication: canSecureStoreUseBiometricAuthentication,
       deleteItemAsync: secureStore.deleteItemAsync,
       getItemAsync: secureStore.getItemAsync,
       setItemAsync: secureStore.setItemAsync,

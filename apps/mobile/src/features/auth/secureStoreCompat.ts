@@ -6,7 +6,7 @@ interface ClerkTokenCacheLike {
 interface SecureStoreModuleLike {
   AFTER_FIRST_UNLOCK: number;
   WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: number;
-  canUseBiometricAuthentication: () => boolean;
+  canUseBiometricAuthentication?: () => boolean;
   deleteItemAsync: (key: string, options?: object) => Promise<void>;
   getItemAsync: (key: string, options?: object) => Promise<string | null>;
   setItemAsync: (key: string, value: string, options?: object) => Promise<void>;
@@ -42,4 +42,16 @@ export function getSecureStoreTokenCache() {
 
 export function getSecureStoreModule() {
   return secureStoreModule;
+}
+
+export function canSecureStoreUseBiometricAuthentication() {
+  if (!secureStoreModule?.canUseBiometricAuthentication) {
+    return false;
+  }
+
+  try {
+    return secureStoreModule.canUseBiometricAuthentication();
+  } catch {
+    return false;
+  }
 }

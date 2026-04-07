@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
 import AppTextField from "@/components/ui/AppTextField";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { activateAuthSession } from "@/features/auth/activateAuthSession";
 import AuthScreenShell from "@/features/auth/AuthScreenShell";
 import { useSignUp } from "@/features/auth/clerkCompat";
@@ -52,6 +53,9 @@ export default function VerifyEmailScreen() {
       });
 
       if (result.status === "complete" && result.createdSessionId && setActive) {
+        captureAnalyticsEvent("email_verified", {
+          method: "email_code",
+        });
         await activateAuthSession(setActive, result.createdSessionId, router);
         return;
       }

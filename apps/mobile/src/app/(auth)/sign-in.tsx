@@ -4,6 +4,7 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
 import AppTextField from "@/components/ui/AppTextField";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { activateAuthSession } from "@/features/auth/activateAuthSession";
 import AuthScreenShell from "@/features/auth/AuthScreenShell";
 import AuthSocialButtons from "@/features/auth/AuthSocialButtons";
@@ -50,7 +51,10 @@ export default function SignInScreen() {
       platform: Platform.OS,
     }) ?? "Sign in with biometrics";
 
-  async function handleSignInResult(result: Awaited<ReturnType<typeof signIn.create>>) {
+  async function handleSignInResult(
+    result: Awaited<ReturnType<typeof signIn.create>>,
+    method: "password" | "biometric" | "second-factor" = "password",
+  ) {
     const nextStep = resolveHybridSignInStep(result);
 
     switch (nextStep.type) {
@@ -66,6 +70,7 @@ export default function SignInScreen() {
           },
           sessionId: nextStep.sessionId,
         });
+        captureAnalyticsEvent("sign_in_completed", { method });
         return;
       case "needs_new_password":
         router.replace("/forgot-password");
@@ -108,7 +113,7 @@ export default function SignInScreen() {
         identifier: trimmedIdentifier,
         password,
       });
-      await handleSignInResult(result);
+      await handleSignInResult(result, "password");
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
@@ -134,7 +139,7 @@ export default function SignInScreen() {
         strategy: "email_code",
         code: code.trim(),
       });
-      await handleSignInResult(result);
+      await handleSignInResult(result, "second-factor");
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(
@@ -161,7 +166,7 @@ export default function SignInScreen() {
 
     try {
       const result = await localCredentials.authenticate();
-      await handleSignInResult(result);
+      await handleSignInResult(result, "biometric");
     } catch (caughtError: unknown) {
       setError(caughtError);
       setSubmitError(

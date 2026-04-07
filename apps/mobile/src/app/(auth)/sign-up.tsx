@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
 import AppTextField from "@/components/ui/AppTextField";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { activateAuthSession } from "@/features/auth/activateAuthSession";
 import AuthScreenShell from "@/features/auth/AuthScreenShell";
 import AuthSocialButtons from "@/features/auth/AuthSocialButtons";
@@ -62,6 +63,10 @@ export default function SignUpScreen() {
       const result = await signUp.create({
         emailAddress: emailAddress.trim(),
         password,
+      });
+
+      captureAnalyticsEvent("sign_up_submitted", {
+        method: "email",
       });
 
       if (result.status === "complete" && result.createdSessionId && setActive) {

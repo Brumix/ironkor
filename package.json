@@ -28,6 +28,7 @@
     "@ironkor/shared": "workspace:*"
   },
   "devDependencies": {
+    "@posthog/cli": "^0.7.5",
     "@convex-dev/migrations": "^0.3.3",
     "@edge-runtime/vm": "^5.0.0",
     "concurrently": "^9.2.1",

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { activateAuthSession } from "@/features/auth/activateAuthSession";
 import { getClerkSSORuntimeError, useSSO } from "@/features/auth/clerkCompat";
 import { resolveAuthErrorMessage } from "@/features/auth/clerkErrors";
@@ -78,6 +79,7 @@ export default function AuthSocialButtons() {
       });
       if (createdSessionId && setActive) {
         await activateAuthSession(setActive, createdSessionId, router);
+        captureAnalyticsEvent("sign_in_completed", { method: "google" });
       }
     } catch (error: unknown) {
       if (__DEV__) {
@@ -123,6 +125,7 @@ export default function AuthSocialButtons() {
       });
       if (createdSessionId && setActive) {
         await activateAuthSession(setActive, createdSessionId, router);
+        captureAnalyticsEvent("sign_in_completed", { method: "apple" });
       }
     } catch (error: unknown) {
       if (__DEV__) {

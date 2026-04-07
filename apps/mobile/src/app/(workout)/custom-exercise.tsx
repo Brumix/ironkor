@@ -21,6 +21,7 @@ import HeaderBackButton from "@/components/ui/HeaderBackButton";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingForm";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import {
   createProgrammingDraftFromExercise,
@@ -71,13 +72,41 @@ function normalizeCreatePayload(args: {
   };
 }
 
+function resolveAnalyticsRoutineId(args: {
+  currentRoutineId: string | null;
+  draftRoutineId?: Id<"routines">;
+  routeRoutineId: string;
+}) {
+  if (args.draftRoutineId) {
+    return String(args.draftRoutineId);
+  }
+
+  if (args.currentRoutineId && args.currentRoutineId !== "new") {
+    return args.currentRoutineId;
+  }
+
+  if (args.routeRoutineId && args.routeRoutineId !== "new") {
+    return args.routeRoutineId;
+  }
+
+  return "draft:new";
+}
+
+function resolveAnalyticsSessionId(session: { key: string; sessionId?: Id<"routineSessions"> } | null) {
+  if (!session) {
+    return null;
+  }
+
+  return session.sessionId ? String(session.sessionId) : session.key;
+}
+
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export default function CustomExerciseScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
   const { showAlert, AlertModal } = useAppAlert();
-  const { draft, addOrReplaceExercise } = useDraftRoutine();
+  const { draft, currentRoutineId, addOrReplaceExercise } = useDraftRoutine();
 
   const createCustomExercise = useMutation(api.exercises.createCustom);
   const updateCustomExercise = useMutation(api.exercises.updateCustom);
@@ -119,6 +148,19 @@ export default function CustomExerciseScreen() {
   const fromManage = parseFromManageFlag(params.fromManage);
 
   const programmingSourceKeyRef = useRef<string | null>(null);
+  const analyticsRoutineId = useMemo(
+    () =>
+      resolveAnalyticsRoutineId({
+        currentRoutineId,
+        draftRoutineId: draft?.routineId,
+        routeRoutineId: routineIdParam,
+      }),
+    [currentRoutineId, draft?.routineId, routineIdParam],
+  );
+  const analyticsSessionId = useMemo(
+    () => resolveAnalyticsSessionId(selectedDraftSession),
+    [selectedDraftSession],
+  );
 
   useEffect(() => {
     if (!isEditMode || exerciseToEdit === undefined) {
@@ -283,6 +325,11 @@ export default function CustomExerciseScreen() {
           exerciseId: exerciseIdParam,
           ...payload,
         });
+        captureAnalyticsEvent("custom_exercise_updated", {
+          body_part: payload.bodyPart,
+          equipment: payload.equipment,
+          primary_muscle: payload.primaryMuscle,
+        });
         exitCustomExerciseScreen();
       } catch (error) {
         showAlert({
@@ -309,6 +356,12 @@ export default function CustomExerciseScreen() {
       setIsSubmitting(true);
       try {
         await createCustomExercise(payload);
+        captureAnalyticsEvent("custom_exercise_created", {
+          body_part: payload.bodyPart,
+          equipment: payload.equipment,
+          primary_muscle: payload.primaryMuscle,
+          added_to_session: false,
+        });
         exitCustomExerciseScreen();
       } catch (error) {
         showAlert({
@@ -334,6 +387,14 @@ export default function CustomExerciseScreen() {
     setIsSubmitting(true);
     try {
       const exerciseId = await createCustomExercise(payload);
+      const normalizedProgramming = normalizeProgrammingDraftForSave(programmingDraft);
+
+      captureAnalyticsEvent("custom_exercise_created", {
+        body_part: payload.bodyPart,
+        equipment: payload.equipment,
+        primary_muscle: payload.primaryMuscle,
+        added_to_session: true,
+      });
 
       const normalized = normalizeExerciseCatalog({
         ...payload,
@@ -349,9 +410,26 @@ export default function CustomExerciseScreen() {
       addOrReplaceExercise(
         selectedDraftSession.key,
         draftExercise,
-        normalizeProgrammingDraftForSave(programmingDraft),
+        normalizedProgramming,
         replaceSessionExerciseIdParam,
       );
+      if (!replaceSessionExerciseIdParam && analyticsSessionId) {
+        captureAnalyticsEvent("session_exercise_added", {
+          routine_id: analyticsRoutineId,
+          session_id: analyticsSessionId,
+          source: "custom",
+          body_part: payload.bodyPart,
+          equipment: payload.equipment,
+        });
+      }
+      if (analyticsSessionId) {
+        captureAnalyticsEvent("session_exercise_programming_saved", {
+          routine_id: analyticsRoutineId,
+          session_id: analyticsSessionId,
+          set_count: normalizedProgramming.sets,
+          has_load: normalizedProgramming.targetWeightKg !== undefined,
+        });
+      }
 
       resetCreateFormState();
       router.replace({

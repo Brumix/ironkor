@@ -25,6 +25,7 @@ import PressableScale from "@/components/ui/PressableScale";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import { createRoutineSaveDraft } from "@/features/workout/mappers";
 import type { DraftWeeklyPlanEntry, RoutineSaveDraft } from "@/features/workout/types";
@@ -426,7 +427,21 @@ export default function RoutineEditorScreen() {
         ...draft,
         name,
       });
-      await saveRoutine(payload as SaveRoutineMutationArgs);
+      const savedRoutineId = await saveRoutine(payload as SaveRoutineMutationArgs);
+
+      captureAnalyticsEvent("routine_saved", {
+        is_new: isNew,
+        session_count: sessionListData.length,
+        train_days: payload.weeklyPlan.filter((entry) => entry.type === "train").length,
+      });
+      payload.sessions.forEach((session, index) => {
+        captureAnalyticsEvent("routine_session_saved", {
+          routine_id: String(savedRoutineId),
+          is_new: session.sessionId === undefined,
+          exercise_count: session.exercises.length,
+          session_order: index,
+        });
+      });
 
       if (!isNew && selectedRoutine) {
         clearPendingRoutineChanges(String(selectedRoutine._id));

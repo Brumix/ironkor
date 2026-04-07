@@ -14,6 +14,7 @@ import GradientCard from "@/components/ui/GradientCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
 
@@ -29,7 +30,11 @@ export default function RoutinesScreen() {
   const deleteRoutine = useMutation(api.routines.deleteRoutine);
   const setActive = useMutation(api.routines.setActive);
   const toggleActive = useMutation(api.routines.toggleActive);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    daysPerWeek: number;
+    id: string;
+    sessionCount: number;
+  } | null>(null);
   const [isDeletingRoutine, setIsDeletingRoutine] = useState(false);
 
   const routines = useMemo<RoutineSummaryRecord[]>(() => routinesData ?? [], [routinesData]);
@@ -99,9 +104,13 @@ export default function RoutinesScreen() {
     [theme],
   );
 
-  function openDeleteRoutineModal(routineId: string, routineName: string) {
+  function openDeleteRoutineModal(routine: RoutineSummaryRecord) {
     if (isDeletingRoutine) return;
-    setDeleteTarget({ id: routineId, name: routineName });
+    setDeleteTarget({
+      daysPerWeek: routine.daysPerWeek,
+      id: String(routine._id),
+      sessionCount: routine.sessions.length,
+    });
   }
 
   function closeDeleteRoutineModal() {
@@ -116,6 +125,10 @@ export default function RoutinesScreen() {
 
     try {
       await deleteRoutine({ routineId: deleteTarget.id as never });
+      captureAnalyticsEvent("routine_deleted", {
+        days_per_week: deleteTarget.daysPerWeek,
+        session_count: deleteTarget.sessionCount,
+      });
       setDeleteTarget(null);
     } catch {
       showAlert({ title: "Failed", message: "Could not delete routine.", variant: "error" });
@@ -246,9 +259,16 @@ export default function RoutinesScreen() {
                     icon={<Ionicons color={theme.colors.onAccent} name="checkmark-circle-outline" size={16} />}
                     label="Activate"
                     onPress={() => {
-                      setActive({ routineId: routine._id }).catch(() => {
-                        showAlert({ title: "Failed", message: "Could not activate routine.", variant: "error" });
-                      });
+                      setActive({ routineId: routine._id })
+                        .then(() => {
+                          captureAnalyticsEvent("routine_activated", {
+                            session_count: routine.sessions.length,
+                            days_per_week: routine.daysPerWeek,
+                          });
+                        })
+                        .catch(() => {
+                          showAlert({ title: "Failed", message: "Could not activate routine.", variant: "error" });
+                        });
                     }}
                     size="sm"
                     variant="accent"
@@ -259,7 +279,7 @@ export default function RoutinesScreen() {
                   accessibilityLabel={`Delete ${routine.name}`}
                   icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
                   onPress={() => {
-                    openDeleteRoutineModal(String(routine._id), routine.name);
+                    openDeleteRoutineModal(routine);
                   }}
                   size="sm"
                   variant="danger"
@@ -273,7 +293,7 @@ export default function RoutinesScreen() {
       <ConfirmActionModal
         visible={Boolean(deleteTarget)}
         title="Delete Routine"
-        message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"?` : undefined}
+        message="Are you sure you want to delete this routine?"
         confirmLabel="Delete"
         cancelLabel="Cancel"
         confirmVariant="danger"

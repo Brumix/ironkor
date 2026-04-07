@@ -23,6 +23,7 @@ import GradientCard from "@/components/ui/GradientCard";
 import ProgressBar from "@/components/ui/ProgressBar";
 import SafeScreen from "@/components/ui/SafeScreen";
 import { useAppAlert } from "@/components/ui/useAppAlert";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { useAccountDeletionTransition } from "@/features/auth/AccountDeletionTransitionProvider";
 import AccountRestoreChoiceModal from "@/features/auth/AccountRestoreChoiceModal";
 import { useAppUnlock } from "@/features/auth/AppUnlockProvider";
@@ -503,7 +504,15 @@ export default function OnboardingFlow() {
       setIsSubmitting(true);
       setFieldError(null);
       try {
-        await completeOnboarding(buildCompletionPayload());
+        const completionPayload = buildCompletionPayload();
+        await completeOnboarding(completionPayload);
+        captureAnalyticsEvent("onboarding_completed", {
+          primary_goal: completionPayload.primaryGoal,
+          experience_level: completionPayload.experienceLevel,
+          workouts_per_week: completionPayload.workoutsPerWeek,
+          training_environment: completionPayload.trainingEnvironment,
+          unit_system: completionPayload.unitSystem,
+        });
         fireHaptic("success");
         router.replace("/(workout)/home");
       } catch (caughtError) {
@@ -536,6 +545,11 @@ export default function OnboardingFlow() {
         workoutsPerWeek: payload.workoutsPerWeek,
       });
 
+      captureAnalyticsEvent("onboarding_step_advanced", {
+        step_key: currentStep.key,
+        step_index: currentStepIndex,
+        total_steps: CREATE_STEPS.length,
+      });
       fireHaptic("light");
       setDirection("forward");
       setCurrentStepIndex((current) => clampIndex(current + 1, CREATE_STEPS.length));

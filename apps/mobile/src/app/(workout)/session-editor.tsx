@@ -53,6 +53,7 @@ import PressableScale from "@/components/ui/PressableScale";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingForm";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { captureAnalyticsEvent } from "@/config/posthog";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import {
   createProgrammingDraftFromExercise,
@@ -113,6 +114,34 @@ function areProgrammingDraftsEqual(a: ProgrammingDraft, b: ProgrammingDraft) {
 }
 
 type ExerciseSourceFilter = "all" | "preset" | "custom";
+
+function resolveAnalyticsRoutineId(args: {
+  currentRoutineId: string | null;
+  draftRoutineId?: Id<"routines">;
+  routeRoutineId: string;
+}) {
+  if (args.draftRoutineId) {
+    return String(args.draftRoutineId);
+  }
+
+  if (args.currentRoutineId && args.currentRoutineId !== "new") {
+    return args.currentRoutineId;
+  }
+
+  if (args.routeRoutineId && args.routeRoutineId !== "new") {
+    return args.routeRoutineId;
+  }
+
+  return "draft:new";
+}
+
+function resolveAnalyticsSessionId(session: { key: string; sessionId?: Id<"routineSessions"> } | null) {
+  if (!session) {
+    return null;
+  }
+
+  return session.sessionId ? String(session.sessionId) : session.key;
+}
 
 
 // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -237,6 +266,19 @@ export default function SessionEditorScreen() {
   const [showDiscardProgrammingModal, setShowDiscardProgrammingModal] = useState(false);
 
   const programmingEditorScrollRef = useRef<ScrollView | null>(null);
+  const analyticsRoutineId = useMemo(
+    () =>
+      resolveAnalyticsRoutineId({
+        currentRoutineId,
+        draftRoutineId: draft?.routineId,
+        routeRoutineId: routineIdParam,
+      }),
+    [currentRoutineId, draft?.routineId, routineIdParam],
+  );
+  const analyticsSessionId = useMemo(
+    () => resolveAnalyticsSessionId(selectedDraftSession),
+    [selectedDraftSession],
+  );
 
   const onProgrammingNotesFocus = useCallback(() => {
     scheduleScrollToEndForNotes(programmingEditorScrollRef);
@@ -985,6 +1027,16 @@ export default function SessionEditorScreen() {
                         return;
                       }
 
+                      if (replaceSessionExerciseId === null && analyticsSessionId) {
+                        captureAnalyticsEvent("session_exercise_added", {
+                          routine_id: analyticsRoutineId,
+                          session_id: analyticsSessionId,
+                          source: exercise.isCustom ? "custom" : "catalog",
+                          body_part: exercise.bodyPart,
+                          equipment: exercise.equipment,
+                        });
+                      }
+
                       closeExercisePicker();
                       openProgrammingEditor(sessionExerciseId, currentEntry);
                     }}
@@ -1077,11 +1129,21 @@ export default function SessionEditorScreen() {
                       return;
                     }
 
+                    const normalizedProgramming = normalizeProgrammingDraftForSave(programmingDraft);
+
                     updateDraftExerciseProgramming(
                       selectedDraftSession.key,
                       editingSessionExerciseId,
-                      normalizeProgrammingDraftForSave(programmingDraft),
+                      normalizedProgramming,
                     );
+                    if (analyticsSessionId) {
+                      captureAnalyticsEvent("session_exercise_programming_saved", {
+                        routine_id: analyticsRoutineId,
+                        session_id: analyticsSessionId,
+                        set_count: normalizedProgramming.sets,
+                        has_load: normalizedProgramming.targetWeightKg !== undefined,
+                      });
+                    }
 
                     closeProgrammingEditor();
                   }}

@@ -66,11 +66,18 @@ function getAuthRedirectDomain() {
   return value && value.length > 0 ? value : null;
 }
 
+function shouldEnablePostHogSourceMapUpload() {
+  const apiKey = process.env.POSTHOG_CLI_API_KEY?.trim();
+  const projectId = process.env.POSTHOG_CLI_PROJECT_ID?.trim();
+  return Boolean(apiKey && projectId);
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appVariant = resolveAppVariant(process.env.APP_VARIANT);
   const appIcon = getAppIcon(appVariant);
   const webFavicon = getWebFavicon(appVariant);
   const authRedirectDomain = getAuthRedirectDomain();
+  const enablePostHogSourceMapUpload = shouldEnablePostHogSourceMapUpload();
   const configExtra = (config.extra ?? {}) as ExpoConfig["extra"] & {
     eas?: Record<string, unknown>;
     router?: Record<string, unknown>;
@@ -92,6 +99,32 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ]
     : undefined;
+
+  const plugins = [
+    "expo-router",
+    "expo-image",
+    "expo-apple-authentication",
+    "expo-localization",
+    "expo-web-browser",
+    [
+      "expo-secure-store",
+      {
+        faceIDPermission: "Allow Ironkor to unlock your training data with Face ID.",
+      },
+    ],
+    [
+      "expo-splash-screen",
+      {
+        backgroundColor: "#17120F",
+        image: getAppIcon(appVariant),
+        android: {
+          image: getAppIcon(appVariant),
+          imageWidth: 76,
+        },
+      },
+    ],
+    ...(enablePostHogSourceMapUpload ? ["posthog-react-native/expo"] : []),
+  ] satisfies NonNullable<ExpoConfig["plugins"]>;
 
   return {
     ...config,
@@ -124,29 +157,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       output: "static",
       favicon: webFavicon,
     },
-    plugins: [
-      "expo-router",
-      "expo-image",
-      "expo-apple-authentication",
-      "expo-web-browser",
-      [
-        "expo-secure-store",
-        {
-          faceIDPermission: "Allow Ironkor to unlock your training data with Face ID.",
-        },
-      ],
-      [
-        "expo-splash-screen",
-        {
-          backgroundColor: "#17120F",
-          image: getAppIcon(appVariant),
-          android: {
-            image: getAppIcon(appVariant),
-            imageWidth: 76,
-          },
-        },
-      ],
-    ],
+    plugins,
     experiments: {
       ...config.experiments,
       typedRoutes: true,
@@ -161,6 +172,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ...(configExtra.eas ?? {}),
         projectId: EAS_PROJECT_ID,
       },
+      appVariant,
+      posthogProjectToken: process.env.POSTHOG_PROJECT_TOKEN,
+      posthogHost: process.env.POSTHOG_HOST,
     },
     owner: "ironkor",
   };
