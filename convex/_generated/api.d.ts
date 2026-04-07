@@ -21,6 +21,7 @@ import type * as routines_exerciseMutations from "../routines/exerciseMutations.
 import type * as routines_helpers from "../routines/helpers.js";
 import type * as routines_queries from "../routines/queries.js";
 import type * as routines_routineMutations from "../routines/routineMutations.js";
+import type * as routines_saveRoutineHandler from "../routines/saveRoutineHandler.js";
 import type * as routines_seed from "../routines/seed.js";
 import type * as routines_sessionMutations from "../routines/sessionMutations.js";
 import type * as routines_weeklyPlanMutations from "../routines/weeklyPlanMutations.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "routines/helpers": typeof routines_helpers;
   "routines/queries": typeof routines_queries;
   "routines/routineMutations": typeof routines_routineMutations;
+  "routines/saveRoutineHandler": typeof routines_saveRoutineHandler;
   "routines/seed": typeof routines_seed;
   "routines/sessionMutations": typeof routines_sessionMutations;
   "routines/weeklyPlanMutations": typeof routines_weeklyPlanMutations;

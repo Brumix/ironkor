@@ -29,10 +29,10 @@ export default function MyExercisesScreen() {
   const { showAlert, AlertModal } = useAppAlert();
 
   const exercisesData = useQuery(api.exercises.listCustom, {});
-  const deleteCustom = useMutation(api.exercises.deleteCustom);
+  const archiveCustom = useMutation(api.exercises.archiveCustom);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: Id<"exercises">; name: string } | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<{ id: Id<"exercises">; name: string } | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   const exercises = useMemo<ExerciseCatalog[]>(() => exercisesData ?? [], [exercisesData]);
 
@@ -81,22 +81,22 @@ export default function MyExercisesScreen() {
     [theme],
   );
 
-  async function confirmDelete() {
-    if (!deleteTarget || isDeleting) {
+  async function confirmArchive() {
+    if (!archiveTarget || isArchiving) {
       return;
     }
-    setIsDeleting(true);
+    setIsArchiving(true);
     try {
-      await deleteCustom({ exerciseId: deleteTarget.id });
-      setDeleteTarget(null);
+      await archiveCustom({ exerciseId: archiveTarget.id });
+      setArchiveTarget(null);
     } catch {
       showAlert({
         title: "Failed",
-        message: "Could not delete exercise.",
+        message: "Could not archive exercise.",
         variant: "error",
       });
     } finally {
-      setIsDeleting(false);
+      setIsArchiving(false);
     }
   }
 
@@ -202,12 +202,12 @@ export default function MyExercisesScreen() {
                   }}
                 />
                 <AppButton
-                  accessibilityLabel={`Delete ${exercise.name}`}
-                  icon={<Ionicons name="trash-outline" size={16} color={theme.colors.error} />}
+                  accessibilityLabel={`Archive ${exercise.name}`}
+                  icon={<Ionicons name="archive-outline" size={16} color={theme.colors.error} />}
                   size="sm"
                   variant="danger"
                   onPress={() => {
-                    setDeleteTarget({ id: exercise._id, name: exercise.name });
+                    setArchiveTarget({ id: exercise._id, name: exercise.name });
                   }}
                 />
               </View>
@@ -217,18 +217,18 @@ export default function MyExercisesScreen() {
       )}
 
       <ConfirmActionModal
-        visible={Boolean(deleteTarget)}
-        title="Delete Exercise"
-        message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}"? This won't remove it from existing sessions.` : undefined}
-        confirmLabel="Delete"
+        visible={Boolean(archiveTarget)}
+        title="Archive Exercise"
+        message={archiveTarget ? `Are you sure you want to archive "${archiveTarget.name}"? This won't remove it from existing sessions.` : undefined}
+        confirmLabel="Archive"
         cancelLabel="Cancel"
         confirmVariant="danger"
         closeOnBackdropPress
-        isSubmitting={isDeleting}
-        onConfirm={confirmDelete}
+        isSubmitting={isArchiving}
+        onConfirm={confirmArchive}
         onCancel={() => {
-          if (!isDeleting) {
-            setDeleteTarget(null);
+          if (!isArchiving) {
+            setArchiveTarget(null);
           }
         }}
       />

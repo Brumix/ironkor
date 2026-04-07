@@ -2,7 +2,7 @@ import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 import { Migrations } from "@convex-dev/migrations";
 
 import { components, internal } from "./_generated/api";
-import { ACCOUNT_RESTORE_WINDOW_MS } from "./authHelpers";
+import { ACCOUNT_RESTORE_WINDOW_MS, isDeletedUser } from "./authHelpers";
 import { ONBOARDING_VERSION } from "./profileHelpers";
 import {
   countTrainingDays,
@@ -33,6 +33,14 @@ type UserWithOptionalAccountLifecycle = Doc<"users"> & {
 };
 type AccountDeletionJobWithOptionalRestorationStatus = Doc<"accountDeletionJobs"> & {
   restorationStatus?: "not_restored" | "restored";
+};
+type AccountDeletionJobWithOptionalPurgeStatus = Doc<"accountDeletionJobs"> & {
+  purgeStatus?: "scheduled" | "purging" | "purged" | "canceled" | "failed";
+  purgeScheduledAt?: number;
+  purgedAt?: number;
+};
+type RoutineSessionWithOptionalExerciseCount = Doc<"routineSessions"> & {
+  exerciseCount?: number;
 };
 type UserProfileDoc = Doc<"userProfiles">;
 
@@ -110,6 +118,30 @@ export const backfillRoutineSessionUserIds = migrations.define({
   },
 });
 
+export const backfillRoutineSessionExerciseCounts = migrations.define({
+  table: "routineSessions",
+  migrateOne: async (ctx, session: RoutineSessionWithOptionalExerciseCount) => {
+    if (session.userId === undefined) {
+      return undefined;
+    }
+
+    const exercises = await ctx.db
+      .query("sessionExercises")
+      .withIndex("by_userId_and_session", (q) =>
+        q.eq("userId", session.userId).eq("sessionId", session._id),
+      )
+      .collect();
+
+    if (session.exerciseCount === exercises.length) {
+      return undefined;
+    }
+
+    return {
+      exerciseCount: exercises.length,
+    };
+  },
+});
+
 export const backfillSessionExerciseUserIds = migrations.define({
   table: "sessionExercises",
   migrateOne: async (ctx, entry: SessionExerciseWithOptionalOwner) => {
@@ -167,6 +199,69 @@ export const backfillAccountDeletionJobRestorationStatus = migrations.define({
   },
 });
 
+export const backfillAccountDeletionJobPurgeStatus = migrations.define({
+  table: "accountDeletionJobs",
+  migrateOne: async (_ctx, job: AccountDeletionJobWithOptionalPurgeStatus) => {
+    if (job.purgeStatus !== undefined && job.purgeScheduledAt !== undefined) {
+      return undefined;
+    }
+
+    if (job.purgedAt !== undefined) {
+      return {
+        purgeStatus: "purged" as const,
+        purgeScheduledAt: job.purgeScheduledAt ?? job.purgedAt,
+      };
+    }
+
+    if (job.restorationStatus === "restored") {
+      return {
+        purgeStatus: "canceled" as const,
+        purgeScheduledAt: job.purgeScheduledAt ?? job.restoreEligibleUntil,
+      };
+    }
+
+    return {
+      purgeStatus: "scheduled" as const,
+      purgeScheduledAt: job.purgeScheduledAt ?? job.restoreEligibleUntil,
+    };
+  },
+});
+
+export const repairDuplicateActiveUsers = migrations.define({
+  table: "users",
+  migrateOne: async (ctx, user: UserWithOptionalAccountLifecycle) => {
+    if (isDeletedUser(user)) {
+      return undefined;
+    }
+
+    const relatedUsers = await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", user.tokenIdentifier))
+      .collect();
+    const activeUsers = relatedUsers
+      .filter((candidate) => !isDeletedUser(candidate))
+      .sort((left, right) => {
+        const updatedAtDelta = (right.updatedAt ?? right._creationTime) - (left.updatedAt ?? left._creationTime);
+        if (updatedAtDelta !== 0) {
+          return updatedAtDelta;
+        }
+        return right._creationTime - left._creationTime;
+      });
+
+    if (activeUsers.length <= 1 || activeUsers[0]?._id === user._id) {
+      return undefined;
+    }
+
+    const deletedAt = user.updatedAt ?? user.createdAt ?? user._creationTime;
+    return {
+      accountStatus: "deleted" as const,
+      deletedAt,
+      restoreDecision: "declined" as const,
+      restoreEligibleUntil: deletedAt,
+    };
+  },
+});
+
 export const backfillLegacyUserProfiles = migrations.define({
   table: "users",
   migrateOne: async (ctx, user: UserWithOptionalAccountLifecycle) => {
@@ -207,8 +302,11 @@ export const runAll = migrations.runner([
   internal.migrations.backfillRoutineUserIds,
   internal.migrations.backfillRoutineWeeklyPlans,
   internal.migrations.backfillRoutineSessionUserIds,
+  internal.migrations.backfillRoutineSessionExerciseCounts,
   internal.migrations.backfillSessionExerciseUserIds,
   internal.migrations.backfillUserAccountLifecycle,
   internal.migrations.backfillAccountDeletionJobRestorationStatus,
+  internal.migrations.backfillAccountDeletionJobPurgeStatus,
+  internal.migrations.repairDuplicateActiveUsers,
   internal.migrations.backfillLegacyUserProfiles,
 ]);

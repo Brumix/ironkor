@@ -580,7 +580,7 @@ export default function SettingsScreen() {
 
       <SectionHeader
         title="Danger zone"
-        subtitle="Permanent account actions stay here at the end of settings"
+        subtitle="Account deactivation and final deletion controls stay here at the end of settings"
       />
 
       <AppCard style={styles.dangerCard}>
@@ -589,9 +589,9 @@ export default function SettingsScreen() {
             <Ionicons color={theme.colors.error} name="warning-outline" size={20} />
           </View>
           <View style={styles.dangerTitleBlock}>
-            <Text style={styles.dangerTitle}>Delete account permanently</Text>
+            <Text style={styles.dangerTitle}>Deactivate account</Text>
             <Text style={styles.dangerDescription}>
-              This removes your current Ironkor account from active use. We preserve your routines, sessions, and custom exercises for 30 days in case you want to restore this account later.
+              This removes your current Ironkor account from active use right away. We preserve your routines, sessions, and custom exercises for 30 days so you can restore the account if you come back before the final purge.
             </Text>
           </View>
         </View>
@@ -599,7 +599,7 @@ export default function SettingsScreen() {
         <AppButton
           fullWidth
           icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
-          label="Delete account"
+          label="Deactivate account"
           loading={isDeletingAccount}
           onPress={() => {
             setShowDeleteAccountModal(true);
@@ -626,9 +626,9 @@ export default function SettingsScreen() {
 
       <ConfirmActionModal
         visible={showDeleteAccountModal}
-        title="Delete account"
-        message="This deletes your current Ironkor account from active use. Your routines, sessions, and custom exercises stay preserved for 30 days so you can restore this account later. If you sign in again within 30 days, you can restore it or start fresh. After 30 days, or if you choose Start fresh, the old account is deleted forever."
-        confirmLabel="Delete forever"
+        title="Deactivate account"
+        message="This deactivates your current Ironkor account right away. Your routines, sessions, and custom exercises stay preserved for 30 days so you can restore the account later. If you sign in again within 30 days, you can restore it or start fresh. After 30 days, or if you choose Start fresh, the old account is permanently purged."
+        confirmLabel="Deactivate"
         cancelLabel="Cancel"
         confirmVariant="danger"
         closeOnBackdropPress={!isDeletingAccount}

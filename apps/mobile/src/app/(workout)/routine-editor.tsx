@@ -26,10 +26,12 @@ import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
-import type { DraftRoutine, DraftWeeklyPlanEntry, RoutineDetailed } from "@/features/workout/types";
+import { createRoutineSaveDraft } from "@/features/workout/mappers";
+import type { DraftWeeklyPlanEntry, RoutineSaveDraft } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
 import type { Id } from "@convex/_generated/dataModel";
+import type { FunctionReference } from "convex/server";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -54,6 +56,8 @@ interface SessionRowStyles {
   dragHandle: StyleProp<ViewStyle>;
   dragHandleActive: StyleProp<ViewStyle>;
 }
+
+type SaveRoutineMutationArgs = RoutineSaveDraft & Record<string, unknown>;
 
 interface RoutineSessionRowProps {
   accentColor: string;
@@ -185,39 +189,6 @@ function reorderSessionOptionsByIndex(
   return reordered;
 }
 
-function arePlannerEntriesEqual(left: DraftWeeklyPlanEntry[], right: DraftWeeklyPlanEntry[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((entry, index) =>
-    entry.day === right[index]?.day && entry.type === right[index]?.type,
-  );
-}
-
-function buildSessionSnapshot(sessions: SessionOption[]) {
-  return sessions.map((session, index) => ({
-    id: session.persistedId ? String(session.persistedId) : `local:${session.key}`,
-    name: session.name,
-    order: index,
-  }));
-}
-
-function areSessionSnapshotsEqual(
-  left: ReturnType<typeof buildSessionSnapshot>,
-  right: ReturnType<typeof buildSessionSnapshot>,
-) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((session, index) =>
-    session.id === right[index]?.id &&
-    session.name === right[index]?.name &&
-    session.order === right[index]?.order,
-  );
-}
-
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export default function RoutineEditorScreen() {
   const { theme } = useTheme();
@@ -226,9 +197,12 @@ export default function RoutineEditorScreen() {
   const { showAlert, AlertModal } = useAppAlert();
   const {
     draft,
+    currentRoutineId,
     hasChanges,
     ensureDraft,
+    hydrateRoutine,
     clearDraft,
+    resetDraft,
     markPendingRoutineChanges,
     clearPendingRoutineChanges,
     setRoutineName: setDraftRoutineName,
@@ -240,13 +214,14 @@ export default function RoutineEditorScreen() {
 
   const routineSummariesData = useQuery(api.routines.listSummaries, { limit: 100 });
 
-  const createRoutine = useMutation(api.routines.create);
-  const updateRoutine = useMutation(api.routines.update);
-  const upsertSession = useMutation(api.routines.upsertSession);
-  const deleteSession = useMutation(api.routines.deleteSession);
-  const reorderPersistedSessions = useMutation(api.routines.reorderSessions);
-  const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
-  const updateWeeklyPlan = useMutation(api.routines.updateWeeklyPlan);
+  const saveRoutine = useMutation(
+    api.routines.saveRoutine as unknown as FunctionReference<
+      "mutation",
+      "public",
+      SaveRoutineMutationArgs,
+      Id<"routines">
+    >,
+  );
 
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "new";
   const isNew = routineIdParam === "new";
@@ -256,11 +231,7 @@ export default function RoutineEditorScreen() {
   );
   const routines = useMemo(() => routineSummariesData ?? [], [routineSummariesData]);
 
-  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-  const [routineName, setRoutineName] = useState("");
   const [newSessionName, setNewSessionName] = useState("");
-  const [plannerDraft, setPlannerDraft] = useState<DraftWeeklyPlanEntry[]>([]);
-  const [sessionListData, setSessionListData] = useState<SessionOption[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [draggingSessionKey, setDraggingSessionKey] = useState<string | null>(null);
   const [showDiscardModal, setShowDiscardModal] = useState(false);
@@ -269,7 +240,6 @@ export default function RoutineEditorScreen() {
   const trackedExistingRoutineIdRef = useRef<string | null>(null);
   const dragStartIndexRef = useRef<number | null>(null);
   const placeholderIndexRef = useRef<number | null>(null);
-  const localSessionCounterRef = useRef(0);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -295,11 +265,7 @@ export default function RoutineEditorScreen() {
   }, [clearDraft, resetNewRoutineUi]);
 
   const resetExistingRoutineUi = useCallback(() => {
-    setHydratedFor(null);
-    setRoutineName("");
     setNewSessionName("");
-    setPlannerDraft([]);
-    setSessionListData([]);
     setDraggingSessionKey(null);
     dragStartIndexRef.current = null;
     placeholderIndexRef.current = null;
@@ -315,114 +281,34 @@ export default function RoutineEditorScreen() {
   );
 
   const sourceSessionOptions = useMemo<SessionOption[]>(() => {
-    if (isNew) {
-      return sortByOrder(draft?.sessions ?? []).map((session: DraftRoutine["sessions"][number]) => ({
-        key: session.key,
-        name: session.name,
-        order: session.order,
-        exerciseCount: session.exercises.length,
-      }));
-    }
-
-    return sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
-      key: String(session._id),
+    return sortByOrder(draft?.sessions ?? []).map((session) => ({
+      key: session.key,
       name: session.name,
       order: session.order,
       exerciseCount: session.exercises.length,
-      persistedId: session._id,
+      persistedId: session.sessionId,
     }));
-  }, [draft?.sessions, isNew, selectedRoutine?.sessions]);
+  }, [draft?.sessions]);
 
   useEffect(() => {
-    if (routineSummariesData === undefined || (!isNew && selectedRoutine === undefined)) {
-      return;
-    }
-
-    if (isNew || !selectedRoutine) {
+    if (routineSummariesData === undefined || isNew || selectedRoutine === undefined || !selectedRoutine) {
       return;
     }
 
     const currentId = String(selectedRoutine._id);
-    if (hydratedFor === currentId) {
+    if (currentRoutineId === currentId && draft) {
       return;
     }
 
-    setRoutineName(selectedRoutine.name);
-    setPlannerDraft(
-      sortPlanner(
-        selectedRoutine.weeklyPlan.map((entry: RoutineDetailed["weeklyPlan"][number]) => ({
-          day: entry.day,
-          type: entry.type,
-        })),
-      ),
-    );
-    setSessionListData(sourceSessionOptions);
-    setHydratedFor(currentId);
-  }, [
-    hydratedFor,
-    isNew,
-    routineSummariesData,
-    selectedRoutine,
-    sourceSessionOptions,
-  ]);
+    hydrateRoutine(selectedRoutine);
+  }, [currentRoutineId, draft, hydrateRoutine, isNew, routineSummariesData, selectedRoutine]);
 
-  useEffect(() => {
-    if (isNew) {
-      setSessionListData(sourceSessionOptions);
-    }
-  }, [isNew, sourceSessionOptions]);
-
-  const routineNameValue = isNew ? draft?.name ?? "" : routineName;
-  const plannerEntries = isNew ? sortPlanner(draft?.weeklyPlan ?? []) : sortPlanner(plannerDraft);
+  const routineNameValue = draft?.name ?? "";
+  const plannerEntries = sortPlanner(draft?.weeklyPlan ?? []);
+  const sessionListData = sourceSessionOptions;
   const canAddSession = newSessionName.trim().length > 0;
   const isAtSessionLimit = sessionListData.length >= MAX_SESSIONS_PER_ROUTINE;
-  const persistedPlannerEntries = useMemo(
-    () =>
-      sortPlanner(
-        selectedRoutine?.weeklyPlan.map((entry: RoutineDetailed["weeklyPlan"][number]) => ({
-          day: entry.day,
-          type: entry.type,
-        })) ?? [],
-      ),
-    [selectedRoutine?.weeklyPlan],
-  );
-  const persistedSessionSnapshot = useMemo(
-    () =>
-      buildSessionSnapshot(
-        sortByOrder(selectedRoutine?.sessions ?? []).map((session) => ({
-          key: String(session._id),
-          name: session.name,
-          order: session.order,
-          exerciseCount: session.exercises.length,
-          persistedId: session._id,
-        })),
-      ),
-    [selectedRoutine?.sessions],
-  );
-  const currentSessionSnapshot = useMemo(
-    () => buildSessionSnapshot(sessionListData),
-    [sessionListData],
-  );
-  const hasExistingRoutineChanges = useMemo(() => {
-    if (isNew || !selectedRoutine) {
-      return false;
-    }
-
-    return (
-      routineNameValue !== selectedRoutine.name ||
-      !arePlannerEntriesEqual(plannerEntries, persistedPlannerEntries) ||
-      !areSessionSnapshotsEqual(currentSessionSnapshot, persistedSessionSnapshot)
-    );
-  }, [
-    currentSessionSnapshot,
-    isNew,
-    persistedPlannerEntries,
-    persistedSessionSnapshot,
-    plannerEntries,
-    routineNameValue,
-    selectedRoutine,
-  ]);
-  const hasPageChanges = isNew ? hasChanges : hasExistingRoutineChanges;
+  const hasPageChanges = hasChanges;
   const shouldShowSaveAction = hasPageChanges || isSaving;
 
   useEffect(() => {
@@ -441,7 +327,7 @@ export default function RoutineEditorScreen() {
       return;
     }
 
-    if (hasExistingRoutineChanges) {
+    if (hasChanges) {
       markPendingRoutineChanges(routineIdParam);
       return;
     }
@@ -449,7 +335,7 @@ export default function RoutineEditorScreen() {
     clearPendingRoutineChanges(routineIdParam);
   }, [
     clearPendingRoutineChanges,
-    hasExistingRoutineChanges,
+    hasChanges,
     isNew,
     markPendingRoutineChanges,
     routineIdParam,
@@ -460,12 +346,7 @@ export default function RoutineEditorScreen() {
   }
 
   function updatePlannerEntries(updater: (current: DraftWeeklyPlanEntry[]) => DraftWeeklyPlanEntry[]) {
-    if (isNew) {
-      setWeeklyPlan(updater);
-      return;
-    }
-
-    setPlannerDraft((current) => sortPlanner(updater(current)));
+    setWeeklyPlan(updater);
   }
 
   function handleBackPress() {
@@ -493,6 +374,7 @@ export default function RoutineEditorScreen() {
       clearNewRoutineDraft();
     } else {
       clearPendingRoutineChanges(routineIdParam);
+      resetDraft();
       resetExistingRoutineUi();
     }
 
@@ -500,22 +382,12 @@ export default function RoutineEditorScreen() {
     navigateToRoutines();
   }
 
-  function buildWeeklyPlanPayload() {
-    return plannerEntries.map((entry) => ({
-      day: entry.day,
-      type: entry.type,
-      assignmentMode: "auto" as const,
-    }));
-  }
-
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   async function handleSaveRoutine() {
     if (isSaving) {
       return;
     }
 
     const name = routineNameValue.trim() || "Untitled routine";
-    const trainingDays = plannerEntries.filter((entry) => entry.type === "train").length;
     const normalizedRoutineName = normalizeDisplayNameKey(name);
 
     const duplicateRoutine = routines.some((routine: (typeof routines)[number]) => {
@@ -546,97 +418,22 @@ export default function RoutineEditorScreen() {
     setIsSaving(true);
 
     try {
-      if (selectedRoutine) {
-        const currentPersistedSessionIds = new Set(
-          selectedRoutine.sessions.map((session) => String(session._id)),
-        );
-        const nextPersistedSessionIds = new Set(
-          sessionListData
-            .map((session) => session.persistedId)
-            .filter((sessionId): sessionId is Id<"routineSessions"> => Boolean(sessionId))
-            .map((sessionId) => String(sessionId)),
-        );
+      if (!draft) {
+        return;
+      }
 
-        await updateRoutine({
-          routineId: selectedRoutine._id,
-          name,
-        });
+      const payload = createRoutineSaveDraft({
+        ...draft,
+        name,
+      });
+      await saveRoutine(payload as SaveRoutineMutationArgs);
 
-        await updateWeeklyPlan({
-          routineId: selectedRoutine._id,
-          weeklyPlan: buildWeeklyPlanPayload(),
-        });
-
-        for (const session of selectedRoutine.sessions) {
-          if (!nextPersistedSessionIds.has(String(session._id))) {
-            await deleteSession({
-              routineId: selectedRoutine._id,
-              sessionId: session._id,
-            });
-          }
-        }
-
-        const createdSessionIdByKey = new Map<string, Id<"routineSessions">>();
-        for (const session of sessionListData) {
-          if (!session.persistedId) {
-            const sessionId = await upsertSession({
-              routineId: selectedRoutine._id,
-              name: session.name,
-            });
-            createdSessionIdByKey.set(session.key, sessionId);
-          }
-        }
-
-        const orderedSessionIds = sessionListData
-          .map((session) => session.persistedId ?? createdSessionIdByKey.get(session.key))
-          .filter((sessionId): sessionId is Id<"routineSessions"> => Boolean(sessionId));
-
-        if (
-          orderedSessionIds.length > 0 ||
-          currentPersistedSessionIds.size > 0
-        ) {
-          await reorderPersistedSessions({
-            routineId: selectedRoutine._id,
-            orderedSessionIds,
-          });
-        }
-
+      if (!isNew && selectedRoutine) {
         clearPendingRoutineChanges(String(selectedRoutine._id));
         resetExistingRoutineUi();
-      } else if (draft) {
-        const routineId = await createRoutine({
-          name,
-          daysPerWeek: Math.max(1, trainingDays),
-        });
-
-        for (const session of sortByOrder(draft.sessions)) {
-          const sessionId = await upsertSession({
-            routineId,
-            name: session.name,
-          });
-
-          for (const exercise of sortByOrder(session.exercises)) {
-            await upsertSessionExercise({
-              sessionId,
-              exerciseId: exercise.exerciseId,
-              sets: exercise.sets,
-              repsText: exercise.repsText,
-              targetWeightKg: exercise.targetWeightKg,
-              restSeconds: exercise.restSeconds,
-              notes: exercise.notes,
-              tempo: exercise.tempo,
-              rir: exercise.rir,
-            });
-          }
-        }
-
-        await updateWeeklyPlan({
-          routineId,
-          weeklyPlan: buildWeeklyPlanPayload(),
-        });
-
-        clearNewRoutineDraft();
       }
+
+      clearDraft();
 
       navigateToRoutines();
     } catch (error) {
@@ -679,35 +476,15 @@ export default function RoutineEditorScreen() {
 
     Keyboard.dismiss();
 
-    if (isNew) {
-      addSession(name);
-      setNewSessionName("");
-      return;
-    }
-
-    const nextSessionKey = `local-session-${localSessionCounterRef.current}`;
-    localSessionCounterRef.current += 1;
-    setSessionListData((current) => [
-      ...current,
-      {
-        key: nextSessionKey,
-        name,
-        order: current.length,
-        exerciseCount: 0,
-      },
-    ]);
+    addSession(name);
     setNewSessionName("");
   }
 
   function handleSessionDragEnd({ data }: DragEndParams<SessionOption>) {
-    setSessionListData(data);
     setDraggingSessionKey(null);
     dragStartIndexRef.current = null;
     placeholderIndexRef.current = null;
-
-    if (isNew) {
-      reorderDraftSessions(data.map((session) => session.key));
-    }
+    reorderDraftSessions(data.map((session) => session.key));
   }
 
   function handleSessionRelease() {
@@ -721,11 +498,7 @@ export default function RoutineEditorScreen() {
     }
 
     const reorderedData = reorderSessionOptionsByIndex(sessionListData, from, to);
-    setSessionListData(reorderedData);
-
-    if (isNew) {
-      reorderDraftSessions(reorderedData.map((session) => session.key));
-    }
+    reorderDraftSessions(reorderedData.map((session) => session.key));
   }
 
   const requestDeleteSession = useCallback((session: SessionOption) => {
@@ -743,7 +516,7 @@ export default function RoutineEditorScreen() {
       return;
     }
 
-    setSessionListData((current) => current.filter((entry) => entry.key !== session.key));
+    removeDraftSession(session.key);
   }, [isNew, removeDraftSession, sessionPendingDelete]);
 
   const closeDeleteSessionModal = useCallback(() => {
@@ -751,30 +524,19 @@ export default function RoutineEditorScreen() {
   }, []);
 
   const openSessionEditor = useCallback((session: SessionOption) => {
-    if (session.persistedId && selectedRoutine) {
-      router.push({
+    router.push({
         pathname: "/(workout)/session-editor",
         params: {
-          routineId: String(selectedRoutine._id),
-          sessionId: String(session.persistedId),
+          routineId: isNew
+            ? "new"
+            : selectedRoutine
+              ? String(selectedRoutine._id)
+              : routineIdParam,
+          draftSessionKey: session.key,
+          ...(session.persistedId ? { sessionId: String(session.persistedId) } : {}),
         },
-      });
-      return;
-    }
-
-    if (!isNew) {
-      showAlert({ title: "Save first", message: "Save the routine before editing exercises for a new section.", variant: "info" });
-      return;
-    }
-
-    router.push({
-      pathname: "/(workout)/session-editor",
-      params: {
-        routineId: "new",
-        draftSessionKey: session.key,
-      },
     });
-  }, [isNew, router, selectedRoutine, showAlert]);
+  }, [isNew, router, routineIdParam, selectedRoutine]);
 
   function cycleDayType(day: number) {
     updatePlannerEntries((current) =>
@@ -1060,14 +822,7 @@ export default function RoutineEditorScreen() {
       <TextInput
         style={styles.input}
         value={routineNameValue}
-        onChangeText={(value) => {
-          if (isNew) {
-            setDraftRoutineName(value);
-            return;
-          }
-
-          setRoutineName(value);
-        }}
+        onChangeText={setDraftRoutineName}
         placeholder="Push / Pull / Legs"
         placeholderTextColor={theme.colors.textSubtle}
       />

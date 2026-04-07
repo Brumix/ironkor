@@ -7,6 +7,7 @@ export const routineSessions = defineTable({
   name: v.string(),
   nameKey: v.optional(v.string()),
   order: v.number(),
+  exerciseCount: v.optional(v.number()),
   updatedAt: v.number(),
 })
   .index("by_userId_and_routine", ["userId", "routineId"])

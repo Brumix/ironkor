@@ -57,42 +57,26 @@ describe("hybridBiometricSignIn", () => {
     ).toBe("Sign in with fingerprint");
   });
 
-  test("routes biometric sign-in completions through session activation without re-storing credentials", async () => {
+  test("routes biometric sign-in completions through session activation", async () => {
     const activateSession = vi.fn(() => Promise.resolve());
-    const setCredentials = vi.fn(() => Promise.resolve());
 
     await completeHybridSignIn({
       activateSession,
-      localCredentials: { setCredentials },
-      passwordCredentials: null,
       sessionId: "sess_biometric",
-      signInOrigin: "local-credentials",
     });
 
     expect(activateSession).toHaveBeenCalledWith("sess_biometric");
-    expect(setCredentials).not.toHaveBeenCalled();
   });
 
-  test("stores local credentials only after a password-origin sign-in has completed", async () => {
+  test("password-origin completions also only activate the session", async () => {
     const activateSession = vi.fn(() => Promise.resolve());
-    const setCredentials = vi.fn(() => Promise.resolve());
 
     await completeHybridSignIn({
       activateSession,
-      localCredentials: { setCredentials },
-      passwordCredentials: {
-        identifier: "athlete@ironkor.app",
-        password: "super-secret",
-      },
       sessionId: "sess_password",
-      signInOrigin: "password",
     });
 
     expect(activateSession).toHaveBeenCalledWith("sess_password");
-    expect(setCredentials).toHaveBeenCalledWith({
-      identifier: "athlete@ironkor.app",
-      password: "super-secret",
-    });
 
     expect(
       resolveHybridSignInStep({

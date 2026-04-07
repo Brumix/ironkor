@@ -283,6 +283,7 @@ export function toExerciseCatalogRecord(
   return {
     _id: doc._id,
     _creationTime: doc._creationTime,
+    archivedAt: doc.archivedAt,
     ...normalized,
   };
 }
@@ -313,12 +314,17 @@ export async function getSessionsByRoutine(
   routineId: Id<"routines">,
   userId: Id<"users">,
 ) {
-  return ctx.db
+  const sessions = await ctx.db
     .query("routineSessions")
     .withIndex("by_userId_and_routine_order", (q) =>
       q.eq("userId", userId).eq("routineId", routineId),
     )
-    .collect();
+    .take(MAX_SESSIONS_PER_ROUTINE + 1);
+  assert(
+    sessions.length <= MAX_SESSIONS_PER_ROUTINE,
+    `Routines can have at most ${MAX_SESSIONS_PER_ROUTINE} sections.`,
+  );
+  return sessions;
 }
 
 export async function getSessionExercisesBySession(
@@ -326,12 +332,17 @@ export async function getSessionExercisesBySession(
   sessionId: Id<"routineSessions">,
   userId: Id<"users">,
 ) {
-  return ctx.db
+  const exercises = await ctx.db
     .query("sessionExercises")
     .withIndex("by_userId_and_session_order", (q) =>
       q.eq("userId", userId).eq("sessionId", sessionId),
     )
-    .collect();
+    .take(MAX_EXERCISES_PER_SESSION + 1);
+  assert(
+    exercises.length <= MAX_EXERCISES_PER_SESSION,
+    `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+  );
+  return exercises;
 }
 
 export async function ensureUniqueRoutineName(
@@ -501,6 +512,7 @@ export async function getDetailedRoutine(
       _id: session._id,
       name: session.name,
       order: session.order,
+      exerciseCount: session.exerciseCount ?? detailedExercises.length,
       exercises: detailedExercises,
     });
   }

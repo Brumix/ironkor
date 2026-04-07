@@ -32,20 +32,11 @@ export async function listSummariesHandler(
     const sessions = sortByOrder(await getSessionsByRoutine(ctx, routine._id, viewer._id));
     const sessionSummaries: RoutineSectionSummaryRecord[] = [];
     for (const session of sessions) {
-      let exerciseCount = 0;
-      const sessionExerciseQuery = ctx.db
-        .query("sessionExercises")
-        .withIndex("by_userId_and_session", (q) =>
-          q.eq("userId", viewer._id).eq("sessionId", session._id),
-        );
-      for await (const _entry of sessionExerciseQuery) {
-        exerciseCount += 1;
-      }
       sessionSummaries.push({
         _id: session._id,
         name: session.name,
         order: session.order,
-        exerciseCount,
+        exerciseCount: session.exerciseCount ?? 0,
       });
     }
 

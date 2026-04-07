@@ -42,13 +42,16 @@ export async function getViewerByTokenIdentifier(
     .withIndex("by_tokenIdentifier_and_accountStatus", (q) =>
       q.eq("tokenIdentifier", tokenIdentifier).eq("accountStatus", "active"),
     )
-    .take(2);
+    .take(USER_LOOKUP_LIMIT);
+  assertNoDuplicateActiveUsers(activeUsers, tokenIdentifier);
   if (activeUsers.length > 0) {
     return pickMostRecentUser(activeUsers);
   }
 
   const users = await listUsersByTokenIdentifier(ctx, tokenIdentifier);
-  return pickMostRecentUser(users.filter(isActiveUser));
+  const activeCandidates = users.filter(isActiveUser);
+  assertNoDuplicateActiveUsers(activeCandidates, tokenIdentifier);
+  return pickMostRecentUser(activeCandidates);
 }
 
 export async function getRestoreCandidateByTokenIdentifier(
@@ -57,6 +60,10 @@ export async function getRestoreCandidateByTokenIdentifier(
   now = Date.now(),
 ) {
   const users = await listUsersByTokenIdentifier(ctx, tokenIdentifier);
+  assertNoDuplicateActiveUsers(
+    users.filter(isActiveUser),
+    tokenIdentifier,
+  );
   const restoreCandidates = users
     .filter((user) => isRestoreCandidateEligible(user, now))
     .sort((left, right) => {
@@ -173,6 +180,16 @@ async function listUsersByTokenIdentifier(
     .query("users")
     .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", tokenIdentifier))
     .take(USER_LOOKUP_LIMIT);
+}
+
+function assertNoDuplicateActiveUsers(
+  users: UserDoc[],
+  tokenIdentifier: string,
+) {
+  invariant(
+    users.length <= 1,
+    `Duplicate active users found for identity ${tokenIdentifier}.`,
+  );
 }
 
 function pickMostRecentUser<T extends { _creationTime: number }>(users: T[]) {

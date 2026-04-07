@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { ClerkProviderProps as ClerkExpoProviderProps } from "@clerk/clerk-expo/dist/provider/ClerkProvider";
+import type { ClerkProviderProps as ClerkExpoProviderProps } from "@clerk/clerk-expo";
 import type { ComponentType, ReactNode } from "react";
 
 export interface ClerkFieldError {

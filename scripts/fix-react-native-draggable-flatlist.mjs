@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const bunModulesRoot = path.join(repoRoot, "node_modules", ".bun");
+const hoistedNodeModulesRoot = path.join(repoRoot, "node_modules");
 const draggableTargetPrefix = "react-native-draggable-flatlist@4.0.3+";
 const clerkExpoTargetPrefix = "@clerk+clerk-expo@";
 
@@ -186,39 +187,54 @@ function fixClerkExpoPackage(packageRoot) {
 }
 
 function main() {
-  if (!existsSync(bunModulesRoot)) {
-    return;
-  }
-
   let draggableChangedCount = 0;
   let clerkChangedCount = 0;
 
-  for (const entry of readdirSync(bunModulesRoot)) {
-    if (entry.startsWith(draggableTargetPrefix)) {
-      const packageRoot = path.join(
-        bunModulesRoot,
-        entry,
-        "node_modules",
-        "react-native-draggable-flatlist",
-      );
+  const directDraggablePackageRoot = path.join(
+    hoistedNodeModulesRoot,
+    "react-native-draggable-flatlist",
+  );
+  if (existsSync(directDraggablePackageRoot) && fixPackageCopy(directDraggablePackageRoot)) {
+    draggableChangedCount += 1;
+  }
 
-      if (fixPackageCopy(packageRoot)) {
-        draggableChangedCount += 1;
+  const directClerkExpoPackageRoot = path.join(
+    hoistedNodeModulesRoot,
+    "@clerk",
+    "clerk-expo",
+  );
+  if (existsSync(directClerkExpoPackageRoot) && fixClerkExpoPackage(directClerkExpoPackageRoot)) {
+    clerkChangedCount += 1;
+  }
+
+  if (existsSync(bunModulesRoot)) {
+    for (const entry of readdirSync(bunModulesRoot)) {
+      if (entry.startsWith(draggableTargetPrefix)) {
+        const packageRoot = path.join(
+          bunModulesRoot,
+          entry,
+          "node_modules",
+          "react-native-draggable-flatlist",
+        );
+
+        if (fixPackageCopy(packageRoot)) {
+          draggableChangedCount += 1;
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (entry.startsWith(clerkExpoTargetPrefix)) {
-      const packageRoot = path.join(
-        bunModulesRoot,
-        entry,
-        "node_modules",
-        "@clerk",
-        "clerk-expo",
-      );
+      if (entry.startsWith(clerkExpoTargetPrefix)) {
+        const packageRoot = path.join(
+          bunModulesRoot,
+          entry,
+          "node_modules",
+          "@clerk",
+          "clerk-expo",
+        );
 
-      if (fixClerkExpoPackage(packageRoot)) {
-        clerkChangedCount += 1;
+        if (fixClerkExpoPackage(packageRoot)) {
+          clerkChangedCount += 1;
+        }
       }
     }
   }

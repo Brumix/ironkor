@@ -33,6 +33,7 @@ export async function upsertSessionExerciseHandler(
   const exercise = await ctx.db.get(args.exerciseId);
   assert(session, "Section not found.");
   assert(exercise, "Exercise not found.");
+  assert(exercise.archivedAt === undefined, "Archived exercises cannot be attached.");
   if (exercise.isCustom) {
     assert(exercise.ownerId === viewer._id, "Unauthorized.");
   }
@@ -63,7 +64,7 @@ export async function upsertSessionExerciseHandler(
     `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
   );
   const nextProgramming = buildProgrammingRecord(args);
-  return ctx.db.insert("sessionExercises", {
+  const sessionExerciseId = await ctx.db.insert("sessionExercises", {
     userId: viewer._id,
     sessionId: args.sessionId,
     exerciseId: args.exerciseId,
@@ -71,6 +72,11 @@ export async function upsertSessionExerciseHandler(
     ...nextProgramming,
     updatedAt: Date.now(),
   });
+  await ctx.db.patch(args.sessionId, {
+    exerciseCount: current.length + 1,
+    updatedAt: Date.now(),
+  });
+  return sessionExerciseId;
 }
 
 export async function updateSessionExerciseProgrammingHandler(
@@ -133,6 +139,11 @@ export async function deleteSessionExerciseHandler(
       updatedAt: Date.now(),
     });
   }
+
+  await ctx.db.patch(args.sessionId, {
+    exerciseCount: remaining.length,
+    updatedAt: Date.now(),
+  });
 }
 
 export async function reorderSessionExercisesHandler(

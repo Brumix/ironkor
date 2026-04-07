@@ -28,6 +28,15 @@ const ACCOUNT_DELETION_RETRY_BASE_MS = 5_000;
 const ACCOUNT_DELETION_RETRY_MAX_MS = 5 * 60 * 1000;
 const ACCOUNT_DELETION_MAX_ATTEMPTS = 10;
 const ACCOUNT_DELETION_ERROR_MAX_LENGTH = 280;
+const ACCOUNT_DELETION_PURGE_RETRY_MS = 60_000;
+const ACCOUNT_DELETION_PURGE_ENTITY_ORDER = [
+  "sessionExercise",
+  "routineSession",
+  "customExercise",
+  "routine",
+  "userMeasurement",
+  "userProfile",
+] as const;
 
 type AccountDeletionJob = Doc<"accountDeletionJobs">;
 type SnapshotDoc = { _id: Id<any> };
@@ -66,6 +75,16 @@ async function scheduleAccountDeletionJob(
   delayMs = 0,
 ) {
   await ctx.scheduler.runAfter(delayMs, internal.auth.processAccountDeletionJob, {
+    jobId,
+  });
+}
+
+async function scheduleAccountDeletionPurge(
+  ctx: Pick<MutationCtx, "scheduler">,
+  jobId: Id<"accountDeletionJobs">,
+  delayMs = 0,
+) {
+  await ctx.scheduler.runAfter(delayMs, internal.auth.purgeDeletedAccountData, {
     jobId,
   });
 }
@@ -239,6 +258,36 @@ async function failAccountDeletionJob(
   return { status: "failed" as const, retryMs };
 }
 
+async function findNextPurgeChunk(
+  ctx: MutationCtx,
+  jobId: Id<"accountDeletionJobs">,
+) {
+  for (const entityType of ACCOUNT_DELETION_PURGE_ENTITY_ORDER) {
+    const chunk = await ctx.db
+      .query("accountDeletionJobChunks")
+      .withIndex("by_jobId_and_entityType_and_chunkIndex", (q) =>
+        q.eq("jobId", jobId).eq("entityType", entityType),
+      )
+      .first();
+
+    if (chunk) {
+      return { chunk, entityType };
+    }
+  }
+
+  return null;
+}
+
+async function deleteSnapshotEntity(
+  ctx: MutationCtx,
+  entityId: Id<any>,
+) {
+  const doc = await ctx.db.get(entityId);
+  if (doc) {
+    await ctx.db.delete(entityId);
+  }
+}
+
 export const getViewer = query({
   args: {},
   handler: async (ctx) => {
@@ -354,6 +403,7 @@ export const restoreDeletedAccount = mutation({
       if (deletionJob) {
         await patchAccountDeletionJobState(ctx, deletionJob._id, {
           restorationStatus: "restored",
+          purgeStatus: "canceled",
           restoredAt,
           restoredUserId: restoreCandidate._id,
         });
@@ -474,6 +524,8 @@ export const queueAccountDeletion = internalMutation({
       status: "pending",
       phase: "capture_routines",
       restorationStatus: "not_restored",
+      purgeStatus: "scheduled",
+      purgeScheduledAt: restoreEligibleUntil,
       deletedAt: now,
       restoreEligibleUntil,
       currentChunkIndex: 0,
@@ -494,6 +546,11 @@ export const queueAccountDeletion = internalMutation({
     });
 
     await scheduleAccountDeletionJob(ctx, jobId);
+    await scheduleAccountDeletionPurge(
+      ctx,
+      jobId,
+      Math.max(0, restoreEligibleUntil - Date.now()),
+    );
 
     return {
       status: "pending" as const,
@@ -629,7 +686,7 @@ export const processAccountDeletionJob = internalMutation({
             deletedAt: job.deletedAt,
             deletionJobId: job._id,
             deletionRequestedAt: job.deletedAt,
-            deletionStatus: "pending",
+            deletionStatus: "complete",
             restoreDecision: viewer.restoreDecision ?? "pending",
             restoreEligibleUntil: job.restoreEligibleUntil,
           });
@@ -641,6 +698,95 @@ export const processAccountDeletionJob = internalMutation({
       return { status: job.status };
     } catch (error) {
       return failAccountDeletionJob(ctx, job, toDeletionFailureMessage(error));
+    }
+  },
+});
+
+export const purgeDeletedAccountData = internalMutation({
+  args: {
+    jobId: v.id("accountDeletionJobs"),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) {
+      return { status: "complete" as const };
+    }
+
+    if (job.restorationStatus === "restored") {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "canceled",
+      });
+      return { status: "canceled" as const };
+    }
+
+    if (job.purgeStatus === "purged") {
+      return { status: "purged" as const };
+    }
+
+    const now = Date.now();
+    if (now < job.restoreEligibleUntil) {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "scheduled",
+        purgeScheduledAt: job.restoreEligibleUntil,
+      });
+      await scheduleAccountDeletionPurge(
+        ctx,
+        job._id,
+        Math.max(0, job.restoreEligibleUntil - now),
+      );
+      return { status: "scheduled" as const };
+    }
+
+    if (job.status !== "complete") {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "scheduled",
+      });
+      await scheduleAccountDeletionPurge(ctx, job._id, ACCOUNT_DELETION_PURGE_RETRY_MS);
+      return { status: "scheduled" as const };
+    }
+
+    const viewer = await ctx.db.get(job.userId);
+    if (viewer?.accountStatus === "active") {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "canceled",
+      });
+      return { status: "canceled" as const };
+    }
+
+    try {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "purging",
+      });
+
+      const nextChunk = await findNextPurgeChunk(ctx, job._id);
+      if (nextChunk) {
+        for (const entityId of nextChunk.chunk.entityIds) {
+          await deleteSnapshotEntity(ctx, entityId);
+        }
+        await ctx.db.delete(nextChunk.chunk._id);
+        await scheduleAccountDeletionPurge(ctx, job._id);
+        return {
+          entityType: nextChunk.entityType,
+          status: "purging" as const,
+        };
+      }
+
+      if (viewer) {
+        await ctx.db.delete(viewer._id);
+      }
+
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "purged",
+        purgedAt: Date.now(),
+      });
+      return { status: "purged" as const };
+    } catch (error) {
+      await patchAccountDeletionJobState(ctx, job._id, {
+        purgeStatus: "failed",
+        lastError: normalizeDeletionErrorMessage(toDeletionFailureMessage(error)),
+      });
+      await scheduleAccountDeletionPurge(ctx, job._id, ACCOUNT_DELETION_PURGE_RETRY_MS);
+      return { status: "failed" as const };
     }
   },
 });

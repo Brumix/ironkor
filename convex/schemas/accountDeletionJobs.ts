@@ -33,6 +33,14 @@ export const accountDeletionJobRestorationStatus = v.union(
   v.literal("restored"),
 );
 
+export const accountDeletionJobPurgeStatus = v.union(
+  v.literal("scheduled"),
+  v.literal("purging"),
+  v.literal("purged"),
+  v.literal("canceled"),
+  v.literal("failed"),
+);
+
 export const accountDeletionJobs = defineTable({
   userId: v.id("users"),
   clerkUserId: v.string(),
@@ -42,6 +50,9 @@ export const accountDeletionJobs = defineTable({
   restorationStatus: v.optional(accountDeletionJobRestorationStatus),
   restoredAt: v.optional(v.number()),
   restoredUserId: v.optional(v.id("users")),
+  purgeStatus: v.optional(accountDeletionJobPurgeStatus),
+  purgeScheduledAt: v.optional(v.number()),
+  purgedAt: v.optional(v.number()),
   deletedAt: v.number(),
   restoreEligibleUntil: v.number(),
   cursor: v.optional(v.string()),

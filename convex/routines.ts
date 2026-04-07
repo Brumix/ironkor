@@ -20,12 +20,37 @@ import {
   toggleActiveHandler,
   updateHandler,
 } from "./routines/routineMutations";
+import { saveRoutineHandler } from "./routines/saveRoutineHandler";
 import {
   deleteSessionHandler,
   reorderSessionsHandler,
   upsertSessionHandler,
 } from "./routines/sessionMutations";
 import { updateWeeklyPlanHandler } from "./routines/weeklyPlanMutations";
+
+const saveRoutineExerciseValidator = v.object({
+  sessionExerciseId: v.optional(v.id("sessionExercises")),
+  exerciseId: v.id("exercises"),
+  sets: v.number(),
+  repsText: v.string(),
+  targetWeightKg: v.optional(v.number()),
+  restSeconds: v.optional(v.number()),
+  notes: v.optional(v.string()),
+  tempo: v.optional(v.string()),
+  rir: v.optional(v.number()),
+});
+
+const saveRoutineSessionValidator = v.object({
+  sessionId: v.optional(v.id("routineSessions")),
+  clientKey: v.string(),
+  name: v.string(),
+  exercises: v.array(saveRoutineExerciseValidator),
+});
+
+const saveRoutineWeeklyPlanValidator = v.object({
+  day: v.number(),
+  type: v.union(v.literal("train"), v.literal("rest")),
+});
 
 export const listSummaries = query({
   args: {
@@ -62,6 +87,16 @@ export const update = mutation({
     daysPerWeek: v.optional(v.number()),
   },
   handler: updateHandler,
+});
+
+export const saveRoutine = mutation({
+  args: {
+    routineId: v.optional(v.id("routines")),
+    name: v.string(),
+    weeklyPlan: v.array(saveRoutineWeeklyPlanValidator),
+    sessions: v.array(saveRoutineSessionValidator),
+  },
+  handler: saveRoutineHandler,
 });
 
 export const deleteRoutine = mutation({

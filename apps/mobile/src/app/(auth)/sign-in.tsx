@@ -1,5 +1,5 @@
 import { Link, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
 import AppButton from "@/components/ui/AppButton";
@@ -36,11 +36,6 @@ export default function SignInScreen() {
   const [submissionMode, setSubmissionMode] = useState<
     "local-credentials" | "password" | "second-factor" | null
   >(null);
-  const signInOriginRef = useRef<"local-credentials" | "password" | null>(null);
-  const pendingPasswordCredentialsRef = useRef<{
-    identifier: string;
-    password: string;
-  } | null>(null);
 
   const fieldStyles = useMemo(() => styles(theme), [theme]);
   const showSecondFactor = isLoaded && signIn.status === "needs_second_factor";
@@ -69,10 +64,7 @@ export default function SignInScreen() {
           activateSession: async (sessionId) => {
             await activateAuthSession(setActive, sessionId, router);
           },
-          localCredentials,
-          passwordCredentials: pendingPasswordCredentialsRef.current,
           sessionId: nextStep.sessionId,
-          signInOrigin: signInOriginRef.current,
         });
         return;
       case "needs_new_password":
@@ -105,11 +97,6 @@ export default function SignInScreen() {
 
     const trimmedIdentifier = emailAddress.trim();
 
-    signInOriginRef.current = "password";
-    pendingPasswordCredentialsRef.current = {
-      identifier: trimmedIdentifier,
-      password,
-    };
     setSubmissionMode("password");
     setError(null);
     setSubmitError(null);
@@ -123,8 +110,6 @@ export default function SignInScreen() {
       });
       await handleSignInResult(result);
     } catch (caughtError: unknown) {
-      signInOriginRef.current = null;
-      pendingPasswordCredentialsRef.current = null;
       setError(caughtError);
       setSubmitError(
         resolveAuthFormErrorMessage(caughtError, "Sign-in failed. Please try again.", {
@@ -169,8 +154,6 @@ export default function SignInScreen() {
       return;
     }
 
-    signInOriginRef.current = "local-credentials";
-    pendingPasswordCredentialsRef.current = null;
     setSubmissionMode("local-credentials");
     setError(null);
     setSubmitError(null);
@@ -180,7 +163,6 @@ export default function SignInScreen() {
       const result = await localCredentials.authenticate();
       await handleSignInResult(result);
     } catch (caughtError: unknown) {
-      signInOriginRef.current = null;
       setError(caughtError);
       setSubmitError(
         resolveAuthFormErrorMessage(

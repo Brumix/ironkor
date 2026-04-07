@@ -89,10 +89,38 @@ async function seedAccountData(authed: ReturnType<typeof createAuthedTest>["auth
 
 async function finishDeletionSnapshot(
   t: ReturnType<typeof createAuthedTest>["t"],
+  jobId: Id<"accountDeletionJobs">,
 ) {
-  await t.finishAllScheduledFunctions(() => {
-    vi.runAllTimers();
-  });
+  for (let index = 0; index < 12; index += 1) {
+    await t.run(async (ctx) => {
+      await ctx.runMutation(internal.auth.processAccountDeletionJob, { jobId });
+    });
+
+    const job = await t.run(async (ctx) => ctx.db.get(jobId));
+    if (job?.status === "complete") {
+      return;
+    }
+  }
+
+  throw new Error("Account deletion snapshot did not complete in time.");
+}
+
+async function finishDeletionPurge(
+  t: ReturnType<typeof createAuthedTest>["t"],
+  jobId: Id<"accountDeletionJobs">,
+) {
+  for (let index = 0; index < 12; index += 1) {
+    const result = await t.run(async (ctx) =>
+      ctx.runMutation(internal.auth.purgeDeletedAccountData, { jobId }),
+    );
+    const job = await t.run(async (ctx) => ctx.db.get(jobId));
+
+    if (result.status === "canceled" || job?.purgeStatus === "purged") {
+      return result;
+    }
+  }
+
+  throw new Error("Account deletion purge did not complete in time.");
 }
 
 async function getAccountDeletionArtifacts(
@@ -197,14 +225,14 @@ test("deleteMyAccount soft deletes the user and snapshots exact related ids", as
   expect(result.status).toBe("pending");
   expect(result.jobId).not.toBeNull();
 
-  await finishDeletionSnapshot(t);
+  await finishDeletionSnapshot(t, result.jobId!);
 
   const artifacts = await getAccountDeletionArtifacts(t, viewerId);
   expect(artifacts.viewer).toMatchObject({
     _id: viewerId,
     accountStatus: "deleted",
     deletionJobId: result.jobId,
-    deletionStatus: "pending",
+    deletionStatus: "complete",
     restoreDecision: "pending",
   });
   expect(artifacts.viewer?.deletedAt).toBeTypeOf("number");
@@ -255,8 +283,8 @@ test("restoreDeletedAccount reactivates the preserved user row and historical da
   const { authed, t } = createAuthedTest();
   const { routineId, viewerId } = await seedAccountData(authed);
 
-  await authed.action(api.auth.deleteMyAccount, {});
-  await finishDeletionSnapshot(t);
+  const result = await authed.action(api.auth.deleteMyAccount, {});
+  await finishDeletionSnapshot(t, result.jobId!);
 
   const restoredViewerId = await authed.mutation(api.auth.restoreDeletedAccount, {});
   expect(restoredViewerId).toBe(viewerId);
@@ -291,8 +319,8 @@ test("declining restore creates a brand-new active user and hides the old data",
   const { authed, t } = createAuthedTest();
   const { routineId, viewerId } = await seedAccountData(authed);
 
-  await authed.action(api.auth.deleteMyAccount, {});
-  await finishDeletionSnapshot(t);
+  const result = await authed.action(api.auth.deleteMyAccount, {});
+  await finishDeletionSnapshot(t, result.jobId!);
 
   await authed.mutation(api.auth.declineDeletedAccountRestore, {});
   const freshViewerId = await authed.mutation(api.auth.ensureViewer, {});
@@ -324,8 +352,8 @@ test("expired restore windows no longer prompt and ensureViewer creates a new us
   const { authed, t } = createAuthedTest();
   const { viewerId } = await seedAccountData(authed);
 
-  await authed.action(api.auth.deleteMyAccount, {});
-  await finishDeletionSnapshot(t);
+  const result = await authed.action(api.auth.deleteMyAccount, {});
+  await finishDeletionSnapshot(t, result.jobId!);
 
   vi.setSystemTime(Date.now() + ACCOUNT_RESTORE_WINDOW_MS + 1);
 
@@ -345,8 +373,8 @@ test("multiple delete cycles only offer the latest eligible deleted account for 
   const { authed, t } = createAuthedTest();
   const firstAccount = await seedAccountData(authed);
 
-  await authed.action(api.auth.deleteMyAccount, {});
-  await finishDeletionSnapshot(t);
+  const firstDeletion = await authed.action(api.auth.deleteMyAccount, {});
+  await finishDeletionSnapshot(t, firstDeletion.jobId!);
   await authed.mutation(api.auth.declineDeletedAccountRestore, {});
 
   const secondViewerId = await authed.mutation(api.auth.ensureViewer, {});
@@ -358,8 +386,8 @@ test("multiple delete cycles only offer the latest eligible deleted account for 
     isActive: true,
   });
 
-  await authed.action(api.auth.deleteMyAccount, {});
-  await finishDeletionSnapshot(t);
+  const secondDeletion = await authed.action(api.auth.deleteMyAccount, {});
+  await finishDeletionSnapshot(t, secondDeletion.jobId!);
 
   const restoreCandidate = await authed.query(api.auth.getRestoreCandidate, {});
   expect(restoreCandidate?.userId).toBe(secondViewerId);
@@ -415,5 +443,114 @@ test("legacy active users can be backfilled into non-blocking complete profiles"
       completionMethod: "legacy_backfill",
       onboardingVersion: 1,
     });
+  });
+});
+
+test("purgeDeletedAccountData permanently removes preserved account data after the restore window", async () => {
+  const { authed, t } = createAuthedTest();
+  const { viewerId } = await seedAccountData(authed);
+
+  const result = await authed.action(api.auth.deleteMyAccount, {});
+  expect(result.jobId).not.toBeNull();
+  await finishDeletionSnapshot(t, result.jobId!);
+
+  vi.setSystemTime(Date.now() + ACCOUNT_RESTORE_WINDOW_MS + 1);
+
+  await finishDeletionPurge(t, result.jobId!);
+
+  const artifacts = await getAccountDeletionArtifacts(t, viewerId);
+  expect(artifacts.viewer).toBeNull();
+  expect(artifacts.routines).toHaveLength(0);
+  expect(artifacts.sessions).toHaveLength(0);
+  expect(artifacts.sessionExercises).toHaveLength(0);
+  expect(artifacts.exercises).toHaveLength(0);
+  expect(artifacts.profiles).toHaveLength(0);
+  expect(artifacts.measurements).toHaveLength(0);
+  expect(artifacts.jobs[0]).toMatchObject({
+    _id: result.jobId,
+    purgeStatus: "purged",
+  });
+  expect(artifacts.jobs[0]?.purgedAt).toBeTypeOf("number");
+  expect(artifacts.chunks).toHaveLength(0);
+});
+
+test("restored accounts are never purged", async () => {
+  const { authed, t } = createAuthedTest();
+  const { viewerId } = await seedAccountData(authed);
+
+  const result = await authed.action(api.auth.deleteMyAccount, {});
+  expect(result.jobId).not.toBeNull();
+  await finishDeletionSnapshot(t, result.jobId!);
+  await authed.mutation(api.auth.restoreDeletedAccount, {});
+
+  vi.setSystemTime(Date.now() + ACCOUNT_RESTORE_WINDOW_MS + 1);
+
+  const purgeResult = await finishDeletionPurge(t, result.jobId!);
+  expect(purgeResult).toMatchObject({ status: "canceled" });
+
+  const artifacts = await getAccountDeletionArtifacts(t, viewerId);
+  expect(artifacts.viewer).toMatchObject({
+    _id: viewerId,
+    accountStatus: "active",
+  });
+  expect(artifacts.routines.length).toBeGreaterThan(0);
+  expect(artifacts.jobs[0]).toMatchObject({
+    purgeStatus: "canceled",
+    restorationStatus: "restored",
+  });
+});
+
+test("duplicate active users fail closed until the repair migration runs", async () => {
+  const { authed, t } = createAuthedTest();
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      tokenIdentifier: "https://clerk.test|clerk_user_1",
+      clerkUserId: "legacy_duplicate_old",
+      accountStatus: "active",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await ctx.db.insert("users", {
+      tokenIdentifier: "https://clerk.test|clerk_user_1",
+      clerkUserId: "legacy_duplicate_new",
+      accountStatus: "active",
+      createdAt: 2,
+      updatedAt: 2,
+    });
+  });
+
+  await expect(authed.query(api.auth.getViewer, {})).rejects.toThrow(
+    "Duplicate active users found for identity https://clerk.test|clerk_user_1.",
+  );
+
+  await t.run(async (ctx) => {
+    await runToCompletion(
+      ctx,
+      components.migrations,
+      internal.migrations.repairDuplicateActiveUsers,
+    );
+  });
+
+  const viewer = await authed.query(api.auth.getViewer, {});
+  expect(viewer).toMatchObject({
+    clerkUserId: "legacy_duplicate_new",
+    accountStatus: "active",
+  });
+
+  await t.run(async (ctx) => {
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", "https://clerk.test|clerk_user_1"),
+      )
+      .collect();
+    const activeUsers = users.filter((user) => user.accountStatus === "active");
+    const deletedUsers = users.filter((user) => user.accountStatus === "deleted");
+
+    expect(activeUsers).toHaveLength(1);
+    expect(activeUsers[0]?.clerkUserId).toBe("legacy_duplicate_new");
+    expect(deletedUsers).toHaveLength(1);
+    expect(deletedUsers[0]?.restoreDecision).toBe("declined");
   });
 });

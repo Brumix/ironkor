@@ -14,6 +14,7 @@ export interface ExerciseCatalogRecord {
   primaryMuscle: MuscleType;
   muscleGroups: MuscleType[];
   description?: string;
+  archivedAt?: number;
   nameText: string;
   musclesText: string;
   isCustom: boolean;
@@ -45,6 +46,7 @@ export interface RoutineSectionRecord {
   _id: Id<"routineSessions">;
   name: string;
   order: number;
+  exerciseCount: number;
   exercises: RoutineSectionExerciseRecord[];
 }
 

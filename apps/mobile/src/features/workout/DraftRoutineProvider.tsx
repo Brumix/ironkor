@@ -1,10 +1,22 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import {
+  cloneDraftRoutine,
+  createDraftRoutineFromRoutine,
+} from "@/features/workout/mappers";
 import type {
   DraftRoutine,
   DraftWeeklyPlanEntry,
   ExerciseCatalog,
   ExerciseProgrammingFields,
+  RoutineDetailed,
 } from "@/features/workout/types";
 
 import type { ReactNode } from "react";
@@ -65,12 +77,15 @@ function areWeeklyPlansEqual(left: DraftWeeklyPlanEntry[], right: DraftWeeklyPla
   );
 }
 
-function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
+function areDraftRoutinesEqual(
+  left: DraftRoutine | null,
+  right: DraftRoutine,
+) {
   const next = left ?? createDefaultDraftRoutine();
   const nextSessions = sortByOrder(next.sessions);
   const baselineSessions = sortByOrder(right.sessions);
 
-  if (next.name !== right.name) {
+  if (next.routineId !== right.routineId || next.name !== right.name) {
     return false;
   }
 
@@ -84,7 +99,12 @@ function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
 
   for (const [sessionIndex, session] of nextSessions.entries()) {
     const baselineSession = baselineSessions[sessionIndex];
-    if (session.name !== baselineSession.name || session.order !== baselineSession.order) {
+    if (
+      session.key !== baselineSession.key ||
+      session.sessionId !== baselineSession.sessionId ||
+      session.name !== baselineSession.name ||
+      session.order !== baselineSession.order
+    ) {
       return false;
     }
 
@@ -99,15 +119,17 @@ function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
       const baselineExercise = baselineExercises[exerciseIndex];
       if (
         !(
-        exercise.order === baselineExercise.order &&
-        exercise.exerciseId === baselineExercise.exerciseId &&
-        exercise.sets === baselineExercise.sets &&
-        exercise.repsText === baselineExercise.repsText &&
-        exercise.targetWeightKg === baselineExercise.targetWeightKg &&
-        exercise.restSeconds === baselineExercise.restSeconds &&
-        exercise.notes === baselineExercise.notes &&
-        exercise.tempo === baselineExercise.tempo &&
-        exercise.rir === baselineExercise.rir
+          exercise.key === baselineExercise.key &&
+          exercise.sessionExerciseId === baselineExercise.sessionExerciseId &&
+          exercise.order === baselineExercise.order &&
+          exercise.exerciseId === baselineExercise.exerciseId &&
+          exercise.sets === baselineExercise.sets &&
+          exercise.repsText === baselineExercise.repsText &&
+          exercise.targetWeightKg === baselineExercise.targetWeightKg &&
+          exercise.restSeconds === baselineExercise.restSeconds &&
+          exercise.notes === baselineExercise.notes &&
+          exercise.tempo === baselineExercise.tempo &&
+          exercise.rir === baselineExercise.rir
         )
       ) {
         return false;
@@ -120,10 +142,13 @@ function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
 
 interface DraftRoutineContextValue {
   draft: DraftRoutine | null;
+  currentRoutineId: string | null;
   hasChanges: boolean;
   hasPendingRoutineChanges: (routineId: string) => boolean;
   ensureDraft: () => void;
+  hydrateRoutine: (routine: RoutineDetailed, options?: { force?: boolean }) => void;
   clearDraft: () => void;
+  resetDraft: () => void;
   markPendingRoutineChanges: (routineId: string) => void;
   clearPendingRoutineChanges: (routineId: string) => void;
   setRoutineName: (name: string) => void;
@@ -153,17 +178,54 @@ const DraftRoutineContext = createContext<DraftRoutineContextValue | null>(null)
 
 export function DraftRoutineProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<DraftRoutine | null>(null);
+  const [baseline, setBaseline] = useState<DraftRoutine | null>(null);
+  const [currentRoutineId, setCurrentRoutineId] = useState<string | null>(null);
   const [pendingRoutineIds, setPendingRoutineIds] = useState<string[]>([]);
   const sessionCounter = useRef(0);
   const exerciseCounter = useRef(0);
 
   const ensureDraft = useCallback(() => {
-    setDraft((current) => current ?? createDefaultDraftRoutine());
-  }, []);
+    setCurrentRoutineId("new");
+    setBaseline(null);
+    setDraft((current) => {
+      if (current && currentRoutineId === "new") {
+        return current;
+      }
+      return createDefaultDraftRoutine();
+    });
+  }, [currentRoutineId]);
+
+  const hydrateRoutine = useCallback((
+    routine: RoutineDetailed,
+    options?: { force?: boolean },
+  ) => {
+    const nextDraft = createDraftRoutineFromRoutine(routine);
+    const nextRoutineId = String(routine._id);
+
+    setBaseline(nextDraft);
+    setCurrentRoutineId(nextRoutineId);
+    setDraft((current) => {
+      if (!options?.force && current && currentRoutineId === nextRoutineId) {
+        return current;
+      }
+      return cloneDraftRoutine(nextDraft);
+    });
+  }, [currentRoutineId]);
 
   const clearDraft = useCallback(() => {
     setDraft(null);
+    setBaseline(null);
+    setCurrentRoutineId(null);
   }, []);
+
+  const resetDraft = useCallback(() => {
+    if (baseline) {
+      setDraft(cloneDraftRoutine(baseline));
+      return;
+    }
+
+    setDraft(createDefaultDraftRoutine());
+  }, [baseline]);
 
   const markPendingRoutineChanges = useCallback((routineId: string) => {
     setPendingRoutineIds((current) => (current.includes(routineId) ? current : [...current, routineId]));
@@ -180,10 +242,12 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
 
   const updateDraft = useCallback((updater: (current: DraftRoutine) => DraftRoutine) => {
     setDraft((current) => {
-      const base = current ?? createDefaultDraftRoutine();
+      const base =
+        current ??
+        (baseline ? cloneDraftRoutine(baseline) : createDefaultDraftRoutine());
       return updater(base);
     });
-  }, []);
+  }, [baseline]);
 
   const setRoutineName = useCallback((name: string) => {
     updateDraft((current) => ({
@@ -453,17 +517,23 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     }));
   }, [updateDraft]);
 
-  const hasChanges = useMemo(
-    () => !areDraftRoutinesEqual(draft, createDefaultDraftRoutine()),
-    [draft],
-  );
+  const hasChanges = useMemo(() => {
+    if (currentRoutineId && currentRoutineId !== "new" && baseline) {
+      return !areDraftRoutinesEqual(draft, baseline);
+    }
+
+    return !areDraftRoutinesEqual(draft, createDefaultDraftRoutine());
+  }, [baseline, currentRoutineId, draft]);
 
   const value = useMemo<DraftRoutineContextValue>(() => ({
     draft,
+    currentRoutineId,
     hasChanges,
     hasPendingRoutineChanges,
     ensureDraft,
+    hydrateRoutine,
     clearDraft,
+    resetDraft,
     markPendingRoutineChanges,
     clearPendingRoutineChanges,
     setRoutineName,
@@ -483,10 +553,12 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     addSession,
     clearDraft,
     clearPendingRoutineChanges,
+    currentRoutineId,
     draft,
     ensureDraft,
     hasChanges,
     hasPendingRoutineChanges,
+    hydrateRoutine,
     markPendingRoutineChanges,
     moveExercise,
     moveSession,
@@ -494,6 +566,7 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     reorderSessions,
     removeExercise,
     removeSession,
+    resetDraft,
     setRoutineName,
     setWeeklyPlan,
     updateExerciseProgramming,

@@ -60,6 +60,7 @@ export async function upsertSessionHandler(
     name,
     nameKey,
     order: nextOrder,
+    exerciseCount: 0,
     updatedAt: Date.now(),
   });
 

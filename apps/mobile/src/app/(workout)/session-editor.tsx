@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -43,7 +43,6 @@ import {
   type MuscleType,
 } from "@ironkor/shared/constants";
 import { MAX_EXERCISES_PER_SESSION } from "@ironkor/shared/routines";
-import { normalizeDisplayNameKey } from "@ironkor/shared/strings";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
@@ -56,13 +55,15 @@ import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingFor
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import {
+  createProgrammingDraftFromExercise,
+  normalizeProgrammingDraftForSave,
+} from "@/features/workout/mappers";
+import {
   createProgrammingDraft,
   formatProgrammingSummary,
-  parseOptionalNumber,
   type ProgrammingDraft,
-  type ProgrammingSource,
 } from "@/features/workout/programmingDraft";
-import type { DraftRoutine, RoutineSection } from "@/features/workout/types";
+import type { DraftSessionExercise, RoutineSection } from "@/features/workout/types";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { tokens, useTheme } from "@/theme";
 
@@ -95,18 +96,6 @@ function scheduleScrollToEndForNotes(scrollRef: RefObject<ScrollView | null>) {
   }
 }
 
-function resolveErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  return fallback;
-}
-
 function renderMuscleLabel(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -134,6 +123,8 @@ export default function SessionEditorScreen() {
   const { showAlert, AlertModal } = useAppAlert();
   const {
     draft,
+    currentRoutineId,
+    hydrateRoutine,
     updateSessionName: updateDraftSessionName,
     addOrReplaceExercise,
     updateExerciseProgramming: updateDraftExerciseProgramming,
@@ -175,14 +166,6 @@ export default function SessionEditorScreen() {
       : "skip",
   );
 
-  const upsertSession = useMutation(api.routines.upsertSession);
-  const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
-  const updateSessionExerciseProgramming = useMutation(
-    api.routines.updateSessionExerciseProgramming,
-  );
-  const deleteSessionExercise = useMutation(api.routines.deleteSessionExercise);
-  const reorderSessionExercises = useMutation(api.routines.reorderSessionExercises);
-
   const staleExercisesRef = useRef<typeof exercisesData>([]);
   if (exercisesData !== undefined) {
     staleExercisesRef.current = exercisesData;
@@ -207,6 +190,19 @@ export default function SessionEditorScreen() {
     }
   }, [isDraftMode, router, selectedRoutine]);
 
+  useEffect(() => {
+    if (isDraftMode || selectedRoutine === undefined || selectedRoutine === null) {
+      return;
+    }
+
+    const routineId = String(selectedRoutine._id);
+    if (currentRoutineId === routineId && draft) {
+      return;
+    }
+
+    hydrateRoutine(selectedRoutine);
+  }, [currentRoutineId, draft, hydrateRoutine, isDraftMode, selectedRoutine]);
+
   const selectedSession = useMemo(
     () =>
       selectedRoutine?.sessions.find(
@@ -218,12 +214,13 @@ export default function SessionEditorScreen() {
   const selectedDraftSession = useMemo(
     () =>
       draft?.sessions.find(
-        (session: DraftRoutine["sessions"][number]) => session.key === draftSessionKey,
+        (session) =>
+          session.key === draftSessionKey ||
+          (sessionIdParam.length > 0 && String(session.sessionId) === sessionIdParam),
       ) ?? null,
-    [draft?.sessions, draftSessionKey],
+    [draft?.sessions, draftSessionKey, sessionIdParam],
   );
 
-  const [sectionDraftName, setSectionDraftName] = useState("");
   const [programmingFormMountKey, setProgrammingFormMountKey] = useState(0);
   const [programmingEditorVisible, setProgrammingEditorVisible] = useState(false);
   const [exerciseOrderKeys, setExerciseOrderKeys] = useState<string[]>([]);
@@ -264,15 +261,6 @@ export default function SessionEditorScreen() {
       setSelectedBodyPart(nextBodyPart);
     }
   }, []);
-
-  useEffect(() => {
-    const nextSession = isDraftMode ? selectedDraftSession : selectedSession;
-    if (!nextSession) {
-      return;
-    }
-
-    setSectionDraftName(nextSession.name);
-  }, [isDraftMode, selectedDraftSession, selectedSession]);
 
   useEffect(() => {
     if (!exercisePickerVisible || !availableFilterOptions) {
@@ -319,9 +307,11 @@ export default function SessionEditorScreen() {
 
   const openProgrammingEditor = useCallback((
     sessionExerciseId: string,
-    _entry?: ProgrammingSource,
+    entry?: DraftSessionExercise,
   ) => {
-    const nextDraft = createProgrammingDraft();
+    const nextDraft = entry
+      ? createProgrammingDraftFromExercise(entry)
+      : createProgrammingDraft();
     setEditingSessionExerciseId(sessionExerciseId);
     setProgrammingDraft(nextDraft);
     setInitialProgrammingDraft(nextDraft);
@@ -385,8 +375,8 @@ export default function SessionEditorScreen() {
   }
 
   const currentExercises = useMemo(
-    () => (isDraftMode ? selectedDraftSession?.exercises ?? [] : selectedSession?.exercises ?? []),
-    [isDraftMode, selectedDraftSession?.exercises, selectedSession?.exercises],
+    () => selectedDraftSession?.exercises ?? [],
+    [selectedDraftSession?.exercises],
   );
   const isAtExerciseLimit = currentExercises.length >= MAX_EXERCISES_PER_SESSION;
   const sortedCurrentExercises = useMemo(
@@ -394,8 +384,7 @@ export default function SessionEditorScreen() {
     [currentExercises],
   );
   const resolveExerciseKey = useCallback(
-    (entry: (typeof sortedCurrentExercises)[number]) =>
-      "key" in entry ? entry.key : String(entry._id),
+    (entry: (typeof sortedCurrentExercises)[number]) => entry.key,
     [],
   );
   const exerciseByKey = useMemo(
@@ -425,63 +414,21 @@ export default function SessionEditorScreen() {
     setExerciseOrderKeys(sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)));
   }, [resolveExerciseKey, sortedCurrentExercises]);
 
-  const applyExerciseOrder = useCallback(
-    async (orderedKeys: string[]) => {
-      if (isDraftMode) {
-        if (!selectedDraftSession) {
-          return;
-        }
+  const applyExerciseOrder = useCallback((orderedKeys: string[]) => {
+    if (!selectedDraftSession) {
+      return;
+    }
 
-        reorderDraftExercises(selectedDraftSession.key, orderedKeys);
-        return;
-      }
-
-      if (!selectedSession) {
-        return;
-      }
-
-      const idByKey = new Map(
-        sortedCurrentExercises.map((entry) => [
-          resolveExerciseKey(entry),
-          "key" in entry ? null : entry._id,
-        ]),
-      );
-      const orderedSessionExerciseIds = orderedKeys
-        .map((key) => idByKey.get(key))
-        .filter((id): id is Id<"sessionExercises"> => Boolean(id));
-
-      if (orderedSessionExerciseIds.length !== sortedCurrentExercises.length) {
-        return;
-      }
-
-      await reorderSessionExercises({
-        sessionId: selectedSession._id,
-        orderedSessionExerciseIds,
-      });
-    },
-    [
-      isDraftMode,
-      reorderDraftExercises,
-      reorderSessionExercises,
-      resolveExerciseKey,
-      selectedDraftSession,
-      selectedSession,
-      sortedCurrentExercises,
-    ],
-  );
+    reorderDraftExercises(selectedDraftSession.key, orderedKeys);
+  }, [reorderDraftExercises, selectedDraftSession]);
 
   const handleExerciseDragEnd = useCallback(
     ({ data }: DragEndParams<{ key: string; entry: (typeof sortedCurrentExercises)[number] }>) => {
       const orderedKeys = data.map((item) => item.key);
       setExerciseOrderKeys(orderedKeys);
-      applyExerciseOrder(orderedKeys).catch(() => {
-        showAlert({ title: "Failed", message: "Could not reorder exercises.", variant: "error" });
-        setExerciseOrderKeys(
-          sortedCurrentExercises.map((entry) => resolveExerciseKey(entry)),
-        );
-      });
+      applyExerciseOrder(orderedKeys);
     },
-    [applyExerciseOrder, resolveExerciseKey, showAlert, sortedCurrentExercises],
+    [applyExerciseOrder],
   );
 
   const styles = useMemo(
@@ -780,21 +727,11 @@ export default function SessionEditorScreen() {
                 accessibilityLabel={`Delete ${entry.exercise.name}`}
                 icon={<Ionicons color={theme.colors.error} name="trash-outline" size={16} />}
                 onPress={() => {
-                  if (isDraftMode && selectedDraftSession) {
-                    removeDraftExercise(selectedDraftSession.key, exerciseKey);
+                  if (!selectedDraftSession) {
                     return;
                   }
 
-                  if (!selectedSession || "key" in entry) {
-                    return;
-                  }
-
-                  deleteSessionExercise({
-                    sessionId: selectedSession._id,
-                    sessionExerciseId: entry._id,
-                  }).catch(() => {
-                    showAlert({ title: "Failed", message: "Could not remove exercise.", variant: "error" });
-                  });
+                  removeDraftExercise(selectedDraftSession.key, exerciseKey);
                 }}
                 size="sm"
                 variant="danger"
@@ -805,13 +742,9 @@ export default function SessionEditorScreen() {
       );
     },
     [
-      deleteSessionExercise,
-      isDraftMode,
       openProgrammingEditor,
       removeDraftExercise,
       selectedDraftSession,
-      selectedSession,
-      showAlert,
       styles,
       theme.colors.accent,
       theme.colors.error,
@@ -852,6 +785,7 @@ export default function SessionEditorScreen() {
 
   if (
     (isDraftMode && !selectedDraftSession) ||
+    (!isDraftMode && selectedRoutine && selectedSession && !selectedDraftSession) ||
     (!isDraftMode && (!selectedRoutine || !selectedSession))
   ) {
     return (
@@ -877,50 +811,15 @@ export default function SessionEditorScreen() {
       <Text style={styles.fieldLabel}>Section name</Text>
       <TextInput
         style={styles.input}
-        value={sectionDraftName}
+        value={selectedDraftSession?.name ?? selectedSession?.name ?? ""}
         onChangeText={(value) => {
-          setSectionDraftName(value);
-
-          if (isDraftMode && selectedDraftSession) {
+          if (selectedDraftSession) {
             updateDraftSessionName(selectedDraftSession.key, value);
           }
         }}
         placeholder="Section name"
         placeholderTextColor={theme.colors.textSubtle}
       />
-
-      {!isDraftMode && selectedRoutine && selectedSession ? (
-        <Pressable
-          style={styles.primaryButton}
-          onPress={async () => {
-            const nextSectionName = sectionDraftName.trim() || selectedSession.name;
-            const normalizedSectionName = normalizeDisplayNameKey(nextSectionName);
-            const duplicateSection = selectedRoutine.sessions.some((session: RoutineSection) => {
-              if (session._id === selectedSession._id) {
-                return false;
-              }
-              return normalizeDisplayNameKey(session.name) === normalizedSectionName;
-            });
-
-            if (duplicateSection) {
-              showAlert({ title: "Duplicate section name", message: "This routine already has a section with this name.", variant: "warning" });
-              return;
-            }
-
-            try {
-              await upsertSession({
-                routineId: selectedRoutine._id,
-                sessionId: selectedSession._id,
-                name: nextSectionName,
-              });
-            } catch (error) {
-              showAlert({ title: "Failed", message: resolveErrorMessage(error, "Could not save section name."), variant: "error" });
-            }
-          }}
-        >
-          <Text style={styles.primaryButtonText}>Save section name</Text>
-        </Pressable>
-      ) : null}
 
       <View style={styles.subHeaderRow}>
         <Text style={styles.subHeader}>Exercises</Text>
@@ -1054,7 +953,7 @@ export default function SessionEditorScreen() {
                 renderItem={({ item: exercise }) => (
                   <Pressable
                     style={styles.libraryRow}
-                    onPress={async () => {
+                    onPress={() => {
                       if (replaceSessionExerciseId === null && isAtExerciseLimit) {
                         showAlert({
                           title: "Exercise limit reached",
@@ -1064,53 +963,30 @@ export default function SessionEditorScreen() {
                         return;
                       }
 
-                      if (isDraftMode && selectedDraftSession) {
-                        const currentEntry =
-                          replaceSessionExerciseId !== null
-                            ? selectedDraftSession.exercises.find(
-                                (entry) => entry.key === replaceSessionExerciseId,
-                              )
-                            : undefined;
-
-                        const sessionExerciseId = addOrReplaceExercise(
-                          selectedDraftSession.key,
-                          exercise,
-                          undefined,
-                          replaceSessionExerciseId ?? undefined,
-                        );
-
-                        if (!sessionExerciseId) {
-                          return;
-                        }
-
-                        closeExercisePicker();
-                        openProgrammingEditor(sessionExerciseId, currentEntry);
-                        return;
-                      }
-
-                      if (!selectedSession) {
+                      if (!selectedDraftSession) {
                         return;
                       }
 
                       const currentEntry =
                         replaceSessionExerciseId !== null
-                          ? selectedSession.exercises.find(
-                              (entry: RoutineSection["exercises"][number]) =>
-                                String(entry._id) === replaceSessionExerciseId,
+                          ? selectedDraftSession.exercises.find(
+                              (entry) => entry.key === replaceSessionExerciseId,
                             )
                           : undefined;
 
-                      const sessionExerciseId = await upsertSessionExercise({
-                        sessionId: selectedSession._id,
-                        sessionExerciseId:
-                          replaceSessionExerciseId !== null
-                            ? (replaceSessionExerciseId as Id<"sessionExercises">)
-                            : undefined,
-                        exerciseId: exercise._id,
-                      });
+                      const sessionExerciseId = addOrReplaceExercise(
+                        selectedDraftSession.key,
+                        exercise,
+                        undefined,
+                        replaceSessionExerciseId ?? undefined,
+                      );
+
+                      if (!sessionExerciseId) {
+                        return;
+                      }
 
                       closeExercisePicker();
-                      openProgrammingEditor(String(sessionExerciseId), currentEntry);
+                      openProgrammingEditor(sessionExerciseId, currentEntry);
                     }}
                   >
                     <Text style={styles.sectionName}>{exercise.name}</Text>
@@ -1140,9 +1016,7 @@ export default function SessionEditorScreen() {
                     pathname: "/(workout)/custom-exercise",
                     params: {
                       routineId: routineIdParam,
-                      ...(isDraftMode
-                        ? { draftSessionKey }
-                        : { sessionId: sessionIdParam }),
+                      draftSessionKey: selectedDraftSession?.key ?? draftSessionKey,
                       ...(replaceSessionExerciseId
                         ? { replaceSessionExerciseId }
                         : {}),
@@ -1198,34 +1072,16 @@ export default function SessionEditorScreen() {
 
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={async () => {
-                    if (!editingSessionExerciseId) {
+                  onPress={() => {
+                    if (!editingSessionExerciseId || !selectedDraftSession) {
                       return;
                     }
 
-                    if (isDraftMode && selectedDraftSession) {
-                      updateDraftExerciseProgramming(selectedDraftSession.key, editingSessionExerciseId, {
-                        sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
-                        repsText: programmingDraft.repsText.trim() || "8-12",
-                        targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
-                        restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
-                        notes: programmingDraft.notes,
-                        tempo: programmingDraft.tempo,
-                        rir: parseOptionalNumber(programmingDraft.rir),
-                      });
-                    } else if (selectedSession) {
-                      await updateSessionExerciseProgramming({
-                        sessionId: selectedSession._id,
-                        sessionExerciseId: editingSessionExerciseId as Id<"sessionExercises">,
-                        sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
-                        repsText: programmingDraft.repsText.trim() || "8-12",
-                        targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
-                        restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
-                        notes: programmingDraft.notes,
-                        tempo: programmingDraft.tempo,
-                        rir: parseOptionalNumber(programmingDraft.rir),
-                      });
-                    }
+                    updateDraftExerciseProgramming(
+                      selectedDraftSession.key,
+                      editingSessionExerciseId,
+                      normalizeProgrammingDraftForSave(programmingDraft),
+                    );
 
                     closeProgrammingEditor();
                   }}

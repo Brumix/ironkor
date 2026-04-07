@@ -1,11 +1,6 @@
 export type HybridSignInOrigin = "local-credentials" | "password" | null;
 export type LocalCredentialBiometricType = "face-recognition" | "fingerprint";
 
-export interface PasswordCredentials {
-  identifier: string;
-  password: string;
-}
-
 export interface HybridSignInResult {
   createdSessionId?: string | null;
   status: string;
@@ -13,10 +8,6 @@ export interface HybridSignInResult {
     emailAddressId?: string;
     strategy: string;
   }[];
-}
-
-export interface LocalCredentialsManager {
-  setCredentials: (credentials: PasswordCredentials) => Promise<void>;
 }
 
 export type HybridSignInStep =
@@ -106,30 +97,10 @@ export function resolveHybridSignInStep(
 
 export async function completeHybridSignIn({
   activateSession,
-  localCredentials,
-  passwordCredentials,
   sessionId,
-  signInOrigin,
 }: {
   activateSession: (sessionId: string) => Promise<void>;
-  localCredentials?: LocalCredentialsManager | null;
-  passwordCredentials: PasswordCredentials | null;
   sessionId: string;
-  signInOrigin: HybridSignInOrigin;
 }) {
   await activateSession(sessionId);
-
-  if (
-    signInOrigin !== "password" ||
-    !passwordCredentials ||
-    !localCredentials
-  ) {
-    return;
-  }
-
-  try {
-    await localCredentials.setCredentials(passwordCredentials);
-  } catch {
-    // Local credential storage is additive; a completed sign-in should still succeed.
-  }
 }

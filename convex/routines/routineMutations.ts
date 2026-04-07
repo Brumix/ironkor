@@ -5,6 +5,7 @@ import {
   assert,
   ensureUniqueRoutineName,
   generateDefaultWeeklyPlan,
+  getSessionExercisesBySession,
   getSessionsByRoutine,
   normalizeDaysPerWeek,
   requireName,
@@ -89,12 +90,11 @@ export async function deleteRoutineHandler(
 
   const sessions = await getSessionsByRoutine(ctx, args.routineId, viewer._id);
   for (const session of sessions) {
-    const sessionExerciseList = await ctx.db
-      .query("sessionExercises")
-      .withIndex("by_userId_and_session", (q) =>
-        q.eq("userId", viewer._id).eq("sessionId", session._id),
-      )
-      .collect();
+    const sessionExerciseList = await getSessionExercisesBySession(
+      ctx,
+      session._id,
+      viewer._id,
+    );
     for (const sessionExercise of sessionExerciseList) {
       await ctx.db.delete(sessionExercise._id);
     }

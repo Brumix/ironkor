@@ -282,3 +282,144 @@ test("createCustom enforces length bounds", async () => {
     }),
   ).rejects.toThrow("Exercise description must be 2000 characters or fewer.");
 });
+
+test("getCustomById resolves exercises outside the default list limit and hides archived ones", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  let targetExerciseId: Id<"exercises"> | null = null;
+  for (let index = 0; index < 101; index += 1) {
+    const exerciseId = await authed.mutation(api.exercises.createCustom, {
+      name: `Custom Exercise ${String(index).padStart(3, "0")}`,
+      bodyPart: "chest",
+      equipment: "cable",
+      primaryMuscle: "pectorals",
+      muscleGroups: ["pectorals"],
+    });
+    if (index === 100) {
+      targetExerciseId = exerciseId;
+    }
+  }
+
+  expect(targetExerciseId).not.toBeNull();
+
+  const firstPage = await authed.query(api.exercises.listCustom, {});
+  expect(firstPage).toHaveLength(100);
+  expect(firstPage.some((exercise) => exercise._id === targetExerciseId)).toBe(false);
+
+  const resolved = await authed.query(api.exercises.getCustomById, {
+    exerciseId: targetExerciseId!,
+  });
+  expect(resolved).toMatchObject({
+    _id: targetExerciseId,
+    name: "Custom Exercise 100",
+  });
+
+  await authed.mutation(api.exercises.archiveCustom, {
+    exerciseId: targetExerciseId!,
+  });
+
+  expect(
+    await authed.query(api.exercises.getCustomById, {
+      exerciseId: targetExerciseId!,
+    }),
+  ).toBeNull();
+
+  const listAfterArchive = await authed.query(api.exercises.listCustom, { limit: 200 });
+  expect(listAfterArchive.some((exercise) => exercise._id === targetExerciseId)).toBe(false);
+});
+
+test("archived custom exercises disappear from catalog queries but still resolve in existing sessions", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  const exerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Archive Me",
+    bodyPart: "back",
+    equipment: "cable",
+    primaryMuscle: "lats",
+    muscleGroups: ["lats"],
+  });
+  const routineId = await authed.mutation(api.routines.create, {
+    name: "Archive Routine",
+    daysPerWeek: 3,
+    isActive: true,
+  });
+  const sessionId = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "Archive Session",
+  });
+  await authed.mutation(api.routines.upsertSessionExercise, {
+    sessionId,
+    exerciseId,
+    sets: 3,
+    repsText: "8-10",
+  });
+
+  await authed.mutation(api.exercises.archiveCustom, { exerciseId });
+
+  const preview = await authed.query(api.exercises.listPreview, {
+    isCustom: true,
+    limit: 50,
+  });
+  expect(preview.some((exercise) => exercise._id === exerciseId)).toBe(false);
+
+  const detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail?.sessions[0]?.exercises[0]?.exercise).toMatchObject({
+    _id: exerciseId,
+    name: "Archive Me",
+    archivedAt: expect.any(Number),
+  });
+});
+
+test("createAndAttachCustom rolls back the custom exercise when the section replacement is invalid", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  const routineId = await authed.mutation(api.routines.create, {
+    name: "Atomic Custom Attach",
+    daysPerWeek: 3,
+    isActive: true,
+  });
+  const sessionA = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "Session A",
+  });
+  const sessionB = await authed.mutation(api.routines.upsertSession, {
+    routineId,
+    name: "Session B",
+  });
+  const baseExerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Existing Exercise",
+    bodyPart: "chest",
+    equipment: "barbell",
+    primaryMuscle: "pectorals",
+    muscleGroups: ["pectorals"],
+  });
+  const sessionExerciseId = await authed.mutation(api.routines.upsertSessionExercise, {
+    sessionId: sessionB,
+    exerciseId: baseExerciseId,
+    sets: 3,
+    repsText: "8",
+  });
+
+  await expect(
+    authed.mutation(api.exercises.createAndAttachCustom, {
+      sessionId: sessionA,
+      replaceSessionExerciseId: sessionExerciseId,
+      name: "Should Roll Back",
+      bodyPart: "back",
+      equipment: "cable",
+      primaryMuscle: "lats",
+      muscleGroups: ["lats"],
+      sets: 4,
+      repsText: "10",
+    }),
+  ).rejects.toThrow("Section exercise does not belong to section.");
+
+  const customExercises = await authed.query(api.exercises.listCustom, { limit: 50 });
+  expect(customExercises.some((exercise) => exercise.name === "Should Roll Back")).toBe(false);
+
+  const detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail?.sessions.map((session) => session.exerciseCount)).toEqual([0, 1]);
+});

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { normalizeExerciseCatalog } from "@convex/exerciseCatalog";
 import { useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -23,9 +23,10 @@ import ExerciseProgrammingForm from "@/components/workout/ExerciseProgrammingFor
 import WorkoutPage from "@/components/workout/WorkoutPage";
 import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import {
-  createProgrammingDraft,
-  parseOptionalNumber,
-} from "@/features/workout/programmingDraft";
+  createProgrammingDraftFromExercise,
+  normalizeProgrammingDraftForSave,
+} from "@/features/workout/mappers";
+import { createProgrammingDraft } from "@/features/workout/programmingDraft";
 import type { ExerciseCatalog } from "@/features/workout/types";
 import { useTheme } from "@/theme";
 
@@ -76,11 +77,10 @@ export default function CustomExerciseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { showAlert, AlertModal } = useAppAlert();
-  const { addOrReplaceExercise } = useDraftRoutine();
+  const { draft, addOrReplaceExercise } = useDraftRoutine();
 
   const createCustomExercise = useMutation(api.exercises.createCustom);
   const updateCustomExercise = useMutation(api.exercises.updateCustom);
-  const upsertSessionExercise = useMutation(api.routines.upsertSessionExercise);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [name, setName] = useState("");
@@ -97,62 +97,84 @@ export default function CustomExerciseScreen() {
       : undefined;
   const isEditMode = Boolean(exerciseIdParam);
 
-  const existingExerciseDoc = useQuery(
-    api.exercises.listCustom,
-    exerciseIdParam ? {} : "skip",
+  const exerciseToEdit = useQuery(
+    api.exercises.getCustomById,
+    exerciseIdParam ? { exerciseId: exerciseIdParam } : "skip",
   );
 
-  const exerciseToEdit = useMemo(() => {
-    if (!exerciseIdParam || !existingExerciseDoc) {
-      return null;
-    }
-    return existingExerciseDoc.find((exercise) => exercise._id === exerciseIdParam) ?? null;
-  }, [exerciseIdParam, existingExerciseDoc]);
-
-  useEffect(() => {
-    if (!isEditMode || !exerciseToEdit) {
-      return;
-    }
-    setName(exerciseToEdit.name);
-    setBodyPart(exerciseToEdit.bodyPart);
-    setEquipment(exerciseToEdit.equipment);
-    setPrimaryMuscle(exerciseToEdit.primaryMuscle);
-    setMuscleGroups(exerciseToEdit.muscleGroups);
-    setDescription(exerciseToEdit.description ?? "");
-  }, [exerciseToEdit, isEditMode]);
-
   const routineIdParam = typeof params.routineId === "string" ? params.routineId : "";
-  const sessionIdParam = typeof params.sessionId === "string" ? params.sessionId : "";
   const draftSessionKeyParam =
     typeof params.draftSessionKey === "string" ? params.draftSessionKey : "";
   const replaceSessionExerciseIdParam =
     typeof params.replaceSessionExerciseId === "string"
       ? params.replaceSessionExerciseId
       : undefined;
-  const isDraftMode = routineIdParam === "new";
-
-  /** From session editor: create exercise and attach to section. From My exercises: catalog only. */
-  const addToSession = useMemo(() => {
-    if (isEditMode) {
-      return false;
-    }
-    return (
-      (routineIdParam === "new" && draftSessionKeyParam.length > 0) ||
-      (routineIdParam.length > 0 &&
-        routineIdParam !== "new" &&
-        sessionIdParam.length > 0)
-    );
-  }, [draftSessionKeyParam, isEditMode, routineIdParam, sessionIdParam]);
-
-  const fromManage = useMemo(
-    () => parseFromManageFlag(params.fromManage),
-    [params.fromManage],
+  const selectedDraftSession = useMemo(
+    () => draft?.sessions.find((session) => session.key === draftSessionKeyParam) ?? null,
+    [draft?.sessions, draftSessionKeyParam],
   );
 
-  const isWaitingForData = isEditMode && exerciseIdParam && exerciseToEdit === null && existingExerciseDoc === undefined;
-  const canSubmit = name.trim().length > 0 && !isSubmitting && !isWaitingForData;
+  /** From session editor: create exercise and attach to section. From My exercises: catalog only. */
+  const addToSession = !isEditMode && routineIdParam.length > 0 && draftSessionKeyParam.length > 0;
+  const fromManage = parseFromManageFlag(params.fromManage);
 
-  function resetCreateFormState() {
+  const programmingSourceKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isEditMode || exerciseToEdit === undefined) {
+      return;
+    }
+
+    if (exerciseToEdit === null) {
+      showAlert({
+        title: "Exercise not found",
+        message: "This exercise is no longer available.",
+        variant: "warning",
+      });
+      router.replace(fromManage ? "/(workout)/my-exercises" : "/(workout)/routines");
+      return;
+    }
+
+    setName(exerciseToEdit.name);
+    setBodyPart(exerciseToEdit.bodyPart);
+    setEquipment(exerciseToEdit.equipment);
+    setPrimaryMuscle(exerciseToEdit.primaryMuscle);
+    setMuscleGroups(exerciseToEdit.muscleGroups);
+    setDescription(exerciseToEdit.description ?? "");
+  }, [exerciseToEdit, fromManage, isEditMode, router, showAlert]);
+
+  useEffect(() => {
+    if (!addToSession) {
+      programmingSourceKeyRef.current = null;
+      return;
+    }
+
+    const sourceKey = `${draftSessionKeyParam}:${replaceSessionExerciseIdParam ?? "new"}`;
+    if (programmingSourceKeyRef.current === sourceKey) {
+      return;
+    }
+
+    if (replaceSessionExerciseIdParam && selectedDraftSession === null) {
+      return;
+    }
+
+    const currentEntry =
+      replaceSessionExerciseIdParam && selectedDraftSession
+        ? selectedDraftSession.exercises.find((entry) => entry.key === replaceSessionExerciseIdParam)
+        : undefined;
+
+    programmingSourceKeyRef.current = sourceKey;
+    setProgrammingDraft(
+      currentEntry ? createProgrammingDraftFromExercise(currentEntry) : createProgrammingDraft(),
+    );
+  }, [
+    addToSession,
+    draftSessionKeyParam,
+    replaceSessionExerciseIdParam,
+    selectedDraftSession,
+  ]);
+
+  const resetCreateFormState = useCallback(() => {
     setName("");
     setBodyPart("chest");
     setEquipment("body weight");
@@ -160,24 +182,29 @@ export default function CustomExerciseScreen() {
     setMuscleGroups(["pectorals"]);
     setDescription("");
     setProgrammingDraft(createProgrammingDraft());
-  }
+  }, []);
+
+  const exitCustomExerciseScreen = useCallback(() => {
+    if (!isEditMode) {
+      resetCreateFormState();
+    }
+
+    if (fromManage) {
+      router.replace("/(workout)/my-exercises");
+      return;
+    }
+
+    router.back();
+  }, [fromManage, isEditMode, resetCreateFormState, router]);
+
+  const isWaitingForData = isEditMode && exerciseIdParam !== undefined && exerciseToEdit === undefined;
+  const canSubmit = name.trim().length > 0 && !isSubmitting && !isWaitingForData;
 
   useEffect(() => {
     if (!isEditMode) {
       resetCreateFormState();
     }
-  }, [isEditMode]);
-
-  function exitCustomExerciseScreen() {
-    if (!isEditMode) {
-      resetCreateFormState();
-    }
-    if (fromManage) {
-      router.replace("/(workout)/my-exercises");
-    } else {
-      router.back();
-    }
-  }
+  }, [isEditMode, resetCreateFormState]);
 
   const styles = useMemo(
     () =>
@@ -224,7 +251,6 @@ export default function CustomExerciseScreen() {
     [theme],
   );
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   async function handleSave() {
     if (isSubmitting) {
       return;
@@ -270,18 +296,10 @@ export default function CustomExerciseScreen() {
       return;
     }
 
-    if (isDraftMode && !draftSessionKeyParam) {
+    if (routineIdParam.length > 0 && !draftSessionKeyParam) {
       showAlert({
         title: "Missing draft session",
-        message: "Open this screen from a draft session to add the exercise.",
-        variant: "warning",
-      });
-      return;
-    }
-    if (routineIdParam !== "" && routineIdParam !== "new" && !sessionIdParam) {
-      showAlert({
-        title: "Missing session",
-        message: "Open this screen from a saved session to add the exercise.",
+        message: "Open this screen from a draft section to add the exercise.",
         variant: "warning",
       });
       return;
@@ -304,63 +322,44 @@ export default function CustomExerciseScreen() {
       return;
     }
 
+    if (!selectedDraftSession) {
+      showAlert({
+        title: "Missing draft session",
+        message: "Open this screen from a draft section to add the exercise.",
+        variant: "warning",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const exerciseId = await createCustomExercise(payload);
 
-      if (isDraftMode) {
-        const normalized = normalizeExerciseCatalog({
-          ...payload,
-          isCustom: true,
-        });
+      const normalized = normalizeExerciseCatalog({
+        ...payload,
+        isCustom: true,
+      });
 
-        const draftExercise: ExerciseCatalog = {
-          _id: exerciseId,
-          _creationTime: Date.now(),
-          ...normalized,
-        };
+      const draftExercise: ExerciseCatalog = {
+        _id: exerciseId,
+        _creationTime: Date.now(),
+        ...normalized,
+      };
 
-        addOrReplaceExercise(
-          draftSessionKeyParam,
-          draftExercise,
-          {
-            sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
-            repsText: programmingDraft.repsText.trim() || "8-12",
-            targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
-            restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
-            notes: programmingDraft.notes,
-            tempo: programmingDraft.tempo,
-            rir: parseOptionalNumber(programmingDraft.rir),
-          },
-          replaceSessionExerciseIdParam,
-        );
-      } else {
-        await upsertSessionExercise({
-          sessionId: sessionIdParam as Id<"routineSessions">,
-          sessionExerciseId: replaceSessionExerciseIdParam as Id<"sessionExercises"> | undefined,
-          exerciseId,
-          sets: Math.max(1, Math.floor(Number(programmingDraft.sets) || 3)),
-          repsText: programmingDraft.repsText.trim() || "8-12",
-          targetWeightKg: parseOptionalNumber(programmingDraft.targetWeightKg),
-          restSeconds: parseOptionalNumber(programmingDraft.restSeconds),
-          notes: programmingDraft.notes,
-          tempo: programmingDraft.tempo,
-          rir: parseOptionalNumber(programmingDraft.rir),
-        });
-      }
+      addOrReplaceExercise(
+        selectedDraftSession.key,
+        draftExercise,
+        normalizeProgrammingDraftForSave(programmingDraft),
+        replaceSessionExerciseIdParam,
+      );
 
       resetCreateFormState();
       router.replace({
         pathname: "/(workout)/session-editor",
-        params: isDraftMode
-          ? {
-              routineId: "new",
-              draftSessionKey: draftSessionKeyParam,
-            }
-          : {
-              routineId: routineIdParam,
-              sessionId: sessionIdParam,
-            },
+        params: {
+          routineId: routineIdParam,
+          draftSessionKey: draftSessionKeyParam,
+        },
       });
     } catch (error) {
       showAlert({

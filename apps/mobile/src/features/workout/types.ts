@@ -1,3 +1,6 @@
+import type { RoutineSaveInput } from "@ironkor/shared/routines";
+
+import type { Id } from "@convex/_generated/dataModel";
 import type {
   ExerciseCatalogRecord,
   RoutineDetailedRecord,
@@ -15,6 +18,7 @@ export type ExerciseProgrammingFields = Pick<
 
 export interface DraftSessionExercise extends ExerciseProgrammingFields {
   key: string;
+  sessionExerciseId?: Id<"sessionExercises">;
   exerciseId: ExerciseCatalog["_id"];
   order: number;
   exercise: ExerciseCatalog;
@@ -22,6 +26,7 @@ export interface DraftSessionExercise extends ExerciseProgrammingFields {
 
 export interface DraftSession {
   key: string;
+  sessionId?: Id<"routineSessions">;
   name: string;
   order: number;
   exercises: DraftSessionExercise[];
@@ -33,10 +38,18 @@ export interface DraftWeeklyPlanEntry {
 }
 
 export interface DraftRoutine {
+  routineId?: Id<"routines">;
   name: string;
   sessions: DraftSession[];
   weeklyPlan: DraftWeeklyPlanEntry[];
 }
+
+export type RoutineSaveDraft = RoutineSaveInput<
+  Id<"routines">,
+  Id<"routineSessions">,
+  Id<"exercises">,
+  Id<"sessionExercises">
+>;
 
 export interface ExerciseLookupItem {
   id: string;

@@ -16,9 +16,12 @@ import { mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import {
   requireCustomExerciseOwner,
+  requireSessionExerciseOwner,
+  requireSessionOwner,
   requireViewer,
 } from "./authHelpers";
 import { normalizeExerciseCatalog, normalizeNameText } from "./exerciseCatalog";
+import { buildProgrammingRecord, MAX_EXERCISES_PER_SESSION } from "./routines/helpers";
 import {
   bodyPartSet,
   equipmentSet,
@@ -97,12 +100,117 @@ function sortAndLimitExercises(
 }
 
 function canViewerSeeExercise(doc: Doc<"exercises">, viewerId: Id<"users">) {
-  return !doc.isCustom || doc.ownerId === viewerId;
+  return doc.archivedAt === undefined && (!doc.isCustom || doc.ownerId === viewerId);
 }
 
 function orderCanonicalValues<T extends string>(values: Iterable<T>, canonical: readonly T[]) {
   const set = values instanceof Set ? values : new Set(values);
   return canonical.filter((value) => set.has(value));
+}
+
+async function collectVisibleExerciseRecords(
+  rows: AsyncIterable<Doc<"exercises">>,
+  viewerId: Id<"users">,
+  limit: number,
+  args?: Parameters<typeof filterExerciseRecord>[1],
+) {
+  const records: ExerciseCatalogRecord[] = [];
+
+  for await (const doc of rows) {
+    if (!canViewerSeeExercise(doc, viewerId)) {
+      continue;
+    }
+
+    const record = toExerciseCatalogRecord(doc);
+    if (args && !filterExerciseRecord(record, args)) {
+      continue;
+    }
+
+    records.push(record);
+    if (records.length >= limit) {
+      break;
+    }
+  }
+
+  return records;
+}
+
+function validateCustomExerciseInput(args: {
+  name: string;
+  bodyPart: BodyPartType;
+  equipment: EquipmentType;
+  primaryMuscle: MuscleType;
+  muscleGroups: MuscleType[];
+  description?: string;
+}) {
+  const name = args.name.trim();
+  const description = args.description?.trim();
+  assert(
+    args.muscleGroups.length <= MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS,
+    `Muscle groups must contain at most ${MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS} items.`,
+  );
+  const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
+  assert(name.length > 0, "Exercise name is required.");
+  assert(
+    name.length <= MAX_CUSTOM_EXERCISE_NAME_LENGTH,
+    `Exercise name must be ${MAX_CUSTOM_EXERCISE_NAME_LENGTH} characters or fewer.`,
+  );
+  if (description !== undefined && description.length > 0) {
+    assert(
+      description.length <= MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH,
+      `Exercise description must be ${MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH} characters or fewer.`,
+    );
+  }
+  assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
+  assert(
+    uniqueMuscleGroups.includes(args.primaryMuscle),
+    "Primary muscle must be included in muscle groups.",
+  );
+
+  return {
+    name,
+    muscleGroups: uniqueMuscleGroups,
+    description: description && description.length > 0 ? description : undefined,
+  };
+}
+
+function buildCustomExerciseInsert(
+  ownerId: Id<"users">,
+  args: {
+    name: string;
+    bodyPart: BodyPartType;
+    equipment: EquipmentType;
+    primaryMuscle: MuscleType;
+    muscleGroups: MuscleType[];
+    description?: string;
+  },
+) {
+  const normalized = validateCustomExerciseInput(args);
+
+  return normalizeExerciseCatalog({
+    ...args,
+    ...normalized,
+    isCustom: true,
+    ownerId,
+  });
+}
+
+function toCustomExerciseInput(args: {
+  name: string;
+  bodyPart: string;
+  equipment: string;
+  primaryMuscle: string;
+  muscleGroups: string[];
+  description?: string;
+}) {
+  return {
+    name: args.name,
+    bodyPart: args.bodyPart as BodyPartType,
+    equipment: args.equipment as EquipmentType,
+    primaryMuscle: args.primaryMuscle as MuscleType,
+    muscleGroups: args.muscleGroups as MuscleType[],
+    description: args.description,
+  };
 }
 
 async function collectVisibleBodyParts(
@@ -275,12 +383,15 @@ async function getAvailableEquipment(
 export const hasAny = query({
   args: {},
   handler: async (ctx) => {
-    await requireViewer(ctx);
-    const first = await ctx.db
-      .query("exercises")
-      .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", false))
-      .first();
-    return first !== null;
+    const { viewer } = await requireViewer(ctx);
+    const firstVisible = await collectVisibleExerciseRecords(
+      ctx.db
+        .query("exercises")
+        .withIndex("by_isCustom_and_nameText", (q) => q.eq("isCustom", false)),
+      viewer._id,
+      1,
+    );
+    return firstVisible.length > 0;
   },
 });
 
@@ -303,37 +414,45 @@ export const listPreview = query({
     const searchText = normalizeNameText(args.searchText ?? "");
 
     if (searchText) {
-      const builtInResults = await ctx.db
-        .query("exercises")
-        .withSearchIndex("search_nameText", (q) => {
-          let builder = q.search("nameText", searchText).eq("isCustom", false);
-          if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
-          if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
-          if (args.primaryMuscle !== undefined)
-            builder = builder.eq("primaryMuscle", args.primaryMuscle);
-          return builder;
-        })
-        .take(limit);
+      const builtInResults = await collectVisibleExerciseRecords(
+        ctx.db
+          .query("exercises")
+          .withSearchIndex("search_nameText", (q) => {
+            let builder = q.search("nameText", searchText).eq("isCustom", false);
+            if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
+            if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
+            if (args.primaryMuscle !== undefined) {
+              builder = builder.eq("primaryMuscle", args.primaryMuscle);
+            }
+            return builder;
+          }),
+        viewer._id,
+        limit,
+        args,
+      );
 
-      const customResults = await ctx.db
-        .query("exercises")
-        .withSearchIndex("search_nameText", (q) => {
-          let builder = q
-            .search("nameText", searchText)
-            .eq("isCustom", true)
-            .eq("ownerId", viewer._id);
-          if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
-          if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
-          if (args.primaryMuscle !== undefined)
-            builder = builder.eq("primaryMuscle", args.primaryMuscle);
-          return builder;
-        })
-        .take(limit);
+      const customResults = await collectVisibleExerciseRecords(
+        ctx.db
+          .query("exercises")
+          .withSearchIndex("search_nameText", (q) => {
+            let builder = q
+              .search("nameText", searchText)
+              .eq("isCustom", true)
+              .eq("ownerId", viewer._id);
+            if (args.bodyPart !== undefined) builder = builder.eq("bodyPart", args.bodyPart);
+            if (args.equipment !== undefined) builder = builder.eq("equipment", args.equipment);
+            if (args.primaryMuscle !== undefined) {
+              builder = builder.eq("primaryMuscle", args.primaryMuscle);
+            }
+            return builder;
+          }),
+        viewer._id,
+        limit,
+        args,
+      );
 
       return sortAndLimitExercises(
-        [...builtInResults, ...customResults]
-          .map(toExerciseCatalogRecord)
-          .filter((exercise) => filterExerciseRecord(exercise, args)),
+        [...builtInResults, ...customResults],
         limit,
       );
     }
@@ -381,16 +500,19 @@ export const listPreview = query({
     }
 
     const builtInResults = docs
+      .filter((exercise) => canViewerSeeExercise(exercise, viewer._id))
       .map(toExerciseCatalogRecord)
       .filter((exercise) => !exercise.isCustom)
       .filter((exercise) => filterExerciseRecord(exercise, args));
 
-    const customResults = (await ctx.db
-      .query("exercises")
-      .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id))
-      .take(limit))
-      .map(toExerciseCatalogRecord)
-      .filter((exercise) => filterExerciseRecord(exercise, args));
+    const customResults = await collectVisibleExerciseRecords(
+      ctx.db
+        .query("exercises")
+        .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id)),
+      viewer._id,
+      limit,
+      args,
+    );
 
     return sortAndLimitExercises(
       [...builtInResults, ...customResults],
@@ -414,24 +536,42 @@ export const listCustom = query({
     const searchText = normalizeNameText(args.searchText ?? "");
 
     if (searchText) {
-      const results = await ctx.db
-        .query("exercises")
-        .withSearchIndex("search_nameText", (q) =>
-          q
-            .search("nameText", searchText)
-            .eq("isCustom", true)
-            .eq("ownerId", viewer._id),
-        )
-        .take(limit);
-      return results.map(toExerciseCatalogRecord);
+      return collectVisibleExerciseRecords(
+        ctx.db
+          .query("exercises")
+          .withSearchIndex("search_nameText", (q) =>
+            q
+              .search("nameText", searchText)
+              .eq("isCustom", true)
+              .eq("ownerId", viewer._id),
+          ),
+        viewer._id,
+        limit,
+      );
     }
 
-    const docs = await ctx.db
-      .query("exercises")
-      .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id))
-      .take(limit);
+    const docs = await collectVisibleExerciseRecords(
+      ctx.db
+        .query("exercises")
+        .withIndex("by_ownerId_and_nameText", (q) => q.eq("ownerId", viewer._id)),
+      viewer._id,
+      limit,
+    );
 
-    return docs.map(toExerciseCatalogRecord).sort((a, b) => a.name.localeCompare(b.name));
+    return docs.sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const getCustomById = query({
+  args: {
+    exerciseId: v.id("exercises"),
+  },
+  handler: async (ctx, args) => {
+    const { exercise } = await requireCustomExerciseOwner(ctx, args.exerciseId);
+    if (exercise.archivedAt !== undefined) {
+      return null;
+    }
+    return toExerciseCatalogRecord(exercise);
   },
 });
 
@@ -478,40 +618,10 @@ export const createCustom = mutation({
   },
   handler: async (ctx, args) => {
     const { viewer } = await requireViewer(ctx);
-    const name = args.name.trim();
-    const description = args.description?.trim();
-    assert(
-      args.muscleGroups.length <= MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS,
-      `Muscle groups must contain at most ${MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS} items.`,
+    return ctx.db.insert(
+      "exercises",
+      buildCustomExerciseInsert(viewer._id, toCustomExerciseInput(args)),
     );
-    const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
-    assert(name.length > 0, "Exercise name is required.");
-    assert(
-      name.length <= MAX_CUSTOM_EXERCISE_NAME_LENGTH,
-      `Exercise name must be ${MAX_CUSTOM_EXERCISE_NAME_LENGTH} characters or fewer.`,
-    );
-    if (description !== undefined && description.length > 0) {
-      assert(
-        description.length <= MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH,
-        `Exercise description must be ${MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH} characters or fewer.`,
-      );
-    }
-    assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
-    assert(
-      uniqueMuscleGroups.includes(args.primaryMuscle),
-      "Primary muscle must be included in muscle groups.",
-    );
-
-    const normalized = normalizeExerciseCatalog({
-      ...args,
-      name,
-      muscleGroups: uniqueMuscleGroups,
-      description: description && description.length > 0 ? description : undefined,
-      isCustom: true,
-      ownerId: viewer._id,
-    });
-
-    return ctx.db.insert("exercises", normalized);
   },
 });
 
@@ -527,41 +637,101 @@ export const updateCustom = mutation({
   },
   handler: async (ctx, args) => {
     const { exercise: existing } = await requireCustomExerciseOwner(ctx, args.exerciseId);
-
-    const name = args.name.trim();
-    const description = args.description?.trim();
-    assert(
-      args.muscleGroups.length <= MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS,
-      `Muscle groups must contain at most ${MAX_CUSTOM_EXERCISE_MUSCLE_GROUPS} items.`,
+    const normalized = buildCustomExerciseInsert(
+      existing.ownerId!,
+      toCustomExerciseInput(args),
     );
-    const uniqueMuscleGroups = Array.from(new Set(args.muscleGroups));
-    assert(name.length > 0, "Exercise name is required.");
-    assert(
-      name.length <= MAX_CUSTOM_EXERCISE_NAME_LENGTH,
-      `Exercise name must be ${MAX_CUSTOM_EXERCISE_NAME_LENGTH} characters or fewer.`,
-    );
-    if (description !== undefined && description.length > 0) {
-      assert(
-        description.length <= MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH,
-        `Exercise description must be ${MAX_CUSTOM_EXERCISE_DESCRIPTION_LENGTH} characters or fewer.`,
-      );
-    }
-    assert(uniqueMuscleGroups.length > 0, "At least one muscle group is required.");
-    assert(
-      uniqueMuscleGroups.includes(args.primaryMuscle),
-      "Primary muscle must be included in muscle groups.",
-    );
-
-    const normalized = normalizeExerciseCatalog({
-      ...args,
-      name,
-      muscleGroups: uniqueMuscleGroups,
-      description: description && description.length > 0 ? description : undefined,
-      isCustom: true,
-      ownerId: existing.ownerId,
-    });
 
     await ctx.db.patch(args.exerciseId, normalized);
+  },
+});
+
+export const createAndAttachCustom = mutation({
+  args: {
+    sessionId: v.id("routineSessions"),
+    replaceSessionExerciseId: v.optional(v.id("sessionExercises")),
+    name: v.string(),
+    bodyPart: bodyPartSet,
+    equipment: equipmentSet,
+    primaryMuscle: muscleSet,
+    muscleGroups: v.array(muscleSet),
+    description: v.optional(v.string()),
+    sets: v.optional(v.number()),
+    repsText: v.optional(v.string()),
+    targetWeightKg: v.optional(v.number()),
+    restSeconds: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    tempo: v.optional(v.string()),
+    rir: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { viewer, session } = await requireSessionOwner(ctx, args.sessionId);
+    const exerciseId = await ctx.db.insert(
+      "exercises",
+      buildCustomExerciseInsert(viewer._id, toCustomExerciseInput(args)),
+    );
+
+    if (args.replaceSessionExerciseId) {
+      const { sessionExercise } = await requireSessionExerciseOwner(
+        ctx,
+        args.replaceSessionExerciseId,
+      );
+      assert(
+        sessionExercise.sessionId === session._id,
+        "Section exercise does not belong to section.",
+      );
+      await ctx.db.patch(args.replaceSessionExerciseId, {
+        exerciseId,
+        ...buildProgrammingRecord(args),
+        updatedAt: Date.now(),
+      });
+      return {
+        exerciseId,
+        sessionExerciseId: args.replaceSessionExerciseId,
+      };
+    }
+
+    const currentEntries = await ctx.db
+      .query("sessionExercises")
+      .withIndex("by_userId_and_session_order", (q) =>
+        q.eq("userId", viewer._id).eq("sessionId", session._id),
+      )
+      .take(MAX_EXERCISES_PER_SESSION + 1);
+    assert(
+      currentEntries.length <= MAX_EXERCISES_PER_SESSION,
+      `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+    );
+    assert(
+      currentEntries.length < MAX_EXERCISES_PER_SESSION,
+      `Sections can have at most ${MAX_EXERCISES_PER_SESSION} exercises.`,
+    );
+
+    const sessionExerciseId = await ctx.db.insert("sessionExercises", {
+      userId: viewer._id,
+      sessionId: session._id,
+      exerciseId,
+      order: currentEntries.length,
+      ...buildProgrammingRecord(args),
+      updatedAt: Date.now(),
+    });
+    await ctx.db.patch(session._id, {
+      exerciseCount: currentEntries.length + 1,
+      updatedAt: Date.now(),
+    });
+
+    return { exerciseId, sessionExerciseId };
+  },
+});
+
+export const archiveCustom = mutation({
+  args: {
+    exerciseId: v.id("exercises"),
+  },
+  handler: async (ctx, args) => {
+    await requireCustomExerciseOwner(ctx, args.exerciseId);
+    await ctx.db.patch(args.exerciseId, {
+      archivedAt: Date.now(),
+    });
   },
 });
 
@@ -571,6 +741,8 @@ export const deleteCustom = mutation({
   },
   handler: async (ctx, args) => {
     await requireCustomExerciseOwner(ctx, args.exerciseId);
-    await ctx.db.delete(args.exerciseId);
+    await ctx.db.patch(args.exerciseId, {
+      archivedAt: Date.now(),
+    });
   },
 });

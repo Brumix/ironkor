@@ -11,6 +11,7 @@ export const exercises = defineTable({
   name: v.string(),
   isCustom: v.boolean(),
   ownerId: v.optional(v.id("users")),
+  archivedAt: v.optional(v.number()),
   bodyPart: bodyPartSet,
   equipment: equipmentSet,
   primaryMuscle: muscleSet,

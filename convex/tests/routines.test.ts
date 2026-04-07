@@ -1,6 +1,7 @@
 import { runToCompletion } from "@convex-dev/migrations";
 import component from "@convex-dev/migrations/test";
 import { convexTest } from "convex-test";
+import type { FunctionReference } from "convex/server";
 import { expect, test } from "vitest";
 
 import { api, components, internal } from "@convex/_generated/api";
@@ -17,6 +18,13 @@ const modules = (import.meta as ImportMetaWithGlob).glob([
   "../**/*.ts",
   "!../tests/**/*.ts",
 ]);
+
+const saveRoutineMutation = api.routines.saveRoutine as unknown as FunctionReference<
+  "mutation",
+  "public",
+  Record<string, unknown>,
+  Id<"routines">
+>;
 
 function createAuthedTest() {
   const t = convexTest(schema, modules);
@@ -48,6 +56,14 @@ function createTrainingWeek(manualSessionId?: Id<"routineSessions">) {
       assignmentMode: "auto" as const,
     };
   });
+}
+
+function createSaveRoutineWeeklyPlan(trainingDays = [0, 1, 2, 3]) {
+  const daySet = new Set(trainingDays);
+  return Array.from({ length: 7 }, (_, day) => ({
+    day,
+    type: daySet.has(day) ? ("train" as const) : ("rest" as const),
+  }));
 }
 
 test("routine and session limits are enforced", async () => {
@@ -477,5 +493,256 @@ test("ownership migrations backfill session and exercise user ids", async () => 
     const entry = await ctx.db.get(sessionExerciseId);
     expect(session?.userId).toBe(userId);
     expect(entry?.userId).toBe(userId);
+  });
+});
+
+test("saveRoutine creates, updates, and summarizes routines with stored exercise counts", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  const squatId = await authed.mutation(api.exercises.createCustom, {
+    name: "Front Squat",
+    bodyPart: "upper legs",
+    equipment: "barbell",
+    primaryMuscle: "quads",
+    muscleGroups: ["quads", "glutes"],
+  });
+  const rowId = await authed.mutation(api.exercises.createCustom, {
+    name: "Seal Row",
+    bodyPart: "back",
+    equipment: "barbell",
+    primaryMuscle: "lats",
+    muscleGroups: ["lats", "traps"],
+  });
+  const pressId = await authed.mutation(api.exercises.createCustom, {
+    name: "Machine Press",
+    bodyPart: "chest",
+    equipment: "leverage machine",
+    primaryMuscle: "pectorals",
+    muscleGroups: ["pectorals", "triceps"],
+  });
+
+  const routineId = await authed.mutation(saveRoutineMutation, {
+    name: "Atomic Builder",
+    weeklyPlan: createSaveRoutineWeeklyPlan([0, 2, 4]),
+    sessions: [
+      {
+        clientKey: "draft-session-a",
+        name: "Lower",
+        exercises: [
+          {
+            exerciseId: squatId,
+            sets: 4,
+            repsText: "5",
+          },
+          {
+            exerciseId: rowId,
+            sets: 3,
+            repsText: "8",
+          },
+        ],
+      },
+      {
+        clientKey: "draft-session-b",
+        name: "Upper",
+        exercises: [
+          {
+            exerciseId: pressId,
+            sets: 3,
+            repsText: "10",
+          },
+        ],
+      },
+    ],
+  });
+
+  let detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail).not.toBeNull();
+  expect(detail!.daysPerWeek).toBe(3);
+  expect(detail!.sessions.map((session) => session.exerciseCount)).toEqual([2, 1]);
+
+  const lowerSession = detail!.sessions.find((session) => session.name === "Lower");
+  const upperSession = detail!.sessions.find((session) => session.name === "Upper");
+  expect(lowerSession).toBeTruthy();
+  expect(upperSession).toBeTruthy();
+
+  await authed.mutation(saveRoutineMutation, {
+    routineId,
+    name: "Atomic Builder V2",
+    weeklyPlan: createSaveRoutineWeeklyPlan([1, 3, 5]),
+    sessions: [
+      {
+        sessionId: upperSession!._id,
+        clientKey: "session:upper",
+        name: "Upper Prime",
+        exercises: [
+          {
+            sessionExerciseId: upperSession!.exercises[0]!._id,
+            exerciseId: pressId,
+            sets: 5,
+            repsText: "6-8",
+          },
+          {
+            exerciseId: rowId,
+            sets: 3,
+            repsText: "10",
+          },
+        ],
+      },
+    ],
+  });
+
+  detail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detail).not.toBeNull();
+  expect(detail!.name).toBe("Atomic Builder V2");
+  expect(detail!.weeklyPlan.filter((entry) => entry.type === "train").map((entry) => entry.day)).toEqual([1, 3, 5]);
+  expect(detail!.sessions).toHaveLength(1);
+  expect(detail!.sessions[0]).toMatchObject({
+    name: "Upper Prime",
+    exerciseCount: 2,
+  });
+  expect(detail!.sessions[0]?.exercises.map((entry) => entry.repsText)).toEqual(["6-8", "10"]);
+
+  const summaries = await authed.query(api.routines.listSummaries, {});
+  expect(summaries[0]).toMatchObject({
+    _id: routineId,
+  });
+  expect(summaries[0]?.sessions.map((session) => session.exerciseCount)).toEqual([2]);
+});
+
+test("saveRoutine rolls back draft changes when validation fails mid-update", async () => {
+  const { authed } = createAuthedTest();
+  await authed.mutation(api.auth.ensureViewer, {});
+
+  const safeExerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Safe Exercise",
+    bodyPart: "back",
+    equipment: "cable",
+    primaryMuscle: "lats",
+    muscleGroups: ["lats"],
+  });
+  const archivedExerciseId = await authed.mutation(api.exercises.createCustom, {
+    name: "Archived Exercise",
+    bodyPart: "chest",
+    equipment: "barbell",
+    primaryMuscle: "pectorals",
+    muscleGroups: ["pectorals"],
+  });
+  await authed.mutation(api.exercises.archiveCustom, { exerciseId: archivedExerciseId });
+
+  const routineId = await authed.mutation(saveRoutineMutation, {
+    name: "Rollback Guard",
+    weeklyPlan: createSaveRoutineWeeklyPlan([0, 1]),
+    sessions: [
+      {
+        clientKey: "draft-a",
+        name: "Session A",
+        exercises: [{ exerciseId: safeExerciseId, sets: 3, repsText: "8" }],
+      },
+      {
+        clientKey: "draft-b",
+        name: "Session B",
+        exercises: [{ exerciseId: safeExerciseId, sets: 4, repsText: "10" }],
+      },
+    ],
+  });
+
+  const originalDetail = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(originalDetail).not.toBeNull();
+
+  await expect(
+    authed.mutation(saveRoutineMutation, {
+      routineId,
+      name: "Rollback Attempt",
+      weeklyPlan: createSaveRoutineWeeklyPlan([2, 4]),
+      sessions: [
+        {
+          sessionId: originalDetail!.sessions[0]!._id,
+          clientKey: "persisted-a",
+          name: "Session A Updated",
+          exercises: [
+            {
+              sessionExerciseId: originalDetail!.sessions[0]!.exercises[0]!._id,
+              exerciseId: archivedExerciseId,
+              sets: 5,
+              repsText: "5",
+            },
+          ],
+        },
+      ],
+    }),
+  ).rejects.toThrow("Archived exercises cannot be attached.");
+
+  const detailAfterFailure = await authed.query(api.routines.getDetailedById, { routineId });
+  expect(detailAfterFailure).toEqual(originalDetail);
+});
+
+test("exercise count migration backfills stored section counts", async () => {
+  const { t } = createAuthedTest();
+
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      tokenIdentifier: "exercise-count-token",
+      clerkUserId: "exercise-count-user",
+      accountStatus: "active",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const routineId = await ctx.db.insert("routines", {
+      userId,
+      name: "Legacy Counts",
+      nameKey: "legacy counts",
+      daysPerWeek: 3,
+      isActive: false,
+      sessionOrder: [],
+      weeklyPlan: createTrainingWeek(),
+      updatedAt: 1,
+    });
+    const sessionId = await ctx.db.insert("routineSessions", {
+      userId,
+      routineId,
+      name: "Count Me",
+      nameKey: "count me",
+      order: 0,
+      updatedAt: 1,
+    });
+    const exerciseId = await ctx.db.insert(
+      "exercises",
+      normalizeExerciseCatalog({
+        name: "Counted Exercise",
+        bodyPart: "back",
+        equipment: "cable",
+        primaryMuscle: "lats",
+        muscleGroups: ["lats"],
+      }),
+    );
+
+    await ctx.db.insert("sessionExercises", {
+      userId,
+      sessionId,
+      exerciseId,
+      order: 0,
+      sets: 3,
+      repsText: "8-12",
+      updatedAt: 1,
+    });
+    await ctx.db.insert("sessionExercises", {
+      userId,
+      sessionId,
+      exerciseId,
+      order: 1,
+      sets: 4,
+      repsText: "6-8",
+      updatedAt: 1,
+    });
+
+    await runToCompletion(
+      ctx,
+      components.migrations,
+      internal.migrations.backfillRoutineSessionExerciseCounts,
+    );
+
+    const session = await ctx.db.get(sessionId);
+    expect(session?.exerciseCount).toBe(2);
   });
 });
