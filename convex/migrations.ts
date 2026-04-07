@@ -3,6 +3,7 @@ import { Migrations } from "@convex-dev/migrations";
 
 import { components, internal } from "./_generated/api";
 import { ACCOUNT_RESTORE_WINDOW_MS } from "./authHelpers";
+import { ONBOARDING_VERSION } from "./profileHelpers";
 import {
   countTrainingDays,
   getRoutineWeeklyPlan,
@@ -33,6 +34,7 @@ type UserWithOptionalAccountLifecycle = Doc<"users"> & {
 type AccountDeletionJobWithOptionalRestorationStatus = Doc<"accountDeletionJobs"> & {
   restorationStatus?: "not_restored" | "restored";
 };
+type UserProfileDoc = Doc<"userProfiles">;
 
 export const backfillRoutineNameKeys = migrations.define({
   table: "routines",
@@ -165,6 +167,38 @@ export const backfillAccountDeletionJobRestorationStatus = migrations.define({
   },
 });
 
+export const backfillLegacyUserProfiles = migrations.define({
+  table: "users",
+  migrateOne: async (ctx, user: UserWithOptionalAccountLifecycle) => {
+    const accountStatus = user.accountStatus ?? "active";
+    if (accountStatus !== "active") {
+      return undefined;
+    }
+
+    const existingProfile: UserProfileDoc | null = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .unique();
+
+    if (existingProfile) {
+      return undefined;
+    }
+
+    const completedAt = user.updatedAt ?? user.createdAt ?? user._creationTime;
+    await ctx.db.insert("userProfiles", {
+      userId: user._id,
+      onboardingStatus: "complete",
+      onboardingVersion: ONBOARDING_VERSION,
+      completionMethod: "legacy_backfill",
+      completedAt,
+      createdAt: user.createdAt ?? user._creationTime,
+      updatedAt: completedAt,
+    });
+
+    return undefined;
+  },
+});
+
 export const run = migrations.runner();
 
 export const runAll = migrations.runner([
@@ -176,4 +210,5 @@ export const runAll = migrations.runner([
   internal.migrations.backfillSessionExerciseUserIds,
   internal.migrations.backfillUserAccountLifecycle,
   internal.migrations.backfillAccountDeletionJobRestorationStatus,
+  internal.migrations.backfillLegacyUserProfiles,
 ]);

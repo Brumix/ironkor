@@ -1,15 +1,21 @@
 import { api } from "@convex/_generated/api";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+
+import type {
+  UserExperienceLevel,
+  UserPrimaryGoal,
+  UserTrainingEnvironment,
+  UserUnitSystem,
+} from "@ironkor/shared/enums";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import MetricCard from "@/components/ui/MetricCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
@@ -17,7 +23,19 @@ import { useAccountDeletionTransition } from "@/features/auth/AccountDeletionTra
 import { useClerk, useUser } from "@/features/auth/clerkCompat";
 import { resolveSignInMethod } from "@/features/auth/resolveSignInMethod";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
+import {
+  formatHeightValue,
+  formatWeightValue,
+  getExperienceLabel,
+  getGoalLabel,
+  getTrainingEnvironmentLabel,
+  getUnitSystemLabel,
+} from "@/features/onboarding/helpers";
+import TrainingProfileQuickEditModal, {
+  type TrainingProfileQuickEditSection,
+} from "@/features/settings/training-profile-quick-edit-modal";
 import { useTheme } from "@/theme";
+
 
 function getDisplayInitials(displayName: string) {
   const words = displayName
@@ -35,6 +53,66 @@ function getDisplayInitials(displayName: string) {
     .join("");
 }
 
+function SummaryActionRow({
+  disabled = false,
+  label,
+  onPress,
+  value,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+  value: string;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        flexDirection: "row",
+        gap: theme.tokens.spacing.md,
+        justifyContent: "space-between",
+        opacity: disabled ? 0.6 : pressed ? 0.8 : 1,
+        paddingVertical: theme.tokens.spacing.xs,
+      })}
+    >
+      <Text
+        style={{
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+        }}
+      >
+        {label}
+      </Text>
+      <View
+        style={{
+          alignItems: "center",
+          flex: 1,
+          flexDirection: "row",
+          gap: theme.tokens.spacing.xs,
+          justifyContent: "flex-end",
+        }}
+      >
+        <Text
+          style={{
+            color: theme.colors.text,
+            flexShrink: 1,
+            fontSize: theme.tokens.typography.fontSize.md,
+            fontWeight: theme.tokens.typography.fontWeight.bold,
+            textAlign: "right",
+          }}
+        >
+          {value}
+        </Text>
+        <Ionicons color={theme.colors.textSubtle} name="chevron-forward" size={16} />
+      </View>
+    </Pressable>
+  );
+}
+
 export default function SettingsScreen() {
   const { client } = useClerk();
   const { user } = useUser();
@@ -46,10 +124,13 @@ export default function SettingsScreen() {
   const secureSignOut = useSecureSignOut();
   const { showAlert, AlertModal } = useAppAlert();
   const deleteMyAccount = useAction(api.auth.deleteMyAccount);
+  const profileSummary = useQuery(api.profile.getViewerProfileSummary, {});
   const [autoStartTimer, setAutoStartTimer] = useState(true);
   const [hapticFeedback, setHapticFeedback] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [activeQuickEditSection, setActiveQuickEditSection] =
+    useState<TrainingProfileQuickEditSection | null>(null);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
 
   const displayName = user?.fullName ?? "Ironkor athlete";
@@ -60,17 +141,23 @@ export default function SettingsScreen() {
   });
   const avatarInitials = getDisplayInitials(displayName);
   const shouldShowAvatarImage = Boolean(user?.hasImage && user.imageUrl);
+  const unitSystem = (profileSummary?.unitSystem ?? "metric") as UserUnitSystem;
+  const latestWeightText =
+    profileSummary === undefined
+      ? "Syncing..."
+      : formatWeightValue(profileSummary.latestMeasurement?.weightKg ?? null, unitSystem);
+  const heightText =
+    profileSummary === undefined
+      ? "Syncing..."
+      : formatHeightValue(profileSummary.heightCm, unitSystem);
+  const profileCompletionMessage =
+    profileSummary?.profileExists === false
+      ? "This account predates onboarding. Add your answers any time to personalize future planning."
+      : "These answers stay editable, so your profile can shift as your training season changes.";
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        metricsRow: {
-          flexDirection: "row",
-          gap: theme.tokens.spacing.md,
-        },
-        metricColumn: {
-          flex: 1,
-        },
         accountActions: {
           flexDirection: "row",
           flexWrap: "wrap",
@@ -215,6 +302,13 @@ export default function SettingsScreen() {
           gap: theme.tokens.spacing.sm,
           flexWrap: "wrap",
         },
+        sectionIntro: {
+          color: theme.colors.textMuted,
+          fontSize: theme.tokens.typography.fontSize.sm,
+          lineHeight:
+            theme.tokens.typography.fontSize.sm *
+            theme.tokens.typography.lineHeight.relaxed,
+        },
       }),
     [theme],
   );
@@ -326,6 +420,119 @@ export default function SettingsScreen() {
       </AppCard>
 
       <SectionHeader
+        title="Training profile"
+        subtitle="The answers that shape your setup and future planning defaults"
+      />
+
+      <AppCard variant="highlight">
+        <Text style={styles.sectionIntro}>{profileCompletionMessage}</Text>
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Goal"
+          onPress={() => {
+            setActiveQuickEditSection("goal");
+          }}
+          value={
+            profileSummary === undefined
+              ? "Syncing..."
+              : getGoalLabel(profileSummary.primaryGoal as UserPrimaryGoal | null)
+          }
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Experience"
+          onPress={() => {
+            setActiveQuickEditSection("experience");
+          }}
+          value={
+            profileSummary === undefined
+              ? "Syncing..."
+              : getExperienceLabel(
+                  profileSummary.experienceLevel as UserExperienceLevel | null,
+                )
+          }
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Weekly rhythm"
+          onPress={() => {
+            setActiveQuickEditSection("rhythm");
+          }}
+          value={
+            profileSummary === undefined
+              ? "Syncing..."
+              : profileSummary.workoutsPerWeek && profileSummary.sessionDurationMinutes
+                ? `${profileSummary.workoutsPerWeek} workouts • ${profileSummary.sessionDurationMinutes} min`
+                : "Add your rhythm"
+          }
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Environment"
+          onPress={() => {
+            setActiveQuickEditSection("setup");
+          }}
+          value={
+            profileSummary === undefined
+              ? "Syncing..."
+              : getTrainingEnvironmentLabel(
+                  profileSummary.trainingEnvironment as UserTrainingEnvironment | null,
+                )
+          }
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Units"
+          onPress={() => {
+            setActiveQuickEditSection("setup");
+          }}
+          value={
+            profileSummary === undefined
+              ? "Syncing..."
+              : getUnitSystemLabel(profileSummary.unitSystem as UserUnitSystem)
+          }
+        />
+      </AppCard>
+
+      <SectionHeader
+        title="Body data"
+        subtitle="Visible here, editable with quick selectors right from Settings"
+      />
+
+      <AppCard variant="muted">
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Current weight"
+          onPress={() => {
+            setActiveQuickEditSection("body");
+          }}
+          value={latestWeightText}
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Height"
+          onPress={() => {
+            setActiveQuickEditSection("body");
+          }}
+          value={heightText}
+        />
+        <SummaryActionRow
+          disabled={profileSummary === undefined}
+          label="Last weight entry"
+          onPress={() => {
+            setActiveQuickEditSection("body");
+          }}
+          value={
+            profileSummary?.latestMeasurement
+              ? new Date(profileSummary.latestMeasurement.recordedAt).toLocaleDateString()
+              : profileSummary === undefined
+                ? "Syncing..."
+                : "No entries yet"
+          }
+        />
+      </AppCard>
+
+      <SectionHeader
         title="Interaction"
         subtitle="Small settings that make the workout flow feel faster"
       />
@@ -372,32 +579,6 @@ export default function SettingsScreen() {
       </AppCard>
 
       <SectionHeader
-        title="Experience"
-        subtitle="A quick summary of the current behavior preferences"
-      />
-
-      <View style={styles.metricsRow}>
-        <View style={styles.metricColumn}>
-          <MetricCard
-            helper="Rest timer begins right after a completed set"
-            icon="timer-outline"
-            label="Auto Timer"
-            tone={autoStartTimer ? "success" : "default"}
-            value={autoStartTimer ? "On" : "Off"}
-          />
-        </View>
-        <View style={styles.metricColumn}>
-          <MetricCard
-            helper="Tactile feedback when sets are completed"
-            icon="phone-portrait-outline"
-            label="Haptics"
-            tone={hapticFeedback ? "accent" : "default"}
-            value={hapticFeedback ? "On" : "Off"}
-          />
-        </View>
-      </View>
-
-      <SectionHeader
         title="Danger zone"
         subtitle="Permanent account actions stay here at the end of settings"
       />
@@ -426,6 +607,22 @@ export default function SettingsScreen() {
           variant="danger"
         />
       </AppCard>
+
+      <TrainingProfileQuickEditModal
+        onClose={() => {
+          setActiveQuickEditSection(null);
+        }}
+        onShowError={({ message, title }) => {
+          showAlert({
+            message,
+            title,
+            variant: "error",
+          });
+        }}
+        profileSummary={profileSummary}
+        section={activeQuickEditSection}
+        visible={activeQuickEditSection !== null}
+      />
 
       <ConfirmActionModal
         visible={showDeleteAccountModal}

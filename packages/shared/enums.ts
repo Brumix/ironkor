@@ -84,6 +84,20 @@ export const DIFFICULTY_VALUES = ['beginner', 'intermediate', 'advanced'] as con
 
 export const FREQUENCY_VALUES = ['custom', 'weekly'] as const;
 
+export const USER_PRIMARY_GOAL_VALUES = [
+	'strength',
+	'muscle_gain',
+	'fat_loss',
+	'recomp',
+	'general_fitness',
+] as const;
+
+export const USER_TRAINING_ENVIRONMENT_VALUES = ['gym', 'home', 'hybrid'] as const;
+
+export const USER_UNIT_SYSTEM_VALUES = ['metric', 'imperial'] as const;
+
+export const USER_EXPERIENCE_LEVEL_VALUES = DIFFICULTY_VALUES;
+
 // ===== TYPE DEFINITIONS =====
 export type SetType = (typeof SET_TYPE_VALUES)[number];
 export type EquipmentType = (typeof EQUIPMENT_VALUES)[number];
@@ -91,4 +105,7 @@ export type MuscleType = (typeof MUSCLE_VALUES)[number];
 export type BodyPartType = (typeof BODY_PART_VALUES)[number];
 export type DifficultyType = (typeof DIFFICULTY_VALUES)[number];
 export type FrequencyType = (typeof FREQUENCY_VALUES)[number];
-
+export type UserPrimaryGoal = (typeof USER_PRIMARY_GOAL_VALUES)[number];
+export type UserTrainingEnvironment = (typeof USER_TRAINING_ENVIRONMENT_VALUES)[number];
+export type UserUnitSystem = (typeof USER_UNIT_SYSTEM_VALUES)[number];
+export type UserExperienceLevel = (typeof USER_EXPERIENCE_LEVEL_VALUES)[number];

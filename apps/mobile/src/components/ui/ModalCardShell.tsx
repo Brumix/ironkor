@@ -7,6 +7,7 @@ import { useTheme } from "@/theme";
 import type { ReactNode } from "react";
 
 export interface ModalCardShellProps {
+  children?: ReactNode;
   visible: boolean;
   title: string;
   message?: string;
@@ -22,6 +23,7 @@ export interface ModalCardShellProps {
  * Shared overlay + card layout for themed modal dialogs (single-button alerts and two-button confirms).
  */
 function ModalCardShell({
+  children,
   visible,
   title,
   message,
@@ -93,6 +95,7 @@ function ModalCardShell({
           {headerAccessory}
           <Text style={styles.title}>{title}</Text>
           {message ? <Text style={styles.message}>{message}</Text> : null}
+          {children}
           <View style={styles.footerRow}>{footer}</View>
         </AppCard>
       </View>

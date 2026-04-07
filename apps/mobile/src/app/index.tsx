@@ -8,6 +8,7 @@ import { useAuth, useSession } from "@/features/auth/clerkCompat";
 import LocalUnlockScreen from "@/features/auth/LocalUnlockScreen";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
+import { useOnboardingGate } from "@/features/onboarding/useOnboardingGate";
 
 export default function Index() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -34,6 +35,7 @@ export default function Index() {
       isUnlocked &&
       !isAccountDeletionTransitioning,
   });
+  const onboardingGate = useOnboardingGate({ enabled: isReady });
 
   if (!isLoaded) {
     return <AuthLoadingScreen title="Loading Ironkor" message="Preparing authentication..." />;
@@ -105,6 +107,21 @@ export default function Index() {
 
   if (!isReady) {
     return <AuthLoadingScreen title="Starting your workspace" message="Syncing your account..." />;
+  }
+
+  if (onboardingGate.isLoading) {
+    return <AuthLoadingScreen title="Opening onboarding" message="Loading your profile..." />;
+  }
+
+  if (onboardingGate.blocked) {
+    return (
+      <Redirect
+        href={{
+          pathname: "/onboarding",
+          params: { mode: "create" },
+        }}
+      />
+    );
   }
 
   return <Redirect href="/(workout)/home" />;

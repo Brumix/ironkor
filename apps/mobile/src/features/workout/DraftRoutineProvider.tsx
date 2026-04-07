@@ -121,8 +121,11 @@ function areDraftRoutinesEqual(left: DraftRoutine | null, right: DraftRoutine) {
 interface DraftRoutineContextValue {
   draft: DraftRoutine | null;
   hasChanges: boolean;
+  hasPendingRoutineChanges: (routineId: string) => boolean;
   ensureDraft: () => void;
   clearDraft: () => void;
+  markPendingRoutineChanges: (routineId: string) => void;
+  clearPendingRoutineChanges: (routineId: string) => void;
   setRoutineName: (name: string) => void;
   setWeeklyPlan: (updater: (current: DraftWeeklyPlanEntry[]) => DraftWeeklyPlanEntry[]) => void;
   addSession: (name: string) => string;
@@ -150,6 +153,7 @@ const DraftRoutineContext = createContext<DraftRoutineContextValue | null>(null)
 
 export function DraftRoutineProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<DraftRoutine | null>(null);
+  const [pendingRoutineIds, setPendingRoutineIds] = useState<string[]>([]);
   const sessionCounter = useRef(0);
   const exerciseCounter = useRef(0);
 
@@ -160,6 +164,19 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
   const clearDraft = useCallback(() => {
     setDraft(null);
   }, []);
+
+  const markPendingRoutineChanges = useCallback((routineId: string) => {
+    setPendingRoutineIds((current) => (current.includes(routineId) ? current : [...current, routineId]));
+  }, []);
+
+  const clearPendingRoutineChanges = useCallback((routineId: string) => {
+    setPendingRoutineIds((current) => current.filter((id) => id !== routineId));
+  }, []);
+
+  const hasPendingRoutineChanges = useCallback(
+    (routineId: string) => pendingRoutineIds.includes(routineId),
+    [pendingRoutineIds],
+  );
 
   const updateDraft = useCallback((updater: (current: DraftRoutine) => DraftRoutine) => {
     setDraft((current) => {
@@ -444,8 +461,11 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
   const value = useMemo<DraftRoutineContextValue>(() => ({
     draft,
     hasChanges,
+    hasPendingRoutineChanges,
     ensureDraft,
     clearDraft,
+    markPendingRoutineChanges,
+    clearPendingRoutineChanges,
     setRoutineName,
     setWeeklyPlan,
     addSession,
@@ -462,9 +482,12 @@ export function DraftRoutineProvider({ children }: { children: ReactNode }) {
     addOrReplaceExercise,
     addSession,
     clearDraft,
+    clearPendingRoutineChanges,
     draft,
     ensureDraft,
     hasChanges,
+    hasPendingRoutineChanges,
+    markPendingRoutineChanges,
     moveExercise,
     moveSession,
     reorderExercises,

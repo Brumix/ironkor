@@ -18,6 +18,7 @@ import {
   isDeletedUser,
   requireIdentity,
 } from "./authHelpers";
+import { createDraftProfile } from "./profileHelpers";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -95,7 +96,12 @@ async function insertAccountDeletionChunk(
   ctx: MutationCtx,
   args: {
     entityIds: Array<
-      Id<"routines"> | Id<"routineSessions"> | Id<"sessionExercises"> | Id<"exercises">
+      | Id<"routines">
+      | Id<"routineSessions">
+      | Id<"sessionExercises">
+      | Id<"exercises">
+      | Id<"userProfiles">
+      | Id<"userMeasurements">
     >;
     entityType: Doc<"accountDeletionJobChunks">["entityType"];
     jobId: Id<"accountDeletionJobs">;
@@ -301,12 +307,15 @@ export const ensureViewer = mutation({
       throw new ConvexError("Restore decision required.");
     }
 
-    return ctx.db.insert("users", {
+    const viewerId = await ctx.db.insert("users", {
       ...snapshot,
       accountStatus: "active",
       createdAt: now,
       updatedAt: now,
     });
+
+    await ctx.db.insert("userProfiles", createDraftProfile(viewerId, now));
+    return viewerId;
   },
 });
 
@@ -573,6 +582,40 @@ export const processAccountDeletionJob = internalMutation({
         return captureSnapshotPage(ctx, {
           docs: page.page,
           entityType: "customExercise",
+          job,
+          nextPhase: "capture_user_profile",
+          page,
+        });
+      }
+
+      if (job.phase === "capture_user_profile") {
+        const page = await ctx.db
+          .query("userProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "userProfile",
+          job,
+          nextPhase: "capture_user_measurements",
+          page,
+        });
+      }
+
+      if (job.phase === "capture_user_measurements") {
+        const page = await ctx.db
+          .query("userMeasurements")
+          .withIndex("by_userId_and_recordedAt", (q) => q.eq("userId", job.userId))
+          .paginate({
+            numItems: ACCOUNT_DELETION_SNAPSHOT_BATCH_SIZE,
+            cursor: job.cursor ?? null,
+          });
+        return captureSnapshotPage(ctx, {
+          docs: page.page,
+          entityType: "userMeasurement",
           job,
           nextPhase: "finalize_user",
           page,

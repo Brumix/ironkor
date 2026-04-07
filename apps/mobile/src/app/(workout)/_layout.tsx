@@ -9,6 +9,7 @@ import { useAuth, useSession } from "@/features/auth/clerkCompat";
 import LocalUnlockScreen from "@/features/auth/LocalUnlockScreen";
 import { useSecureSignOut } from "@/features/auth/useSecureSignOut";
 import { useViewerBootstrap } from "@/features/auth/useViewerBootstrap";
+import { useOnboardingGate } from "@/features/onboarding/useOnboardingGate";
 import { DraftRoutineProvider } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
 
@@ -38,6 +39,7 @@ export default function WorkoutLayout() {
       isUnlocked &&
       !isAccountDeletionTransitioning,
   });
+  const onboardingGate = useOnboardingGate({ enabled: isReady });
 
   if (!isLoaded) {
     return <AuthLoadingScreen title="Loading Ironkor" message="Preparing your session..." />;
@@ -109,6 +111,21 @@ export default function WorkoutLayout() {
 
   if (!isReady) {
     return <AuthLoadingScreen title="Opening your gym logbook" message="Syncing your account..." />;
+  }
+
+  if (onboardingGate.isLoading) {
+    return <AuthLoadingScreen title="Opening onboarding" message="Loading your profile..." />;
+  }
+
+  if (onboardingGate.blocked) {
+    return (
+      <Redirect
+        href={{
+          pathname: "/onboarding",
+          params: { mode: "create" },
+        }}
+      />
+    );
   }
 
   return (

@@ -14,6 +14,7 @@ import GradientCard from "@/components/ui/GradientCard";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { useAppAlert } from "@/components/ui/useAppAlert";
 import WorkoutPage from "@/components/workout/WorkoutPage";
+import { useDraftRoutine } from "@/features/workout/DraftRoutineProvider";
 import { useTheme } from "@/theme";
 
 import type { RoutineSummaryRecord } from "@convex/types";
@@ -22,6 +23,7 @@ import type { RoutineSummaryRecord } from "@convex/types";
 export default function RoutinesScreen() {
   const { theme } = useTheme();
   const { showAlert, AlertModal } = useAppAlert();
+  const { hasPendingRoutineChanges } = useDraftRoutine();
   const routinesData = useQuery(api.routines.listSummaries, { limit: 50 });
 
   const deleteRoutine = useMutation(api.routines.deleteRoutine);
@@ -194,6 +196,9 @@ export default function RoutinesScreen() {
                   <View style={styles.routineMetaRow}>
                     <AppChip label={routine.isActive ? "Active" : "Inactive"} variant={routine.isActive ? "accent" : "neutral"} />
                     <AppChip label={`${routine.daysPerWeek} days/week`} variant="neutral" />
+                    {hasPendingRoutineChanges(String(routine._id)) ? (
+                      <AppChip label="Pending changes" variant="warning" />
+                    ) : null}
                   </View>
                   <Text style={styles.routineTitle}>{routine.name}</Text>
                   <Text style={styles.routineMeta}>{routine.sessions.length} sections ready for training</Text>

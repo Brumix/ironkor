@@ -6,7 +6,10 @@ import {
   EQUIPMENT_VALUES,
   FREQUENCY_VALUES,
   MUSCLE_VALUES,
-  SET_TYPE_VALUES
+  SET_TYPE_VALUES,
+  USER_PRIMARY_GOAL_VALUES,
+  USER_TRAINING_ENVIRONMENT_VALUES,
+  USER_UNIT_SYSTEM_VALUES,
 } from "@ironkor/shared/constants";
 
 /** ----- Unions (enums) ----- */
@@ -20,3 +23,6 @@ export const bodyPartSet = createUnion(BODY_PART_VALUES);
 export const typeSet = createUnion(SET_TYPE_VALUES);
 export const difficultySet = createUnion(DIFFICULTY_VALUES);
 export const frequencySet = createUnion(FREQUENCY_VALUES);
+export const userPrimaryGoalSet = createUnion(USER_PRIMARY_GOAL_VALUES);
+export const userTrainingEnvironmentSet = createUnion(USER_TRAINING_ENVIRONMENT_VALUES);
+export const userUnitSystemSet = createUnion(USER_UNIT_SYSTEM_VALUES);

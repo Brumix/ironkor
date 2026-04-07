@@ -1,7 +1,9 @@
+import { runToCompletion } from "@convex-dev/migrations";
+import component from "@convex-dev/migrations/test";
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { api } from "@convex/_generated/api";
+import { api, components, internal } from "@convex/_generated/api";
 import schema from "@convex/schema";
 import { ACCOUNT_RESTORE_WINDOW_MS } from "@convex/authHelpers";
 
@@ -26,6 +28,7 @@ function createWeeklyPlan() {
 
 function createAuthedTest() {
   const t = convexTest(schema, modules);
+  component.register(t as never);
   const authed = t.withIdentity({
     issuer: "https://clerk.test",
     subject: "clerk_user_1",
@@ -38,6 +41,16 @@ function createAuthedTest() {
 
 async function seedAccountData(authed: ReturnType<typeof createAuthedTest>["authed"]) {
   const viewerId = await authed.mutation(api.auth.ensureViewer, {});
+  await authed.mutation(api.profile.completeOnboarding, {
+    primaryGoal: "strength",
+    experienceLevel: "intermediate",
+    workoutsPerWeek: 4,
+    sessionDurationMinutes: 60,
+    trainingEnvironment: "gym",
+    unitSystem: "metric",
+    height: 182,
+    weight: 82,
+  });
   const routineId = await authed.mutation(api.routines.create, {
     name: "Push / Pull",
     daysPerWeek: 4,
@@ -88,6 +101,14 @@ async function getAccountDeletionArtifacts(
 ) {
   return t.run(async (ctx) => {
     const viewer = await ctx.db.get(viewerId);
+    const profiles = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", viewerId))
+      .collect();
+    const measurements = await ctx.db
+      .query("userMeasurements")
+      .withIndex("by_userId_and_recordedAt", (q) => q.eq("userId", viewerId))
+      .collect();
     const routines = await ctx.db
       .query("routines")
       .withIndex("by_userId_and_updatedAt", (q) => q.eq("userId", viewerId))
@@ -121,6 +142,8 @@ async function getAccountDeletionArtifacts(
       chunks,
       exercises,
       jobs,
+      measurements,
+      profiles,
       routines,
       sessionExercises,
       sessions,
@@ -193,6 +216,8 @@ test("deleteMyAccount soft deletes the user and snapshots exact related ids", as
   expect(artifacts.sessions.map((entry) => entry._id)).toEqual([sessionId]);
   expect(artifacts.sessionExercises.map((entry) => entry._id)).toEqual([sessionExerciseId]);
   expect(artifacts.exercises.map((entry) => entry._id)).toEqual([exerciseId]);
+  expect(artifacts.profiles).toHaveLength(1);
+  expect(artifacts.measurements).toHaveLength(1);
 
   expect(artifacts.jobs).toHaveLength(1);
   expect(artifacts.jobs[0]).toMatchObject({
@@ -203,7 +228,7 @@ test("deleteMyAccount soft deletes the user and snapshots exact related ids", as
     userId: viewerId,
   });
 
-  expect(artifacts.chunks).toHaveLength(4);
+  expect(artifacts.chunks).toHaveLength(6);
   expect(
     artifacts.chunks.map((chunk) => ({
       entityIds: chunk.entityIds,
@@ -214,6 +239,8 @@ test("deleteMyAccount soft deletes the user and snapshots exact related ids", as
     { entityIds: [sessionId], entityType: "routineSession" },
     { entityIds: [sessionExerciseId], entityType: "sessionExercise" },
     { entityIds: [exerciseId], entityType: "customExercise" },
+    { entityIds: [artifacts.profiles[0]!._id], entityType: "userProfile" },
+    { entityIds: [artifacts.measurements[0]!._id], entityType: "userMeasurement" },
   ]);
 
   expect(await authed.query(api.auth.getViewer, {})).toBeNull();
@@ -240,6 +267,10 @@ test("restoreDeletedAccount reactivates the preserved user row and historical da
   expect(viewer).not.toHaveProperty("deletedAt");
   expect(viewer).not.toHaveProperty("restoreEligibleUntil");
   expect(viewer).not.toHaveProperty("restoreDecision");
+  const profileSummary = await authed.query(api.profile.getViewerProfileSummary, {});
+  expect(profileSummary.blocked).toBe(false);
+  expect(profileSummary.primaryGoal).toBe("strength");
+  expect(profileSummary.latestMeasurement?.weightKg).toBe(82);
 
   const artifacts = await getAccountDeletionArtifacts(t, viewerId);
   expect(artifacts.jobs).toHaveLength(1);
@@ -248,7 +279,7 @@ test("restoreDeletedAccount reactivates the preserved user row and historical da
     restoredUserId: viewerId,
   });
   expect(artifacts.jobs[0]?.restoredAt).toBeTypeOf("number");
-  expect(artifacts.chunks).toHaveLength(4);
+  expect(artifacts.chunks).toHaveLength(6);
 
   const routineSummaries = await authed.query(api.routines.listSummaries, {});
   expect(routineSummaries).toHaveLength(1);
@@ -271,6 +302,11 @@ test("declining restore creates a brand-new active user and hides the old data",
   expect(viewer?._id).toBe(freshViewerId);
   expect(viewer?.accountStatus).toBe("active");
   expect(await authed.query(api.auth.getRestoreCandidate, {})).toBeNull();
+  const profileSummary = await authed.query(api.profile.getViewerProfileSummary, {});
+  expect(profileSummary.blocked).toBe(true);
+  expect(profileSummary.onboardingStatus).toBe("draft");
+  expect(profileSummary.profileExists).toBe(true);
+  expect(profileSummary.latestMeasurement).toBeNull();
 
   const routineSummaries = await authed.query(api.routines.listSummaries, {});
   expect(routineSummaries).toHaveLength(0);
@@ -300,6 +336,9 @@ test("expired restore windows no longer prompt and ensureViewer creates a new us
   const viewer = await authed.query(api.auth.getViewer, {});
   expect(viewer?._id).toBe(freshViewerId);
   expect(viewer?.accountStatus).toBe("active");
+  const profileSummary = await authed.query(api.profile.getViewerProfileSummary, {});
+  expect(profileSummary.blocked).toBe(true);
+  expect(profileSummary.onboardingStatus).toBe("draft");
 });
 
 test("multiple delete cycles only offer the latest eligible deleted account for restore", async () => {
@@ -342,6 +381,39 @@ test("multiple delete cycles only offer the latest eligible deleted account for 
     expect(secondDeletedUser).toMatchObject({
       _id: secondViewerId,
       restoreDecision: "pending",
+    });
+  });
+});
+
+test("legacy active users can be backfilled into non-blocking complete profiles", async () => {
+  const { t } = createAuthedTest();
+
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      tokenIdentifier: "https://clerk.test|legacy_onboarding_user",
+      clerkUserId: "legacy_onboarding_user",
+      accountStatus: "active",
+      createdAt: 10,
+      updatedAt: 20,
+    });
+
+    await runToCompletion(
+      ctx,
+      components.migrations,
+      internal.migrations.backfillLegacyUserProfiles,
+    );
+
+    const profiles = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]).toMatchObject({
+      userId,
+      onboardingStatus: "complete",
+      completionMethod: "legacy_backfill",
+      onboardingVersion: 1,
     });
   });
 });

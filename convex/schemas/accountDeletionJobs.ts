@@ -13,6 +13,8 @@ export const accountDeletionJobPhase = v.union(
   v.literal("capture_routine_sessions"),
   v.literal("capture_session_exercises"),
   v.literal("capture_custom_exercises"),
+  v.literal("capture_user_profile"),
+  v.literal("capture_user_measurements"),
   v.literal("finalize_user"),
   v.literal("complete"),
 );
@@ -22,6 +24,8 @@ export const accountDeletionSnapshotEntityType = v.union(
   v.literal("routineSession"),
   v.literal("sessionExercise"),
   v.literal("customExercise"),
+  v.literal("userProfile"),
+  v.literal("userMeasurement"),
 );
 
 export const accountDeletionJobRestorationStatus = v.union(
@@ -62,6 +66,8 @@ export const accountDeletionJobChunks = defineTable({
       v.id("routineSessions"),
       v.id("sessionExercises"),
       v.id("exercises"),
+      v.id("userProfiles"),
+      v.id("userMeasurements"),
     ),
   ),
   createdAt: v.number(),

@@ -229,6 +229,8 @@ export default function RoutineEditorScreen() {
     hasChanges,
     ensureDraft,
     clearDraft,
+    markPendingRoutineChanges,
+    clearPendingRoutineChanges,
     setRoutineName: setDraftRoutineName,
     setWeeklyPlan,
     addSession,
@@ -264,6 +266,7 @@ export default function RoutineEditorScreen() {
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [sessionPendingDelete, setSessionPendingDelete] = useState<SessionOption | null>(null);
   const draftRef = useRef(draft);
+  const trackedExistingRoutineIdRef = useRef<string | null>(null);
   const dragStartIndexRef = useRef<number | null>(null);
   const placeholderIndexRef = useRef<number | null>(null);
   const localSessionCounterRef = useRef(0);
@@ -274,9 +277,10 @@ export default function RoutineEditorScreen() {
 
   useLayoutEffect(() => {
     if (!isNew && selectedRoutine === null) {
+      clearPendingRoutineChanges(routineIdParam);
       router.replace("/(workout)/routines");
     }
-  }, [isNew, router, selectedRoutine]);
+  }, [clearPendingRoutineChanges, isNew, router, routineIdParam, selectedRoutine]);
 
   const resetNewRoutineUi = useCallback(() => {
     setNewSessionName("");
@@ -421,6 +425,36 @@ export default function RoutineEditorScreen() {
   const hasPageChanges = isNew ? hasChanges : hasExistingRoutineChanges;
   const shouldShowSaveAction = hasPageChanges || isSaving;
 
+  useEffect(() => {
+    const nextTrackedRoutineId = isNew ? null : routineIdParam;
+    const previousTrackedRoutineId = trackedExistingRoutineIdRef.current;
+
+    if (previousTrackedRoutineId && previousTrackedRoutineId !== nextTrackedRoutineId) {
+      clearPendingRoutineChanges(previousTrackedRoutineId);
+    }
+
+    trackedExistingRoutineIdRef.current = nextTrackedRoutineId;
+  }, [clearPendingRoutineChanges, isNew, routineIdParam]);
+
+  useEffect(() => {
+    if (isNew) {
+      return;
+    }
+
+    if (hasExistingRoutineChanges) {
+      markPendingRoutineChanges(routineIdParam);
+      return;
+    }
+
+    clearPendingRoutineChanges(routineIdParam);
+  }, [
+    clearPendingRoutineChanges,
+    hasExistingRoutineChanges,
+    isNew,
+    markPendingRoutineChanges,
+    routineIdParam,
+  ]);
+
   function navigateToRoutines() {
     router.replace("/(workout)/routines");
   }
@@ -458,6 +492,7 @@ export default function RoutineEditorScreen() {
     if (isNew) {
       clearNewRoutineDraft();
     } else {
+      clearPendingRoutineChanges(routineIdParam);
       resetExistingRoutineUi();
     }
 
@@ -566,6 +601,7 @@ export default function RoutineEditorScreen() {
           });
         }
 
+        clearPendingRoutineChanges(String(selectedRoutine._id));
         resetExistingRoutineUi();
       } else if (draft) {
         const routineId = await createRoutine({

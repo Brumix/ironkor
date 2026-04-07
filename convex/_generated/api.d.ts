@@ -14,6 +14,8 @@ import type * as env from "../env.js";
 import type * as exerciseCatalog from "../exerciseCatalog.js";
 import type * as exercises from "../exercises.js";
 import type * as migrations from "../migrations.js";
+import type * as profile from "../profile.js";
+import type * as profileHelpers from "../profileHelpers.js";
 import type * as routines from "../routines.js";
 import type * as routines_exerciseMutations from "../routines/exerciseMutations.js";
 import type * as routines_helpers from "../routines/helpers.js";
@@ -28,6 +30,8 @@ import type * as schemas_routineSessions from "../schemas/routineSessions.js";
 import type * as schemas_routines from "../schemas/routines.js";
 import type * as schemas_sessionExercises from "../schemas/sessionExercises.js";
 import type * as schemas_unions from "../schemas/unions.js";
+import type * as schemas_userMeasurements from "../schemas/userMeasurements.js";
+import type * as schemas_userProfiles from "../schemas/userProfiles.js";
 import type * as schemas_users from "../schemas/users.js";
 import type * as types from "../types.js";
 
@@ -44,6 +48,8 @@ declare const fullApi: ApiFromModules<{
   exerciseCatalog: typeof exerciseCatalog;
   exercises: typeof exercises;
   migrations: typeof migrations;
+  profile: typeof profile;
+  profileHelpers: typeof profileHelpers;
   routines: typeof routines;
   "routines/exerciseMutations": typeof routines_exerciseMutations;
   "routines/helpers": typeof routines_helpers;
@@ -58,6 +64,8 @@ declare const fullApi: ApiFromModules<{
   "schemas/routines": typeof schemas_routines;
   "schemas/sessionExercises": typeof schemas_sessionExercises;
   "schemas/unions": typeof schemas_unions;
+  "schemas/userMeasurements": typeof schemas_userMeasurements;
+  "schemas/userProfiles": typeof schemas_userProfiles;
   "schemas/users": typeof schemas_users;
   types: typeof types;
 }>;
